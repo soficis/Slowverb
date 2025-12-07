@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2025 Slowverb
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -113,39 +129,39 @@ class EffectSelectionScreen extends ConsumerWidget {
 
   List<_PresetData> _getPresets() {
     return [
-      _PresetData(
+      const _PresetData(
         id: 'slowed_reverb',
         name: 'Slowed + Reverb',
         description: 'Classic dreamy vaporwave effect',
         gradient: SlowverbColors.slowedReverbGradient,
         icon: Icons.slow_motion_video,
       ),
-      _PresetData(
+      const _PresetData(
         id: 'vaporwave_chill',
         name: 'Vaporwave Chill',
         description: 'Warm, nostalgic sound',
         gradient: SlowverbColors.vaporwaveChillGradient,
         icon: Icons.nights_stay,
       ),
-      _PresetData(
+      const _PresetData(
         id: 'nightcore',
         name: 'Nightcore',
         description: 'Fast & energetic',
         gradient: SlowverbColors.nightcoreGradient,
         icon: Icons.bolt,
       ),
-      _PresetData(
+      const _PresetData(
         id: 'echo_slow',
         name: 'Echo Slow',
         description: 'Hazy with deep echoes',
         gradient: SlowverbColors.echoSlowGradient,
         icon: Icons.waves,
       ),
-      _PresetData(
+      const _PresetData(
         id: 'manual',
         name: 'Manual',
         description: 'Full control over all params',
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [SlowverbColors.surfaceVariant, SlowverbColors.surface],
         ),
         icon: Icons.tune,

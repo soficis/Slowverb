@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2025 Slowverb
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import 'dart:async';
 
 import 'package:slowverb/domain/repositories/audio_engine.dart';
@@ -35,7 +51,7 @@ class FFmpegAudioEngine implements AudioEngine {
   }) async {
     _ensureInitialized();
 
-    final filterChain = _buildFilterChain(params);
+    // final filterChain = _buildFilterChain(params);
 
     // TODO: Generate preview using FFmpeg
     // For now, return a placeholder path
@@ -84,16 +100,19 @@ class FFmpegAudioEngine implements AudioEngine {
     if (controller == null) return;
 
     try {
-      final filterChain = _buildFilterChain(params);
-      final bitrateArg = bitrateKbps != null ? '-b:a ${bitrateKbps}k' : '';
+      // final filterChain = _buildFilterChain(params);
+      // final bitrateArg = bitrateKbps != null ? '-b:a ${bitrateKbps}k' : '';
 
       // Build FFmpeg command
+      // Command construction commented out until implementation
+      /*
       final command =
           '-i "$sourcePath" '
           '-af "$filterChain" '
           '$bitrateArg '
           '-threads 0 '
           '"$outputPath"';
+      */
 
       // TODO: Execute using ffmpeg_kit_flutter
       // For now, simulate progress
@@ -118,6 +137,7 @@ class FFmpegAudioEngine implements AudioEngine {
     _renderProgressController = null;
   }
 
+  /*
   /// Build the FFmpeg filter chain from parameters
   String _buildFilterChain(Map<String, double> params) {
     final tempo = params['tempo'] ?? 1.0;
@@ -143,33 +163,39 @@ class FFmpegAudioEngine implements AudioEngine {
 
     return filters.isEmpty ? 'anull' : filters.join(',');
   }
+  */
 
+  /*
   /// Build atempo filter, chaining if needed for extreme values
   String _buildTempoFilter(double tempo) {
     // atempo only supports 0.5 to 2.0, chain for more extreme values
     if (tempo >= 0.5 && tempo <= 2.0) {
-      return 'atempo=$tempo';
+      return 'atempo=\$tempo';
     } else if (tempo < 0.5) {
       // Chain multiple atempo filters
       final factor1 = 0.5;
       final factor2 = tempo / factor1;
-      return 'atempo=$factor1,atempo=$factor2';
+      return 'atempo=\$factor1,atempo=\$factor2';
     } else {
       // tempo > 2.0
       final factor1 = 2.0;
       final factor2 = tempo / factor1;
-      return 'atempo=$factor1,atempo=$factor2';
+      return 'atempo=\$factor1,atempo=\$factor2';
     }
   }
+  */
 
+  /*
   /// Build pitch shift filter using asetrate + aresample
   String _buildPitchFilter(double semitones) {
     // Convert semitones to rate multiplier
     // Each semitone is a factor of 2^(1/12) ≈ 1.0595
     final multiplier = 1.0 + (semitones * 0.0595);
-    return 'asetrate=44100*$multiplier,aresample=44100';
+    return 'asetrate=44100*\$multiplier,aresample=44100';
   }
+  */
 
+  /*
   /// Build reverb filter using aecho
   String _buildReverbFilter(double amount) {
     // Map amount (0-1) to aecho parameters
@@ -177,8 +203,9 @@ class FFmpegAudioEngine implements AudioEngine {
     final decay = 0.2 + (amount * 0.5); // 0.2 to 0.7
     final delay = 40 + (amount * 80).toInt(); // 40ms to 120ms
 
-    return 'aecho=0.8:0.88:$delay:$decay';
+    return 'aecho=0.8:0.88:\$delay:\$decay';
   }
+  */
 
   void _ensureInitialized() {
     if (!_isInitialized) {

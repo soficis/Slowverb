@@ -84,9 +84,19 @@ coverage/
 *.lcov
 
 # Documentation build
-docs/
-
+/docs
 # Temporary files
 *.tmp
 *.temp
 .cache/
+
+# Debug and Analysis output
+**/analysis_*.txt
+**/app_analyze.txt
+**/test_output.txt
+**/test.json
+**/.flutter-plugins-dependencies
+run_with_logging.bat
+lints.txt
+lints_utf8.txt
+export_crash_test.dart

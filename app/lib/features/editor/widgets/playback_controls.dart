@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2025 Slowverb
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import 'package:flutter/material.dart';
 import 'package:slowverb/app/colors.dart';
 import 'package:slowverb/app/widgets/vaporwave_widgets.dart';
@@ -32,7 +48,7 @@ class PlaybackControls extends StatelessWidget {
             onPressed: onLoop,
             icon: const Icon(Icons.repeat),
             iconSize: 24,
-            color: SlowverbColors.neonCyan.withOpacity(0.7),
+            color: SlowverbColors.neonCyan.withValues(alpha: 0.7),
           ),
           const SizedBox(width: 24),
           // Seek backward
@@ -86,17 +102,20 @@ class PlaybackControls extends StatelessWidget {
           gradient: SlowverbColors.vaporwaveSunset,
           boxShadow: [
             BoxShadow(
-              color: SlowverbColors.hotPink.withOpacity(0.6),
+              color: SlowverbColors.hotPink.withValues(alpha: 0.6),
               blurRadius: 24,
               spreadRadius: 2,
             ),
             BoxShadow(
-              color: SlowverbColors.neonCyan.withOpacity(0.4),
+              color: SlowverbColors.neonCyan.withValues(alpha: 0.4),
               blurRadius: 12,
               spreadRadius: -2,
             ),
           ],
-          border: Border.all(color: Colors.white.withOpacity(0.2), width: 2),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.2),
+            width: 2,
+          ),
         ),
         child: Icon(
           isPlaying ? Icons.pause : Icons.play_arrow_rounded,
@@ -104,7 +123,7 @@ class PlaybackControls extends StatelessWidget {
           size: 48,
           shadows: [
             Shadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),

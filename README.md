@@ -1,10 +1,8 @@
 # Slowverb 🎵
 
-**Create stunning slowed + reverb audio edits with ease**
+**Create slowed + reverb audio edits with ease**
 
-Slowverb is a cross-platform audio processing application that transforms any song into dreamy, vaporwave-style remixes. With professional-grade 48kHz audio processing, multi-stage reverb, and bass enhancement, Slowverb delivers studio-quality results.
-
-![Slowverb Preview](docs/preview.png)
+Slowverb is a cross-platform audio processing application that transforms any song into dreamy, vaporwave-style remixes with  48kHz audio processing, multi-stage reverb, and bass enhancement.
 
 ---
 
@@ -114,9 +112,9 @@ Follow Xcode instructions to archive and deploy.
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Windows  | ✅ Full Support | Tested on Windows 10/11 |
-| macOS    | ✅ Full Support | Tested on macOS 12+ |
-| Linux    | ✅ Full Support | Tested on Ubuntu 22.04 |
+| Windows  | ✅ Full Support | Windows 10/11 |
+| macOS    | ✅ Full Support | macOS 12+ |
+| Linux    | ✅ Full Support | Ubuntu 22.04 |
 | Android  | ✅ Full Support | Android 6.0+ |
 | iOS      | ✅ Full Support | iOS 12+ |
 
@@ -166,67 +164,12 @@ slowverb/
 
 ---
 
-## 🛠️ Development
-
-### Running in Development
-
-```bash
-cd app
-flutter run -d windows  # or macos, linux, chrome
-```
-
-### Hot Reload
-
-Press `r` in the terminal while the app is running to hot reload changes.
-
-### Running Tests
-
-```bash
-cd app
-flutter test
-```
-
-### Linting
-
-```bash
-cd app
-flutter analyze
-```
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
 ## 🙏 Acknowledgments
 
 - [Flutter](https://flutter.dev) - Cross-platform framework
 - [FFmpeg](https://ffmpeg.org) - Audio processing engine
 - [just_audio](https://pub.dev/packages/just_audio) - Audio playback
 - [Hive](https://pub.dev/packages/hive) - Local storage
-
----
-
-## 📧 Support
-
-If you encounter any issues or have questions:
-
-1. Check the [FAQ](#faq) below
-2. Search [existing issues](https://github.com/yourusername/slowverb/issues)
-3. Open a [new issue](https://github.com/yourusername/slowverb/issues/new)
 
 ---
 
@@ -245,8 +188,19 @@ A: Yes! Select "Manual" preset and adjust the sliders to your liking.
 A: MP3, WAV, AAC, FLAC, OGG, and most common audio formats.
 
 **Q: Where are my exported files saved?**  
-A: By default, exports go to your Documents/Slowverb folder. You can change this in the Export screen.
-
+A: By default, exports go to your Documents/Slowverb folder. You can change this in the Export screen
 ---
 
-Made with ❤️ by the Slowverb Team
+## 📜 License
+
+This project is licensed under the **GNU General Public License v3.0** (GPLv3) - see the [LICENSE](LICENSE) file for details.
+
+### FFmpeg Attribution & Compliance
+
+This software uses libraries from the [FFmpeg](https://ffmpeg.org) project under the [LGPLv2.1](http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html).
+
+- **FFmpeg Source Code:** The exact source code for the FFmpeg build used in this project can be downloaded from: [Link to your source/fork or upstream if unmodified] (e.g., <https://ffmpeg.org/download.html>)
+- **Modifications:** No modifications were made to the FFmpeg source code.
+- **Ownership:** This project does NOT own FFmpeg. FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
+
+Note: Since this project links to FFmpeg libraries (via dynamic linking or command line execution), and is licensed under GPLv3, it is fully compatible with FFmpeg's licensing terms.
