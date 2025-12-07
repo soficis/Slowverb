@@ -48,13 +48,13 @@ flutter run
 
 ---
 
-## 📦 FFmpeg Installation
+## FFmpeg Installation
 
 Slowverb requires FFmpeg for audio processing. Choose your platform:
 
 ### Windows
 
-**Option 1: Automatic (Recommended)**
+#### Option 1: Automatic (Recommended)
 
 ```powershell
 # Run the setup script
@@ -62,28 +62,29 @@ cd app/scripts
 .\download_ffmpeg.ps1
 ```
 
-**Option 2: Using winget**
+#### Option 2: Using winget
 
 ```powershell
 winget install FFmpeg
 ```
 
-**Option 3: Using Chocolatey**
+#### Option 3: Using Chocolatey
 
 ```powershell
 choco install ffmpeg
 ```
 
-**Option 4: Manual Download**
+#### Option 4: Manual Download
 
 1. Download from [FFmpeg Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
 2. Extract `ffmpeg.exe` to the app directory (next to `slowverb.exe`)
 
 ### macOS
 
-**Using Homebrew (Recommended)**
+#### Using Homebrew (Recommended)
 
 ```bash
+brew install ffmpeg
 ```
 
 The executable will be at: `build/linux/x64/release/bundle/slowverb`
@@ -108,7 +109,7 @@ Follow Xcode instructions to archive and deploy.
 
 ---
 
-## 📱 Platform Support
+## Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
@@ -120,7 +121,7 @@ Follow Xcode instructions to archive and deploy.
 
 ---
 
-## 🎛️ Effect Presets
+## Effect Presets
 
 | Preset | Tempo | Pitch | Reverb | Description |
 |--------|-------|-------|--------|-------------|
@@ -132,7 +133,7 @@ Follow Xcode instructions to archive and deploy.
 
 ---
 
-## 🎨 Audio Processing
+## Audio Processing
 
 Slowverb uses professional-grade FFmpeg filters for high-quality audio:
 
@@ -143,9 +144,9 @@ Slowverb uses professional-grade FFmpeg filters for high-quality audio:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
-```
+```text
 slowverb/
 ├── app/                    # Flutter application
 │   ├── lib/               # Dart source code
@@ -164,7 +165,7 @@ slowverb/
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Flutter](https://flutter.dev) - Cross-platform framework
 - [FFmpeg](https://ffmpeg.org) - Audio processing engine
@@ -173,7 +174,7 @@ slowverb/
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 **Q: Why do I get "FFmpeg not found" error?**  
 A: Install FFmpeg following the [installation instructions](#ffmpeg-installation) above.
@@ -188,7 +189,8 @@ A: Yes! Select "Manual" preset and adjust the sliders to your liking.
 A: MP3, WAV, AAC, FLAC, OGG, and most common audio formats.
 
 **Q: Where are my exported files saved?**  
-A: By default, exports go to your Documents/Slowverb folder. You can change this in the Export screen
+A: By default, exports go to your Documents/Slowverb folder. You can change this in the Export screen.
+
 ---
 
 ## 📜 License
