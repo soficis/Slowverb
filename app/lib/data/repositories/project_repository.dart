@@ -1,0 +1,101 @@
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:slowverb/domain/entities/project.dart';
+
+/// Repository for persisting projects to local storage using Hive
+class ProjectRepository {
+  static const String _boxName = 'projects';
+  late Box<Map> _box;
+
+  /// Initialize the repository
+  Future<void> initialize() async {
+    await Hive.initFlutter();
+    _box = await Hive.openBox<Map>(_boxName);
+  }
+
+  /// Get all projects sorted by last updated
+  List<Project> getAllProjects() {
+    final projects = _box.values
+        .map((json) => _projectFromJson(Map<String, dynamic>.from(json)))
+        .toList();
+
+    projects.sort((a, b) {
+      final aDate = a.updatedAt ?? a.createdAt ?? DateTime(1970);
+      final bDate = b.updatedAt ?? b.createdAt ?? DateTime(1970);
+      return bDate.compareTo(aDate); // Most recent first
+    });
+
+    return projects;
+  }
+
+  /// Get a project by ID
+  Project? getProject(String id) {
+    final json = _box.get(id);
+    if (json == null) return null;
+    return _projectFromJson(Map<String, dynamic>.from(json));
+  }
+
+  /// Save a project (create or update)
+  Future<void> saveProject(Project project) async {
+    final updatedProject = project.copyWith(updatedAt: DateTime.now());
+    await _box.put(project.id, _projectToJson(updatedProject));
+  }
+
+  /// Delete a project by ID
+  Future<void> deleteProject(String id) async {
+    await _box.delete(id);
+  }
+
+  /// Check if a project exists
+  bool hasProject(String id) {
+    return _box.containsKey(id);
+  }
+
+  /// Get the number of saved projects
+  int get projectCount => _box.length;
+
+  /// Convert Project to JSON for storage
+  Map<String, dynamic> _projectToJson(Project project) {
+    return {
+      'id': project.id,
+      'name': project.name,
+      'sourcePath': project.sourcePath,
+      'sourceTitle': project.sourceTitle,
+      'sourceArtist': project.sourceArtist,
+      'durationMs': project.durationMs,
+      'presetId': project.presetId,
+      'parameters': project.parameters,
+      'createdAt': project.createdAt?.toIso8601String(),
+      'updatedAt': project.updatedAt?.toIso8601String(),
+      'lastExportPath': project.lastExportPath,
+      'lastExportFormat': project.lastExportFormat,
+      'lastExportBitrateKbps': project.lastExportBitrateKbps,
+      'lastExportDate': project.lastExportDate?.toIso8601String(),
+    };
+  }
+
+  /// Convert JSON to Project
+  Project _projectFromJson(Map<String, dynamic> json) {
+    return Project(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      sourcePath: json['sourcePath'] as String,
+      sourceTitle: json['sourceTitle'] as String?,
+      sourceArtist: json['sourceArtist'] as String?,
+      durationMs: json['durationMs'] as int,
+      presetId: json['presetId'] as String,
+      parameters: Map<String, double>.from(json['parameters'] ?? {}),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : null,
+      lastExportPath: json['lastExportPath'] as String?,
+      lastExportFormat: json['lastExportFormat'] as String?,
+      lastExportBitrateKbps: json['lastExportBitrateKbps'] as int?,
+      lastExportDate: json['lastExportDate'] != null
+          ? DateTime.parse(json['lastExportDate'] as String)
+          : null,
+    );
+  }
+}

@@ -1,0 +1,92 @@
+# Slowverb - Gitignore
+
+# Build artifacts
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+pubspec.lock
+*.iml
+
+# Android
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+**/*.keystore
+**/*.jks
+
+# iOS/macOS
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/xcuserdata
+**/ios/**/.sconsign.dblite
+**/ios/**/*.xcworkspace
+**/macos/Flutter/ephemeral
+**/macos/**/*.resolved
+**/macos/**/Pods/
+
+# Windows
+**/windows/flutter/ephemeral/
+
+# Linux
+**/linux/flutter/ephemeral/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# FFmpeg binaries (downloaded at runtime)
+**/ffmpeg.exe
+**/ffmpeg
+**/ffprobe.exe
+**/ffprobe
+
+# Personal/sensitive
+*.env
+.env.*
+secrets/
+credentials/
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Documentation build
+docs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
