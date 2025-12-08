@@ -1,0 +1,53 @@
+name: slowverb_web
+description: "Slowverb Web - Browser-based slowed + reverb vaporwave editor"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.3
+
+  # File Handling
+  file_picker: ^8.1.7
+
+  # Audio Playback (web-compatible)
+  just_audio: ^0.9.42
+  just_audio_web: ^0.4.13
+
+  # Local Storage (IndexedDB for web)
+  idb_shim: ^2.4.0
+
+  # Utilities
+  uuid: ^4.5.1
+  collection: ^1.19.1
+
+  # JS Interop for WASM engine
+  js: ^0.7.1
+
+  # UI Components
+  flutter_animate: ^4.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  riverpod_generator: ^2.6.2
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+
+  # WASM assets and worker scripts
+  assets:
+    - assets/wasm/
+    - web/js/

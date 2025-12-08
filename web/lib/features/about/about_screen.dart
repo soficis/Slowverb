@@ -1,0 +1,213 @@
+/*
+ * Copyright (C) 2025 Slowverb
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import 'package:flutter/material.dart';
+import 'package:slowverb_web/app/colors.dart';
+
+/// About screen with app information and credits
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: SlowverbColors.backgroundDark,
+      appBar: AppBar(title: const Text('ABOUT')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: SlowverbColors.backgroundGradient,
+        ),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 700),
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: SlowverbColors.surface,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Logo
+                  Center(
+                    child: ShaderMask(
+                      shaderCallback: (bounds) =>
+                          SlowverbColors.primaryGradient.createShader(bounds),
+                      child: Text(
+                        'SLOWVERB',
+                        style: Theme.of(context).textTheme.displayMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w200,
+                              letterSpacing: 8.0,
+                            ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Center(
+                    child: Text(
+                      'Slowed + Reverb Audio Editor',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: SlowverbColors.textSecondary,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.info_outline,
+                    title: 'About',
+                    content:
+                        'Slowverb is a browser-based audio editor for creating dreamy slowed + reverb and vaporwave effects. All audio processing happens locally in your browser using WebAssembly.',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.security,
+                    title: 'Privacy First',
+                    content:
+                        'Your audio files NEVER leave your device. Everything is processed locally using FFmpeg.wasm. No uploads, no tracking, no data collection.',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.music_note,
+                    title: 'Supported Formats',
+                    content:
+                        'Input: MP3, WAV, AAC, M4A, OGG, FLAC\n'
+                        'Output: MP3 (128-320 kbps), WAV (lossless), FLAC (lossless)',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.tune,
+                    title: 'Features',
+                    content:
+                        '• 12 professional effect presets\n'
+                        '• Custom parameter control (tempo, pitch, reverb, echo, warmth)\n'
+                        '• Interactive waveform visualization\n'
+                        '• Real-time audio preview\n'
+                        '• High-quality FLAC export',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.code,
+                    title: 'Built With',
+                    content:
+                        '• Flutter Web for the UI\n'
+                        '• FFmpeg.wasm for audio processing\n'
+                        '• Web Workers for background processing\n'
+                        '• Material Design 3 with custom vaporwave theme',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
+                    icon: Icons.copyright,
+                    title: 'License',
+                    content:
+                        'Slowverb is free and open-source software licensed under GPL-3.0.\n\n'
+                        'Copyright © 2025 Slowverb\n\n'
+                        'This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to redistribute it under certain conditions.',
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Version
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SlowverbColors.backgroundLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Version 1.0.0-beta',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: SlowverbColors.textSecondary,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String content,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 20, color: SlowverbColors.accentCyan),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: SlowverbColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.only(left: 32),
+          child: Text(
+            content,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: SlowverbColors.textSecondary,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

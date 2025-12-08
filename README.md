@@ -107,6 +107,16 @@ flutter build ios --release
 
 Follow Xcode instructions to archive and deploy.
 
+### Web
+
+```bash
+cd web
+flutter pub get
+flutter build web --release
+```
+
+The build output will be in `web/build/web/`. See [Web Version Documentation](./web/README.md) for detailed web deployment and development information.
+
 ---
 
 ## Platform Support
@@ -118,6 +128,39 @@ Follow Xcode instructions to archive and deploy.
 | Linux    | ✅ Full Support | Ubuntu 22.04 |
 | Android  | ✅ Full Support | Android 6.0+ |
 | iOS      | ✅ Full Support | iOS 12+ |
+| Web      | ✅ Full Support | Modern web browsers (Chrome, Firefox, Safari, Edge) |
+
+---
+
+## Web Version
+
+Slowverb includes a **full-featured web version** that runs entirely in the browser with **no server-side processing**. This means:
+
+- ✅ **Complete privacy** - All audio processing happens locally on your device
+- ✅ **No audio uploads** - Your files never leave your browser
+- ✅ **Instant processing** - No wait times for server processing
+- ✅ **Works offline** - After initial load, the app functions without internet connection
+- ⚠️ **Browser-dependent** - Audio processing performance depends on your browser's capabilities
+
+### Key Differences from Desktop/Mobile
+
+| Feature | Desktop/Mobile | Web |
+|---------|---|---|
+| **Audio Engine** | Native FFmpeg | Web Audio API + WASM FFmpeg |
+| **Processing** | Fast (native code) | Good (optimized WASM) |
+| **File I/O** | Full filesystem access | Browser storage (IndexedDB) |
+| **Export** | Direct file save | Browser download |
+| **Memory** | System memory | Browser tab memory (~500MB-2GB) |
+| **Browser Support** | N/A | Chrome, Firefox, Safari, Edge 15+ |
+
+**Browser Requirements:**
+- Chrome 57+ (2017)
+- Firefox 52+ (2017)
+- Safari 11+ (2017)
+- Edge 79+ (Chromium-based)
+- Chrome/Firefox on Android
+
+For more details on the web version, see the [Web README](./web/README.md).
 
 ---
 
@@ -148,7 +191,7 @@ Slowverb uses professional-grade FFmpeg filters for high-quality audio:
 
 ```text
 slowverb/
-├── app/                    # Flutter application
+├── app/                    # Flutter application (Mobile + Desktop)
 │   ├── lib/               # Dart source code
 │   │   ├── app/           # App configuration
 │   │   ├── domain/        # Entities & interfaces
@@ -159,8 +202,24 @@ slowverb/
 │   │   └── audio_engine/  # FFmpeg integration
 │   ├── scripts/           # Build scripts
 │   └── test/              # Unit tests
+├── web/                   # Flutter web application
+│   ├── lib/               # Dart source code for web
+│   │   ├── app/           # Web app configuration
+│   │   ├── domain/        # Shared entities & interfaces
+│   │   ├── engine/        # Web audio engine (WASM FFmpeg)
+│   │   ├── features/      # Feature modules (web-optimized)
+│   │   └── providers/     # State management (Riverpod)
+│   ├── web/               # Web assets and HTML
+│   │   ├── js/            # JavaScript utilities
+│   │   ├── fonts/         # Web fonts
+│   │   ├── icons/         # Web app icons
+│   │   └── manifest.json  # PWA manifest
+│   ├── assets/wasm/       # WASM FFmpeg binaries
+│   ├── pubspec.yaml       # Web-specific dependencies
+│   └── README.md          # Web version documentation
 ├── docs/                  # Documentation
-└── README.md
+├── LICENSE                # GPLv3 License
+└── README.md              # This file
 ```
 
 ---
