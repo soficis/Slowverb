@@ -17,6 +17,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
 /// Transport controls for audio playback
 class TransportBar extends StatelessWidget {
@@ -44,98 +45,201 @@ class TransportBar extends StatelessWidget {
     final totalMs = totalTime.inMilliseconds;
     final safeTotalMs = totalMs <= 0 ? 1 : totalMs;
     final progress =
-        (totalMs <= 0) ? 0.0 : currentTime.inMilliseconds / safeTotalMs;
+        totalMs <= 0 ? 0.0 : currentTime.inMilliseconds / safeTotalMs;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
       decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        color: SlowverbColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+        border: Border.all(
+          color: SlowverbColors.accentPink.withOpacity(0.25),
+        ),
+        boxShadow: [SlowverbTokens.shadowCard],
       ),
-      child: Row(
-        children: [
-          // Time + seek slider
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Slider(
-                  value: progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0),
-                  onChanged: (value) => onSeek(
-                    Duration(milliseconds: (value * safeTotalMs).toInt()),
-                  ),
-                  activeColor: SlowverbColors.primaryPurple,
-                  inactiveColor: SlowverbColors.textSecondary.withOpacity(0.3),
-                ),
-                Text(
-                  '${_formatDuration(currentTime)} / ${_formatDuration(totalTime)}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                ),
-              ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 720;
+          final seekSection = _SeekSection(
+            progress: progress,
+            currentTime: currentTime,
+            totalTime: totalTime,
+            onSeek: (value) => onSeek(
+              Duration(milliseconds: (value * safeTotalMs).toInt()),
             ),
-          ),
+          );
+          final transportControls = _TransportControls(
+            isPlaying: isPlaying,
+            onPlayPause: onPlayPause,
+            onStop: onStop,
+          );
+          final previewButton = _PreviewButton(onPreview: onPreview);
 
-          // Transport controls
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Stop
-              IconButton(
-                onPressed: onStop,
-                icon: const Icon(Icons.stop),
-                tooltip: 'Stop',
-                color: SlowverbColors.textPrimary,
-              ),
-
-              const SizedBox(width: 8),
-
-              // Play/Pause
-              Container(
-                decoration: BoxDecoration(
-                  gradient: SlowverbColors.primaryGradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: SlowverbColors.primaryPurple.withOpacity(0.4),
-                      blurRadius: 12,
-                      spreadRadius: 2,
-                    ),
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                seekSection,
+                const SizedBox(height: SlowverbTokens.spacingSm),
+                Row(
+                  children: [
+                    transportControls,
+                    const SizedBox(width: SlowverbTokens.spacingSm),
+                    Expanded(child: previewButton),
                   ],
                 ),
-                child: IconButton(
-                  onPressed: onPlayPause,
-                  icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-                  iconSize: 32,
-                  tooltip: isPlaying ? 'Pause' : 'Play',
-                  color: Colors.white,
-                ),
-              ),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: seekSection),
+              const SizedBox(width: SlowverbTokens.spacingLg),
+              transportControls,
+              const Spacer(),
+              previewButton,
             ],
-          ),
-
-          const Spacer(),
-
-          // Preview button
-          ElevatedButton.icon(
-            onPressed: onPreview,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: SlowverbColors.surfaceVariant,
-              foregroundColor: SlowverbColors.textPrimary,
-            ),
-            icon: const Icon(Icons.headphones, size: 20),
-            label: const Text('PREVIEW FULL'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
+}
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    return '${minutes.toString().padLeft(1, '0')}:${seconds.toString().padLeft(2, '0')}';
+class _SeekSection extends StatelessWidget {
+  final double progress;
+  final Duration currentTime;
+  final Duration totalTime;
+  final ValueChanged<double> onSeek;
+
+  const _SeekSection({
+    required this.progress,
+    required this.currentTime,
+    required this.totalTime,
+    required this.onSeek,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Slider(
+          value: progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0),
+          onChanged: onSeek,
+          activeColor: SlowverbColors.primaryPurple,
+          inactiveColor: SlowverbColors.textSecondary.withOpacity(0.3),
+        ),
+        Text(
+          '${_formatDuration(currentTime)} / ${_formatDuration(totalTime)}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+        ),
+      ],
+    );
   }
+}
+
+class _TransportControls extends StatelessWidget {
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+  final VoidCallback onStop;
+
+  const _TransportControls({
+    required this.isPlaying,
+    required this.onPlayPause,
+    required this.onStop,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ChromeIconButton(
+          icon: Icons.stop,
+          tooltip: 'Stop',
+          onPressed: onStop,
+        ),
+        const SizedBox(width: SlowverbTokens.spacingSm),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: SlowverbColors.primaryGradient,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: SlowverbColors.primaryPurple.withOpacity(0.4),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: IconButton(
+            onPressed: onPlayPause,
+            icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+            iconSize: 32,
+            tooltip: isPlaying ? 'Pause' : 'Play',
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewButton extends StatelessWidget {
+  final VoidCallback onPreview;
+
+  const _PreviewButton({required this.onPreview});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPreview,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: SlowverbColors.surface,
+        foregroundColor: SlowverbColors.textPrimary,
+        padding: const EdgeInsets.symmetric(
+          horizontal: SlowverbTokens.spacingMd,
+          vertical: SlowverbTokens.spacingSm,
+        ),
+      ),
+      icon: const Icon(Icons.headphones, size: 20),
+      label: const Text('Preview Full'),
+    );
+  }
+}
+
+class _ChromeIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _ChromeIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.08),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, color: SlowverbColors.textPrimary),
+      ),
+    );
+  }
+}
+
+String _formatDuration(Duration duration) {
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds % 60;
+  return '${minutes.toString().padLeft(1, '0')}:${seconds.toString().padLeft(2, '0')}';
 }

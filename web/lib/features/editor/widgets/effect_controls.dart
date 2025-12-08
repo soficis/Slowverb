@@ -17,6 +17,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
 /// Effect parameter controls
 class EffectControls extends StatelessWidget {
@@ -47,95 +48,88 @@ class EffectControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(16),
+    final sliders = [
+      _EffectSlider(
+        label: 'Tempo',
+        value: tempo,
+        min: 0.5,
+        max: 1.5,
+        divisions: 100,
+        valueFormat: (v) => '${(v * 100).toInt()}%',
+        onChanged: onTempoChanged,
+        icon: Icons.speed,
       ),
-      child: SingleChildScrollView(
-        child: Column(
+      _EffectSlider(
+        label: 'Pitch',
+        value: pitch,
+        min: -12.0,
+        max: 12.0,
+        divisions: 24,
+        valueFormat: (v) => '${v.toStringAsFixed(1)} st',
+        onChanged: onPitchChanged,
+        icon: Icons.music_note,
+      ),
+      _EffectSlider(
+        label: 'Reverb',
+        value: reverbAmount,
+        min: 0.0,
+        max: 1.0,
+        divisions: 100,
+        valueFormat: (v) => '${(v * 100).toInt()}%',
+        onChanged: onReverbChanged,
+        icon: Icons.waves,
+      ),
+      _EffectSlider(
+        label: 'Echo',
+        value: echoAmount,
+        min: 0.0,
+        max: 1.0,
+        divisions: 100,
+        valueFormat: (v) => '${(v * 100).toInt()}%',
+        onChanged: onEchoChanged,
+        icon: Icons.graphic_eq,
+      ),
+      _EffectSlider(
+        label: 'Warmth',
+        value: eqWarmth,
+        min: 0.0,
+        max: 1.0,
+        divisions: 100,
+        valueFormat: (v) => '${(v * 100).toInt()}%',
+        onChanged: onEqWarmthChanged,
+        icon: Icons.equalizer,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 640;
+        final itemWidth = isWide
+            ? (constraints.maxWidth - SlowverbTokens.spacingLg) / 2
+            : constraints.maxWidth;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'EFFECT PARAMETERS',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(letterSpacing: 2.0),
+              'Effect Parameters',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 24),
-
-            // Tempo
-            _EffectSlider(
-              label: 'TEMPO',
-              value: tempo,
-              min: 0.5,
-              max: 1.5,
-              divisions: 100,
-              valueFormat: (v) => '${(v * 100).toInt()}%',
-              onChanged: onTempoChanged,
-              icon: Icons.speed,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Pitch
-            _EffectSlider(
-              label: 'PITCH',
-              value: pitch,
-              min: -12.0,
-              max: 12.0,
-              divisions: 24,
-              valueFormat: (v) => '${v.toStringAsFixed(1)} st',
-              onChanged: onPitchChanged,
-              icon: Icons.music_note,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Reverb
-            _EffectSlider(
-              label: 'REVERB',
-              value: reverbAmount,
-              min: 0.0,
-              max: 1.0,
-              divisions: 100,
-              valueFormat: (v) => '${(v * 100).toInt()}%',
-              onChanged: onReverbChanged,
-              icon: Icons.waves,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Echo
-            _EffectSlider(
-              label: 'ECHO',
-              value: echoAmount,
-              min: 0.0,
-              max: 1.0,
-              divisions: 100,
-              valueFormat: (v) => '${(v * 100).toInt()}%',
-              onChanged: onEchoChanged,
-              icon: Icons.graphic_eq,
-            ),
-
-            const SizedBox(height: 20),
-
-            // EQ Warmth
-            _EffectSlider(
-              label: 'WARMTH',
-              value: eqWarmth,
-              min: 0.0,
-              max: 1.0,
-              divisions: 100,
-              valueFormat: (v) => '${(v * 100).toInt()}%',
-              onChanged: onEqWarmthChanged,
-              icon: Icons.equalizer,
+            const SizedBox(height: SlowverbTokens.spacingSm),
+            Wrap(
+              spacing: SlowverbTokens.spacingLg,
+              runSpacing: SlowverbTokens.spacingMd,
+              children: sliders
+                  .map(
+                    (slider) => SizedBox(
+                      width: itemWidth,
+                      child: slider,
+                    ),
+                  )
+                  .toList(),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -164,54 +158,78 @@ class _EffectSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 18, color: SlowverbColors.accentCyan),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: SlowverbColors.textSecondary,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: SlowverbColors.backgroundLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                valueFormat(value),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: SlowverbColors.accentPink,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(SlowverbTokens.spacingSm),
+      decoration: BoxDecoration(
+        color: SlowverbColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+        border: Border.all(
+          color: SlowverbColors.surface.withOpacity(0.6),
         ),
-        const SizedBox(height: 8),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 6.0,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 20.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: SlowverbColors.accentCyan),
+              const SizedBox(width: SlowverbTokens.spacingXs),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: SlowverbColors.textSecondary,
+                    ),
+              ),
+              const Spacer(),
+              _ValuePill(text: valueFormat(value)),
+            ],
           ),
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: valueFormat(value),
-            onChanged: onChanged,
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 6.0,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 18.0),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              label: valueFormat(value),
+              onChanged: onChanged,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ValuePill extends StatelessWidget {
+  final String text;
+
+  const _ValuePill({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SlowverbTokens.spacingSm,
+        vertical: SlowverbTokens.spacingXs,
+      ),
+      decoration: BoxDecoration(
+        color: SlowverbColors.backgroundLight,
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: SlowverbColors.accentPink,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+      ),
     );
   }
 }

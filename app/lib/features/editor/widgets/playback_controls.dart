@@ -21,6 +21,7 @@ import 'package:slowverb/app/widgets/vaporwave_widgets.dart';
 /// Playback control buttons for the editor
 class PlaybackControls extends StatelessWidget {
   final bool isPlaying;
+  final bool isProcessing;
   final VoidCallback onPlayPause;
   final VoidCallback onSeekBackward;
   final VoidCallback onSeekForward;
@@ -29,6 +30,7 @@ class PlaybackControls extends StatelessWidget {
   const PlaybackControls({
     super.key,
     required this.isPlaying,
+    this.isProcessing = false,
     required this.onPlayPause,
     required this.onSeekBackward,
     required this.onSeekForward,
@@ -117,15 +119,29 @@ class PlaybackControls extends StatelessWidget {
             width: 2,
           ),
         ),
-        child: Icon(
-          isPlaying ? Icons.pause : Icons.play_arrow_rounded,
-          color: Colors.white,
-          size: 48,
-          shadows: [
-            Shadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (isProcessing)
+              const SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            Icon(
+              isPlaying ? Icons.pause : Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 48,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
           ],
         ),

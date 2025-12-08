@@ -1,184 +1,189 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:slowverb/app/colors.dart';
+import 'package:slowverb/app/slowverb_design_tokens.dart';
 
-/// Theme configuration for Slowverb
-///
-/// Creates a dark, vaporwave-inspired visual style with custom
-/// slider, button, and card styling optimized for audio editing UI.
+/// Slowverb cross-platform theme configuration.
 abstract final class SlowverbTheme {
   static ThemeData get darkTheme {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: _colorScheme,
+    final base = ThemeData.dark(useMaterial3: true);
+    final textTheme = _buildTextTheme(base.textTheme);
+
+    return base.copyWith(
+      colorScheme: _buildColorScheme(),
       scaffoldBackgroundColor: SlowverbColors.deepPurple,
-      appBarTheme: _appBarTheme,
-      cardTheme: _cardTheme,
-      elevatedButtonTheme: _elevatedButtonTheme,
-      textButtonTheme: _textButtonTheme,
-      floatingActionButtonTheme: _fabTheme,
-      sliderTheme: _sliderTheme,
-      iconTheme: _iconTheme,
-      textTheme: _textTheme,
-      inputDecorationTheme: _inputDecorationTheme,
-      dividerTheme: _dividerTheme,
+      textTheme: textTheme,
+      appBarTheme: _buildAppBarTheme(textTheme),
+      elevatedButtonTheme: _buildElevatedButtonTheme(),
+      textButtonTheme: _buildTextButtonTheme(),
+      sliderTheme: _buildSliderTheme(),
+      inputDecorationTheme: _buildInputDecorationTheme(),
+      cardTheme: _buildCardTheme(),
+      snackBarTheme: _buildSnackBarTheme(),
+      dividerTheme: _buildDividerTheme(),
     );
   }
 
-  static const _colorScheme = ColorScheme.dark(
-    primary: SlowverbColors.hotPink,
-    secondary: SlowverbColors.neonCyan,
-    tertiary: SlowverbColors.lavender,
-    surface: SlowverbColors.surface,
-    onSurface: SlowverbColors.onSurface,
-    error: SlowverbColors.error,
-  );
+  static ColorScheme _buildColorScheme() {
+    return const ColorScheme.dark(
+      primary: SlowverbColors.hotPink,
+      onPrimary: Colors.white,
+      secondary: SlowverbColors.neonCyan,
+      onSecondary: Colors.white,
+      surface: SlowverbColors.surface,
+      onSurface: SlowverbColors.onSurface,
+      error: SlowverbColors.error,
+      onError: Colors.white,
+    );
+  }
 
-  static const _appBarTheme = AppBarTheme(
-    backgroundColor: Colors.transparent,
-    elevation: 0,
-    centerTitle: true,
-    titleTextStyle: TextStyle(
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
-      color: SlowverbColors.onSurface,
-    ),
-    iconTheme: IconThemeData(color: SlowverbColors.onSurface),
-  );
+  static TextTheme _buildTextTheme(TextTheme base) {
+    final inter = GoogleFonts.interTextTheme(base);
+    final spaceGroteskHeadline =
+        GoogleFonts.spaceGrotesk(textStyle: base.headlineMedium);
+    final spaceGroteskTitle =
+        GoogleFonts.spaceGrotesk(textStyle: base.titleLarge);
 
-  static const _cardTheme = CardThemeData(
-    color: SlowverbColors.surface,
-    elevation: 4,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(16)),
-    ),
-  );
+    return inter.copyWith(
+      headlineMedium: spaceGroteskHeadline.copyWith(
+        color: SlowverbColors.onSurface,
+        letterSpacing: 1.2,
+      ),
+      titleLarge: spaceGroteskTitle.copyWith(
+        color: SlowverbColors.onSurface,
+        letterSpacing: 1.1,
+      ),
+      bodyMedium: inter.bodyMedium?.copyWith(
+        color: SlowverbColors.onSurfaceMuted,
+      ),
+      bodySmall: inter.bodySmall?.copyWith(
+        color: SlowverbColors.onSurfaceMuted,
+      ),
+      labelLarge: inter.labelLarge?.copyWith(
+        color: SlowverbColors.onSurface,
+        letterSpacing: 1.1,
+      ),
+    );
+  }
 
-  static final _elevatedButtonTheme = ElevatedButtonThemeData(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: SlowverbColors.hotPink,
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-    ),
-  );
+  static AppBarTheme _buildAppBarTheme(TextTheme textTheme) {
+    return AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
+      iconTheme: const IconThemeData(color: SlowverbColors.onSurface),
+    );
+  }
 
-  static final _textButtonTheme = TextButtonThemeData(
-    style: TextButton.styleFrom(
-      foregroundColor: SlowverbColors.neonCyan,
-      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-    ),
-  );
+  static ElevatedButtonThemeData _buildElevatedButtonTheme() {
+    return ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: SlowverbColors.hotPink,
+        foregroundColor: Colors.white,
+        elevation: 6,
+        padding: const EdgeInsets.symmetric(
+          horizontal: SlowverbTokens.spacingLg,
+          vertical: SlowverbTokens.spacingSm + 4,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+        ),
+        shadowColor: SlowverbColors.hotPink.withOpacity(0.35),
+        textStyle: GoogleFonts.inter(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.0,
+        ),
+      ),
+    );
+  }
 
-  static const _fabTheme = FloatingActionButtonThemeData(
-    backgroundColor: SlowverbColors.hotPink,
-    foregroundColor: Colors.white,
-    elevation: 8,
-    shape: CircleBorder(),
-  );
+  static TextButtonThemeData _buildTextButtonTheme() {
+    return TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: SlowverbColors.neonCyan,
+        textStyle: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
 
-  static final _sliderTheme = SliderThemeData(
-    activeTrackColor: SlowverbColors.neonCyan,
-    inactiveTrackColor: SlowverbColors.surfaceVariant,
-    thumbColor: SlowverbColors.neonCyan,
-    overlayColor: SlowverbColors.neonCyan.withValues(alpha: 0.2),
-    trackHeight: 4,
-    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-  );
+  static SliderThemeData _buildSliderTheme() {
+    return SliderThemeData(
+      activeTrackColor: SlowverbColors.hotPink,
+      inactiveTrackColor: SlowverbColors.onSurfaceMuted.withOpacity(0.35),
+      thumbColor: SlowverbColors.neonCyan,
+      overlayColor: SlowverbColors.neonCyan.withOpacity(0.2),
+      valueIndicatorColor: SlowverbColors.hotPink,
+      trackHeight: 6.0,
+      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
+      overlayShape: const RoundSliderOverlayShape(overlayRadius: 18.0),
+      valueIndicatorTextStyle: GoogleFonts.inter(
+        color: Colors.white,
+        fontSize: 12,
+      ),
+    );
+  }
 
-  static const _iconTheme = IconThemeData(
-    color: SlowverbColors.onSurface,
-    size: 24,
-  );
+  static InputDecorationTheme _buildInputDecorationTheme() {
+    final borderRadius = BorderRadius.circular(SlowverbTokens.radiusSm);
 
-  static const _textTheme = TextTheme(
-    displayLarge: TextStyle(
-      fontSize: 32,
-      fontWeight: FontWeight.bold,
-      color: SlowverbColors.onSurface,
-    ),
-    displayMedium: TextStyle(
-      fontSize: 28,
-      fontWeight: FontWeight.bold,
-      color: SlowverbColors.onSurface,
-    ),
-    headlineLarge: TextStyle(
-      fontSize: 24,
-      fontWeight: FontWeight.w600,
-      color: SlowverbColors.onSurface,
-    ),
-    headlineMedium: TextStyle(
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
-      color: SlowverbColors.onSurface,
-    ),
-    titleLarge: TextStyle(
-      fontSize: 18,
-      fontWeight: FontWeight.w600,
-      color: SlowverbColors.onSurface,
-    ),
-    titleMedium: TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.w500,
-      color: SlowverbColors.onSurface,
-    ),
-    bodyLarge: TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.normal,
-      color: SlowverbColors.onSurface,
-    ),
-    bodyMedium: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.normal,
-      color: SlowverbColors.onSurface,
-    ),
-    labelLarge: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-      color: SlowverbColors.onSurfaceMuted,
-    ),
-    labelMedium: TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w500,
-      color: SlowverbColors.onSurfaceMuted,
-    ),
-  );
+    return InputDecorationTheme(
+      filled: true,
+      fillColor: SlowverbColors.surfaceVariant,
+      labelStyle: const TextStyle(color: SlowverbColors.onSurfaceMuted),
+      hintStyle: const TextStyle(color: SlowverbColors.onSurfaceMuted),
+      border: OutlineInputBorder(
+        borderRadius: borderRadius,
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: borderRadius,
+        borderSide: const BorderSide(
+          color: SlowverbColors.hotPink,
+          width: 2,
+        ),
+      ),
+    );
+  }
 
-  static final _inputDecorationTheme = InputDecorationTheme(
-    filled: true,
-    fillColor: SlowverbColors.surface,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide.none,
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: SlowverbColors.neonCyan),
-    ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-  );
+  static CardThemeData _buildCardTheme() {
+    return CardThemeData(
+      color: SlowverbColors.surface,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+      ),
+      shadowColor: SlowverbTokens.shadowCard.color,
+      elevation: 6,
+    );
+  }
 
-  static const _dividerTheme = DividerThemeData(
-    color: SlowverbColors.surfaceVariant,
-    thickness: 1,
-    space: 24,
-  );
+  static SnackBarThemeData _buildSnackBarTheme() {
+    return SnackBarThemeData(
+      backgroundColor: SlowverbColors.surfaceVariant,
+      contentTextStyle: GoogleFonts.inter(
+        color: SlowverbColors.onSurface,
+        fontSize: 14,
+      ),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+      ),
+    );
+  }
+
+  static DividerThemeData _buildDividerTheme() {
+    return DividerThemeData(
+      color: SlowverbColors.onSurfaceMuted.withOpacity(0.2),
+      space: SlowverbTokens.spacingMd,
+      thickness: 1,
+    );
+  }
 }

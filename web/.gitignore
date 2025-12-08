@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+test/
+test/widget_test.dart
 
 # Symbolication related
 app.*.symbols

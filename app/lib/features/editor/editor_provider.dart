@@ -134,6 +134,11 @@ class EditorNotifier extends StateNotifier<EditorState> {
     });
   }
 
+  /// Clear any transient error message.
+  void clearError() {
+    state = state.copyWith(clearErrorMessage: true);
+  }
+
   /// Import an audio file and create a new project
   Future<bool> importAudioFile() async {
     try {

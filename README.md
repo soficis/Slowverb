@@ -15,7 +15,8 @@ Slowverb is a cross-platform audio processing application that transforms any so
 - **Real-Time Preview** - Hear changes as you adjust
 - **Multiple Export Formats** - MP3, WAV, AAC
 - **Custom Save Location** - Choose where to save exports
-- **Beautiful UI** - Vaporwave-inspired dark theme
+- **Unified Preset Catalog** - Same 12 presets across web, desktop, and mobile (Slowed + Reverb, Vaporwave Chill, Nightcore, Echo Slow, Lo-Fi, Ambient, Deep Bass, Crystal Clear, Underwater, Synthwave, Slow Motion, Manual)
+- **VaporXP Responsive UI** - Shared VaporXP Luna aesthetic with responsive layout on all platforms
 
 ---
 

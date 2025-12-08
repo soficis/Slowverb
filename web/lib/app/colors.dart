@@ -16,47 +16,48 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
-/// Vaporwave-inspired color palette for Slowverb Web
+/// VaporXP Luna color palette mapped to legacy names for compatibility.
 class SlowverbColors {
-  // Primary vaporwave gradient
-  static const primaryPurple = Color(0xFF667EEA);
-  static const primaryViolet = Color(0xFF764BA2);
+  // Primary palette
+  static const primaryPurple = SlowverbTokens.primaryPurple;
+  static const primaryViolet = SlowverbTokens.primaryPink;
 
   // Accent colors
-  static const accentPink = Color(0xFFF093FB);
-  static const accentCyan = Color(0xFF4FACFE);
-  static const accentMint = Color(0xFF43E97B);
+  static const accentPink = SlowverbTokens.primaryPink;
+  static const accentCyan = SlowverbTokens.primaryBlue;
+  static const accentMint = SlowverbTokens.primaryCyan;
 
   // Background
-  static const backgroundDark = Color(0xFF1A1A2E);
-  static const backgroundMedium = Color(0xFF16213E);
-  static const backgroundLight = Color(0xFF0F3460);
+  static const backgroundDark = SlowverbTokens.surfaceBase;
+  static const backgroundMedium = Color(0xFF0F1628);
+  static const backgroundLight = Color(0xFF23304A);
 
   // Surface colors
-  static const surface = Color(0xFF1E1E3F);
-  static const surfaceVariant = Color(0xFF2A2A4A);
+  static const surface = Color(0xFF1F1B2F);
+  static const surfaceVariant = Color(0xFF2A2343);
 
   // Text
-  static const textPrimary = Color(0xFFEEEEEE);
-  static const textSecondary = Color(0xFFB0B0D0);
-  static const textHint = Color(0xFF808099);
+  static const textPrimary = Color(0xFFF5F1FF);
+  static const textSecondary = Color(0xFFCBC6DD);
+  static const textHint = Color(0xFF9FA4BF);
 
   // Waveform
-  static const waveformActive = Color(0xFF667EEA);
-  static const waveformInactive = Color(0xFF404060);
-  static const playhead = Color(0xFFF093FB);
+  static const waveformActive = accentPink;
+  static const waveformInactive = Color(0xFF3B3A55);
+  static const playhead = accentCyan;
 
   // Success/Error
-  static const success = Color(0xFF4ADE80);
-  static const error = Color(0xFFF87171);
-  static const warning = Color(0xFFFBBF24);
+  static const success = SlowverbTokens.success;
+  static const error = SlowverbTokens.error;
+  static const warning = SlowverbTokens.warning;
 
   // Gradients
   static const primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [primaryPurple, primaryViolet],
+    colors: [primaryPurple, accentPink],
   );
 
   static const accentGradient = LinearGradient(
@@ -65,9 +66,5 @@ class SlowverbColors {
     colors: [accentPink, accentCyan],
   );
 
-  static const backgroundGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [backgroundDark, backgroundMedium],
-  );
+  static const backgroundGradient = SlowverbTokens.backgroundGradient;
 }

@@ -16,7 +16,7 @@
  */
 
 @JS()
-library engine_js_interop;
+library;
 
 import 'dart:js_util' as js_util;
 import 'package:js/js.dart';

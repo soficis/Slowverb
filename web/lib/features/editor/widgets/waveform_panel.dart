@@ -20,12 +20,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
 
 /// Waveform visualization panel with playhead
 class WaveformPanel extends ConsumerStatefulWidget {
   final double playbackPosition; // 0.0 to 1.0
-  final Function(double) onSeek;
+  final ValueChanged<double> onSeek;
 
   const WaveformPanel({
     super.key,
@@ -46,24 +47,30 @@ class _WaveformPanelState extends ConsumerState<WaveformPanel> {
     final waveformState = ref.watch(waveformProvider);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(
+        vertical: SlowverbTokens.spacingMd,
+      ),
       decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1F1B2F),
+            Color(0xFF2A2343),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
+        border: Border.all(
+          color: SlowverbColors.accentCyan.withOpacity(0.25),
+        ),
+        boxShadow: [SlowverbTokens.shadowCard],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
         child: waveformState.isLoading
             ? const Center(
                 child: CircularProgressIndicator(
-                  color: SlowverbColors.primaryPurple,
+                  color: SlowverbColors.accentCyan,
                 ),
               )
             : waveformState.error != null
