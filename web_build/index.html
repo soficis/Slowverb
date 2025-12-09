@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- App Metadata -->
+  <meta name="description"
+    content="Slowverb Web - Create dreamy slowed + reverb vaporwave edits in your browser. All processing happens locally.">
+  <meta name="keywords"
+    content="slowed reverb, vaporwave, audio editor, browser, local processing, privacy-first, FLAC">
+  <meta name="author" content="Slowverb">
+
+  <!-- Privacy & Security -->
+  <meta name="robots" content="index, follow">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Slowverb">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700&display=swap" rel="stylesheet">
+
+  <title>Slowverb Web - Slowed + Reverb Editor</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Loading screen styles */
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: white;
+      transition: opacity 0.5s ease-out;
+    }
+
+    .loading h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    .loading p {
+      font-size: 0.9rem;
+      opacity: 0.8;
+    }
+
+    .spinner {
+      margin: 2rem auto;
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Loading screen -->
+  <div class="loading" id="loading">
+    <h1>SLOWVERB</h1>
+    <div class="spinner"></div>
+    <p>Loading app...</p>
+    <p style="font-size: 0.75rem; margin-top: 2rem;">🔒 All processing happens locally in your browser</p>
+  </div>
+
+  <script>
+    // Hide loading screen once Flutter loads
+    window.addEventListener('flutter-first-frame', function () {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.display = 'none';
+      }
+    });
+
+    // Fallback: hide after 5 seconds if Flutter event doesn't fire
+    setTimeout(function () {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.opacity = '0';
+        setTimeout(function () {
+          loading.style.display = 'none';
+        }, 500);
+      }
+    }, 5000);
+  </script>
+
+  <!-- Audio engine wrapper (must load before Flutter) -->
+  <script src="js/engine_wrapper.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+
+</html>
