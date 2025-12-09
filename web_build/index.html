@@ -118,6 +118,16 @@
   <!-- Audio engine wrapper (must load before Flutter) -->
   <script src="js/engine_wrapper.js"></script>
   <script src="flutter_bootstrap.js" async></script>
+
+  <!-- Vercel Web Analytics -->
+  <script>
+    // Initialize Vercel Web Analytics with event tracking
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+
+  <!-- Vercel Speed Insights -->
+  <script defer src="https://cdn.vercel-analytics.com/v1/web.js"></script>
 </body>
 
 </html>
