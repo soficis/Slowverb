@@ -20,6 +20,8 @@ import 'dart:html' as html;
 import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 
+import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
+import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/engine/engine_js_interop.dart';
 import 'package:slowverb_web/engine/filter_chain_builder.dart';
@@ -380,6 +382,215 @@ class WasmAudioEngine implements AudioEngine {
     if (!_isInitialized) {
       throw StateError('AudioEngine not initialized. Call initialize() first.');
     }
+  }
+
+  // Batch processing state
+  bool _batchCancelled = false;
+  bool _batchPaused = false;
+
+  @override
+  Stream<BatchRenderProgress> renderBatch({
+    required List<BatchInputFile> files,
+    required EffectPreset defaultPreset,
+    required ExportOptions options,
+  }) async* {
+    _ensureInitialized();
+
+    // Enforce batch size limit for web (50 files max)
+    if (files.length > 50) {
+      throw ArgumentError(
+        'Batch size limit exceeded. Maximum 50 files allowed on web.',
+      );
+    }
+
+    if (files.isEmpty) {
+      yield BatchRenderProgress.completed(
+        totalFiles: 0,
+        completedFiles: 0,
+        failedFiles: 0,
+        completedFileNames: [],
+        errors: {},
+      );
+      return;
+    }
+
+    _batchCancelled = false;
+    _batchPaused = false;
+
+    // Track progress
+    int completedCount = 0;
+    int failedCount = 0;
+    final completedFileNames = <String>[];
+    final errors = <String, String>{};
+    final startTime = DateTime.now();
+
+    // Yield initial progress
+    yield BatchRenderProgress.initial(files.length);
+
+    // Process files sequentially (concurrency = 1 for web)
+    for (int index = 0; index < files.length; index++) {
+      // Check for cancellation
+      if (_batchCancelled) break;
+
+      // Wait while paused
+      while (_batchPaused && !_batchCancelled) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (_batchCancelled) break;
+
+      final file = files[index];
+      final preset = file.presetOverride ?? defaultPreset;
+
+      try {
+        // Load the file
+        await loadSource(
+          fileId: file.fileId,
+          filename: file.fileName,
+          bytes: file.bytes,
+        );
+
+        // Create effect config from preset
+        final config = EffectConfig.fromParams(preset.id, preset.parameters);
+
+        // Start render
+        final jobId = await startRender(
+          fileId: file.fileId,
+          config: config,
+          options: options,
+        );
+
+        // Watch progress and yield updates
+        await for (final progress in watchProgress(jobId)) {
+          if (_batchCancelled) {
+            await cancelRender(jobId);
+            break;
+          }
+
+          // Yield batch progress
+          yield BatchRenderProgress(
+            totalFiles: files.length,
+            completedFiles: completedCount,
+            failedFiles: failedCount,
+            currentFileIndex: index,
+            currentFileName: file.fileName,
+            currentFileProgress: progress.progress,
+            overallProgress:
+                (completedCount + progress.progress) / files.length,
+            estimatedTimeRemaining: _estimateTimeRemaining(
+              startTime,
+              completedCount,
+              files.length,
+            ),
+            completedFileNames: completedFileNames,
+            errors: errors,
+          );
+        }
+
+        if (_batchCancelled) break;
+
+        // Get result
+        final result = await getResult(jobId);
+
+        if (result.success && result.outputBytes != null) {
+          // Auto-download to free memory (web platform requirement)
+          _triggerDownload(result.outputBytes!, file.fileName, options.format);
+          completedCount++;
+          completedFileNames.add(file.fileName);
+        } else {
+          failedCount++;
+          errors[file.fileName] = result.errorMessage ?? 'Unknown error';
+        }
+
+        // Cleanup to free memory
+        await cleanup(fileId: file.fileId);
+      } catch (e) {
+        failedCount++;
+        errors[file.fileName] = e.toString();
+        // Continue with next file
+      }
+    }
+
+    // Yield final progress
+    yield BatchRenderProgress.completed(
+      totalFiles: files.length,
+      completedFiles: completedCount,
+      failedFiles: failedCount,
+      completedFileNames: completedFileNames,
+      errors: errors,
+    );
+  }
+
+  @override
+  Future<void> cancelBatch() async {
+    _batchCancelled = true;
+  }
+
+  @override
+  Future<void> pauseBatch() async {
+    _batchPaused = true;
+  }
+
+  @override
+  Future<void> resumeBatch() async {
+    _batchPaused = false;
+  }
+
+  /// Trigger download of rendered file
+  void _triggerDownload(Uint8List bytes, String fileName, String format) {
+    // Create blob
+    final mimeType = _mimeTypeForFormat(format);
+    final blob = html.Blob([bytes], mimeType);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    // Create download link and trigger
+    final anchor = html.AnchorElement()
+      ..href = url
+      ..download = '${_removeExtension(fileName)}_slowverb.$format'
+      ..style.display = 'none';
+
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+
+    // Cleanup blob URL
+    html.Url.revokeObjectUrl(url);
+  }
+
+  /// Get MIME type for format
+  String _mimeTypeForFormat(String format) {
+    switch (format.toLowerCase()) {
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'flac':
+        return 'audio/flac';
+      case 'aac':
+        return 'audio/aac';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  /// Remove file extension
+  String _removeExtension(String fileName) {
+    final lastDot = fileName.lastIndexOf('.');
+    return lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
+  }
+
+  /// Estimate time remaining
+  Duration? _estimateTimeRemaining(
+    DateTime startTime,
+    int completedCount,
+    int totalCount,
+  ) {
+    if (completedCount == 0) return null;
+
+    final elapsed = DateTime.now().difference(startTime);
+    final avgTimePerFile = elapsed.inSeconds / completedCount;
+    final remainingFiles = totalCount - completedCount;
+
+    return Duration(seconds: (avgTimePerFile * remainingFiles).round());
   }
 
   // JS interop helpers

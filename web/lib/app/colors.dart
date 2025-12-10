@@ -29,6 +29,10 @@ class SlowverbColors {
   static const accentCyan = SlowverbTokens.primaryBlue;
   static const accentMint = SlowverbTokens.primaryCyan;
 
+  // Aliases for cross-platform compatibility
+  static const neonCyan = SlowverbTokens.primaryCyan;
+  static const hotPink = SlowverbTokens.primaryPink;
+
   // Background
   static const backgroundDark = SlowverbTokens.surfaceBase;
   static const backgroundMedium = Color(0xFF0F1628);
@@ -64,6 +68,13 @@ class SlowverbColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [accentPink, accentCyan],
+  );
+
+  // Cross-platform gradient aliases
+  static const vaporwaveSunset = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [hotPink, accentCyan],
   );
 
   static const backgroundGradient = SlowverbTokens.backgroundGradient;

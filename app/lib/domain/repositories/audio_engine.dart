@@ -14,6 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+import 'package:slowverb/domain/entities/batch_render_progress.dart';
+import 'package:slowverb/domain/entities/effect_preset.dart';
+import 'package:slowverb/domain/entities/batch_job.dart';
+
 /// Abstract interface for audio processing operations
 ///
 /// All audio processing (preview and render) goes through this interface.
@@ -53,6 +58,41 @@ abstract class AudioEngine {
 
   /// Check if FFmpeg is available on this platform
   Future<bool> isAvailable();
+
+  /// Render multiple files with the same or individual presets
+  ///
+  /// Returns a stream of BatchRenderProgress updates.
+  /// [concurrency] controls parallel processing (desktop can use > 1, web should use 1)
+  Stream<BatchRenderProgress> renderBatch({
+    required List<BatchInputFile> files,
+    required EffectPreset defaultPreset,
+    required ExportOptions options,
+    int concurrency = 1,
+  });
+
+  /// Cancel the entire batch operation
+  Future<void> cancelBatch();
+
+  /// Pause batch processing (if supported)
+  Future<void> pauseBatch();
+
+  /// Resume paused batch
+  Future<void> resumeBatch();
+}
+
+/// Input file for batch processing
+class BatchInputFile {
+  final String fileId;
+  final String sourcePath;
+  final String fileName;
+  final EffectPreset? presetOverride; // null = use batch default
+
+  const BatchInputFile({
+    required this.fileId,
+    required this.sourcePath,
+    required this.fileName,
+    this.presetOverride,
+  });
 }
 
 /// Result of a render operation

@@ -17,6 +17,9 @@
 
 import 'dart:typed_data';
 
+import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
+import 'package:slowverb_web/domain/entities/effect_preset.dart';
+
 /// Abstract interface for audio processing operations
 ///
 /// All audio processing (preview and render) goes through this interface.
@@ -79,6 +82,25 @@ abstract class AudioEngine {
 
   /// Free memory for a loaded source file
   Future<void> cleanup({String? fileId});
+
+  /// Render multiple files with batch processing
+  ///
+  /// For web, this ALWAYS uses sequential processing (concurrency = 1)
+  /// to avoid browser memory issues. Files are processed one at a time.
+  Stream<BatchRenderProgress> renderBatch({
+    required List<BatchInputFile> files,
+    required EffectPreset defaultPreset,
+    required ExportOptions options,
+  });
+
+  /// Cancel the entire batch operation
+  Future<void> cancelBatch();
+
+  /// Pause the batch operation (can be resumed later)
+  Future<void> pauseBatch();
+
+  /// Resume a paused batch operation
+  Future<void> resumeBatch();
 }
 
 /// Metadata extracted from an audio file
@@ -213,5 +235,20 @@ class RenderResult {
     this.outputBytes,
     this.errorMessage,
     this.renderDuration,
+  });
+}
+
+/// Input file for batch processing
+class BatchInputFile {
+  final String fileId;
+  final String fileName;
+  final Uint8List bytes;
+  final EffectPreset? presetOverride; // null = use batch default
+
+  const BatchInputFile({
+    required this.fileId,
+    required this.fileName,
+    required this.bytes,
+    this.presetOverride,
   });
 }

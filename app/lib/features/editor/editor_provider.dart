@@ -24,6 +24,8 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:slowverb/domain/entities/effect_preset.dart';
 import 'package:slowverb/domain/entities/project.dart';
+import 'package:slowverb/domain/entities/history_entry.dart';
+import 'package:slowverb/features/history/history_provider.dart';
 import 'package:uuid/uuid.dart';
 
 /// State for the current editing session
@@ -106,6 +108,7 @@ class EditorState {
 
 /// Notifier managing the editor state and audio playback
 class EditorNotifier extends StateNotifier<EditorState> {
+  final Ref ref;
   final AudioPlayer _audioPlayer;
   final Uuid _uuid = const Uuid();
 
@@ -114,7 +117,9 @@ class EditorNotifier extends StateNotifier<EditorState> {
   String? _lastPreviewPath;
   static const _previewDebounceDuration = Duration(milliseconds: 500);
 
-  EditorNotifier() : _audioPlayer = AudioPlayer(), super(const EditorState()) {
+  EditorNotifier(this.ref)
+    : _audioPlayer = AudioPlayer(),
+      super(const EditorState()) {
     _setupPlayerListeners();
   }
 
@@ -179,6 +184,61 @@ class EditorNotifier extends StateNotifier<EditorState> {
       final duration = _audioPlayer.duration ?? Duration.zero;
 
       // Get default parameters from the preset
+      final preset = Presets.slowedReverb;
+      final defaultParams = <String, double>{};
+      for (final param in preset.parameters) {
+        defaultParams[param.id] = param.defaultValue;
+      }
+
+      state = state.copyWith(
+        currentProject: project.copyWith(durationMs: duration.inMilliseconds),
+        selectedPresetId: 'slowed_reverb',
+        parameters: defaultParams,
+        duration: duration,
+        position: Duration.zero,
+        isPlaying: false,
+        clearExportedFilePath: true,
+        clearPreviewFilePath: true,
+      );
+
+      // Generate initial preview with effects
+      _schedulePreviewGeneration();
+
+      return true;
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Failed to import: $e');
+      return false;
+    }
+  }
+
+  /// Import an audio file from a specific path (e.g., YouTube downloads)
+  Future<bool> importAudioFileFromPath(String filePath) async {
+    try {
+      if (!await File(filePath).exists()) {
+        state = state.copyWith(errorMessage: 'File not found');
+        return false;
+      }
+
+      // Get file info
+      final fileName = path.basenameWithoutExtension(filePath);
+
+      // Create a new project
+      final project = Project(
+        id: _uuid.v4(),
+        name: fileName,
+        sourcePath: filePath,
+        sourceTitle: fileName,
+        durationMs: 0,
+        presetId: 'slowed_reverb',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Load audio to get duration
+      await _audioPlayer.setFilePath(filePath);
+      final duration = _audioPlayer.duration ?? Duration.zero;
+
+      // Set default parameters for slowed_reverb preset
       final preset = Presets.slowedReverb;
       final defaultParams = <String, double>{};
       for (final param in preset.parameters) {
@@ -455,6 +515,21 @@ class EditorNotifier extends StateNotifier<EditorState> {
           exportProgress: 1.0,
           exportedFilePath: outputPath,
         );
+
+        // Save to history
+        ref
+            .read(historyProvider.notifier)
+            .addEntry(
+              HistoryEntry.create(
+                sourcePath: project.sourcePath,
+                outputPath: outputPath,
+                presetId: state.selectedPresetId ?? 'custom',
+                parameters: state.parameters,
+                format: format,
+                durationMs: project.durationMs,
+              ),
+            );
+
         return true;
       } else {
         // Fallback: copy original file
@@ -465,6 +540,21 @@ class EditorNotifier extends StateNotifier<EditorState> {
           exportedFilePath: outputPath,
           errorMessage: 'FFmpeg not available. Exported original file.',
         );
+
+        // Save to history even for fallback
+        ref
+            .read(historyProvider.notifier)
+            .addEntry(
+              HistoryEntry.create(
+                sourcePath: project.sourcePath,
+                outputPath: outputPath,
+                presetId: state.selectedPresetId ?? 'custom',
+                parameters: state.parameters,
+                format: format,
+                durationMs: project.durationMs,
+              ),
+            );
+
         return true;
       }
     } catch (e) {
@@ -576,6 +666,8 @@ class EditorNotifier extends StateNotifier<EditorState> {
         codecArgs.addAll(['-codec:a', 'libmp3lame', '-b:a', bitrate]);
       } else if (format == 'aac') {
         codecArgs.addAll(['-codec:a', 'aac', '-b:a', bitrate]);
+      } else if (format == 'flac') {
+        codecArgs.addAll(['-codec:a', 'flac', '-compression_level', '8']);
       } else {
         codecArgs.addAll(['-codec:a', 'pcm_s16le']);
       }
@@ -679,5 +771,5 @@ class EditorNotifier extends StateNotifier<EditorState> {
 final editorProvider = StateNotifierProvider<EditorNotifier, EditorState>((
   ref,
 ) {
-  return EditorNotifier();
+  return EditorNotifier(ref);
 });

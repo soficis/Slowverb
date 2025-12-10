@@ -41,7 +41,7 @@ abstract final class Presets {
     name: 'Slowed + Reverb',
     description: 'Classic dreamy vaporwave effect',
     parameters: {
-      'tempo': 0.85,
+      'tempo': 0.95,
       'pitch': -2.0,
       'reverbAmount': 0.7,
       'echoAmount': 0.2,

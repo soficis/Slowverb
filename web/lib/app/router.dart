@@ -22,6 +22,8 @@ import 'package:slowverb_web/features/import/import_screen.dart';
 import 'package:slowverb_web/features/editor/editor_screen.dart';
 import 'package:slowverb_web/features/export/export_screen.dart';
 import 'package:slowverb_web/features/about/about_screen.dart';
+import 'package:slowverb_web/features/youtube/youtube_stream_screen.dart';
+import 'package:slowverb_web/app/app_config.dart';
 
 /// App navigation routes
 class AppRoutes {
@@ -30,6 +32,7 @@ class AppRoutes {
   static const presets = '/presets';
   static const export = '/export';
   static const about = '/about';
+  static const youtube = '/youtube';
 }
 
 /// Router configuration for Slowverb Web
@@ -69,6 +72,13 @@ final appRouter = GoRouter(
       name: 'about',
       builder: (context, state) => const AboutScreen(),
     ),
+    // YouTube streaming (experimental)
+    if (AppConfig.enableExperimentalYouTubeMode)
+      GoRoute(
+        path: AppRoutes.youtube,
+        name: 'youtube',
+        builder: (context, state) => const YouTubeStreamScreen(),
+      ),
   ],
   errorBuilder: (context, state) => Scaffold(
     body: Center(

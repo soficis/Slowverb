@@ -16,6 +16,7 @@
  */
 import 'package:flutter/material.dart';
 import 'package:slowverb/app/colors.dart';
+import 'package:slowverb/app/slowverb_design_tokens.dart';
 import 'package:slowverb/app/widgets/vaporwave_widgets.dart';
 
 /// Playback control buttons for the editor
@@ -66,7 +67,7 @@ class PlaybackControls extends StatelessWidget {
           ),
           const SizedBox(width: 24),
           // Play/Pause (Primary Neon)
-          _buildPlayButton(),
+          _buildPlayButton(context),
           const SizedBox(width: 24),
           // Seek forward
           IconButton(
@@ -93,12 +94,19 @@ class PlaybackControls extends StatelessWidget {
     );
   }
 
-  Widget _buildPlayButton() {
+  Widget _buildPlayButton(BuildContext context) {
+    // Responsive sizing: Desktop 96px, Tablet 88px, Mobile 80px
+    final isDesktop = SlowverbTokens.isDesktop(context);
+    final isTablet = SlowverbTokens.isTablet(context);
+    final buttonSize = isDesktop ? 96.0 : (isTablet ? 88.0 : 80.0);
+    final iconSize = isDesktop ? 56.0 : (isTablet ? 52.0 : 48.0);
+    final spinnerSize = isDesktop ? 42.0 : (isTablet ? 38.0 : 36.0);
+
     return GestureDetector(
       onTap: onPlayPause,
       child: Container(
-        width: 80,
-        height: 80,
+        width: buttonSize,
+        height: buttonSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: SlowverbColors.vaporwaveSunset,
@@ -123,10 +131,10 @@ class PlaybackControls extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             if (isProcessing)
-              const SizedBox(
-                width: 36,
-                height: 36,
-                child: CircularProgressIndicator(
+              SizedBox(
+                width: spinnerSize,
+                height: spinnerSize,
+                child: const CircularProgressIndicator(
                   strokeWidth: 3,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
@@ -134,7 +142,7 @@ class PlaybackControls extends StatelessWidget {
             Icon(
               isPlaying ? Icons.pause : Icons.play_arrow_rounded,
               color: Colors.white,
-              size: 48,
+              size: iconSize,
               shadows: [
                 Shadow(
                   color: Colors.black.withValues(alpha: 0.3),

@@ -26,6 +26,8 @@ import 'package:slowverb/domain/entities/effect_preset.dart';
 import 'package:slowverb/features/editor/editor_provider.dart';
 import 'package:slowverb/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb/features/editor/widgets/playback_controls.dart';
+import 'package:slowverb/features/visualizer/visualizer_controller.dart';
+import 'package:slowverb/features/visualizer/visualizer_panel.dart';
 
 /// Main editor screen with VaporXP layout shared with the web experience.
 class EditorScreen extends ConsumerWidget {
@@ -41,12 +43,18 @@ class EditorScreen extends ConsumerWidget {
 
     if (state.errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(state.errorMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(state.errorMessage!)));
+        notifier.clearError();
         notifier.clearError();
       });
     }
+
+    // Sync playback state with visualizer
+    ref.listen(editorProvider.select((s) => s.isPlaying), (_, isPlaying) {
+      ref.read(visualizerProvider.notifier).setPlaying(isPlaying);
+    });
 
     if (project == null) {
       return ResponsiveScaffold(
@@ -71,39 +79,81 @@ class EditorScreen extends ConsumerWidget {
       );
     }
 
-    final presetName = _presetNameFor(state.selectedPresetId ?? project.presetId);
+    final presetName = _presetNameFor(
+      state.selectedPresetId ?? project.presetId,
+    );
 
     return ResponsiveScaffold(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Use Stack to layer visualizer behind controls
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          _EditorTitleBar(
-            presetName: presetName,
-            onBack: () {
-              notifier.stopPlayback();
-              context.go(RoutePaths.home);
-            },
-            onExport: () =>
-                context.push(RoutePaths.exportWithId(projectId)),
+          // Background Visualizer
+          const Positioned.fill(
+            child: VisualizerPanel(mode: VisualizerMode.background),
           ),
-          const SizedBox(height: SlowverbTokens.spacingLg),
-          _FileInfoBanner(
-            name: project.name,
-            duration: state.duration,
-            onChangeFile: () => context.go(RoutePaths.home),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingLg),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 1100;
-                final content = isWide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: _WaveformTransportCard(
+
+          // Content Overlay
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Top Bar
+                  _EditorTitleBar(
+                    presetName: presetName,
+                    onBack: () {
+                      notifier.stopPlayback();
+                      context.go(RoutePaths.home);
+                    },
+                    onExport: () =>
+                        context.push(RoutePaths.exportWithId(projectId)),
+                  ),
+
+                  const Spacer(),
+
+                  // Bottom Controls
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 900;
+
+                      if (isWide) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _WaveformTransportCard(
+                                projectName: project.name,
+                                position: state.position,
+                                duration: state.duration,
+                                isPlaying: state.isPlaying,
+                                isGeneratingPreview: state.isGeneratingPreview,
+                                onPlayPause: notifier.togglePlayback,
+                                onSeek: (pos) => notifier.seekTo(
+                                  Duration(milliseconds: pos),
+                                ),
+                                onSeekBackward: notifier.seekBackward,
+                                onSeekForward: notifier.seekForward,
+                              ),
+                            ),
+                            const SizedBox(width: SlowverbTokens.spacingLg),
+                            Expanded(
+                              flex: 2,
+                              child: _EffectColumn(
+                                state: state,
+                                onPresetSelected: notifier.selectPreset,
+                                onUpdateParam: notifier.updateParameter,
+                              ),
+                            ),
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _WaveformTransportCard(
                               projectName: project.name,
                               position: state.position,
                               duration: state.duration,
@@ -115,48 +165,19 @@ class EditorScreen extends ConsumerWidget {
                               onSeekBackward: notifier.seekBackward,
                               onSeekForward: notifier.seekForward,
                             ),
-                          ),
-                          const SizedBox(width: SlowverbTokens.spacingLg),
-                          Expanded(
-                            flex: 2,
-                            child: _EffectColumn(
+                            const SizedBox(height: SlowverbTokens.spacingMd),
+                            _EffectColumn(
                               state: state,
                               onPresetSelected: notifier.selectPreset,
                               onUpdateParam: notifier.updateParameter,
                             ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          _WaveformTransportCard(
-                            projectName: project.name,
-                            position: state.position,
-                            duration: state.duration,
-                            isPlaying: state.isPlaying,
-                            isGeneratingPreview: state.isGeneratingPreview,
-                            onPlayPause: notifier.togglePlayback,
-                            onSeek: (pos) =>
-                                notifier.seekTo(Duration(milliseconds: pos)),
-                            onSeekBackward: notifier.seekBackward,
-                            onSeekForward: notifier.seekForward,
-                          ),
-                          const SizedBox(height: SlowverbTokens.spacingLg),
-                          _EffectColumn(
-                            state: state,
-                            onPresetSelected: notifier.selectPreset,
-                            onUpdateParam: notifier.updateParameter,
-                          ),
-                        ],
-                      );
-
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: content,
+                          ],
+                        );
+                      }
+                    },
                   ),
-                );
-              },
+                ],
+              ),
             ),
           ),
         ],
@@ -200,16 +221,19 @@ class _EditorTitleBar extends StatelessWidget {
         children: [
           _ChromeButton(icon: Icons.arrow_back, onTap: onBack),
           const SizedBox(width: SlowverbTokens.spacingSm),
+          const _VisualizerSelector(),
+          const SizedBox(width: SlowverbTokens.spacingSm),
           Text(
             'Slowverb Editor',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                  shadows: const [
-                    Shadow(color: Colors.black54, offset: Offset(0, 1)),
-                  ],
-                ),
+              color: Colors.white,
+              letterSpacing: 1.2,
+              shadows: const [
+                Shadow(color: Colors.black54, offset: Offset(0, 1)),
+              ],
+            ),
           ),
+
           const Spacer(),
           _PresetBadge(presetName: presetName),
           const SizedBox(width: SlowverbTokens.spacingSm),
@@ -217,61 +241,6 @@ class _EditorTitleBar extends StatelessWidget {
             onPressed: onExport,
             icon: const Icon(Icons.download),
             label: const Text('Export'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FileInfoBanner extends StatelessWidget {
-  final String name;
-  final Duration duration;
-  final VoidCallback onChangeFile;
-
-  const _FileInfoBanner({
-    required this.name,
-    required this.duration,
-    required this.onChangeFile,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
-        border: Border.all(
-          color: SlowverbColors.hotPink.withOpacity(0.25),
-        ),
-        boxShadow: [SlowverbTokens.shadowCard],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.audio_file, color: SlowverbColors.hotPink),
-          const SizedBox(width: SlowverbTokens.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Duration: ${_formatDuration(duration)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onChangeFile,
-            icon: const Icon(Icons.close),
-            tooltip: 'Change file',
           ),
         ],
       ),
@@ -317,35 +286,12 @@ class _WaveformTransportCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            projectName,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text(projectName, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: SlowverbTokens.spacingMd),
-          Container(
-            height: 180,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1F1B2F), Color(0xFF2A2343)],
-              ),
-              borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
-              border: Border.all(
-                color: SlowverbColors.neonCyan.withOpacity(0.25),
-              ),
-            ),
-            child: const Center(
-              child: Text(
-                'Waveform Preview',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingSm),
+          // Visualizer is now in background
           Slider(
             value: progress.clamp(0.0, 1.0),
-            onChanged: (value) => onSeek(
-              (value * totalMs).toInt(),
-            ),
+            onChanged: (value) => onSeek((value * totalMs).toInt()),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(
@@ -467,10 +413,7 @@ class _QuickPresetChips extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Quick Presets',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('Quick Presets', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: SlowverbTokens.spacingSm),
         Wrap(
           spacing: SlowverbTokens.spacingSm,
@@ -484,10 +427,10 @@ class _QuickPresetChips extends StatelessWidget {
               selectedColor: SlowverbColors.hotPink.withOpacity(0.2),
               backgroundColor: SlowverbColors.surfaceVariant,
               labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isSelected
-                        ? SlowverbColors.hotPink
-                        : SlowverbColors.onSurface,
-                  ),
+                color: isSelected
+                    ? SlowverbColors.hotPink
+                    : SlowverbColors.onSurface,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
                 side: BorderSide(
@@ -527,6 +470,91 @@ class _ChromeButton extends StatelessWidget {
   }
 }
 
+class _VisualizerSelector extends ConsumerWidget {
+  const _VisualizerSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visualizerState = ref.watch(visualizerProvider);
+    final currentPreset = visualizerState.activePreset;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Change Visualizer',
+      offset: const Offset(0, 40),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: SlowverbTokens.spacingMd,
+          vertical: SlowverbTokens.spacingXs + 2,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+            const SizedBox(width: SlowverbTokens.spacingXs),
+            Text(
+              currentPreset.name,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white70),
+          ],
+        ),
+      ),
+      onSelected: (presetId) {
+        ref.read(visualizerProvider.notifier).selectPreset(presetId);
+      },
+      itemBuilder: (context) {
+        return VisualizerController.presets.map((preset) {
+          final isSelected = preset.id == currentPreset.id;
+          return PopupMenuItem<String>(
+            value: preset.id,
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18,
+                  color: isSelected ? SlowverbColors.neonCyan : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        preset.name,
+                        style: TextStyle(
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      Text(
+                        preset.description,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList();
+      },
+    );
+  }
+}
+
 class _PresetBadge extends StatelessWidget {
   final String presetName;
 
@@ -552,9 +580,9 @@ class _PresetBadge extends StatelessWidget {
           Text(
             presetName,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
+              color: Colors.white,
+              letterSpacing: 1.2,
+            ),
           ),
         ],
       ),

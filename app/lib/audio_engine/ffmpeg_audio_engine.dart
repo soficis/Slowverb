@@ -15,20 +15,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:ffmpeg_kit_flutter_audio/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_audio/return_code.dart';
 import 'package:slowverb/domain/repositories/audio_engine.dart';
+import 'package:slowverb/domain/entities/batch_job.dart';
+import 'package:slowverb/domain/entities/batch_render_progress.dart';
+import 'package:slowverb/domain/entities/effect_preset.dart';
+import 'package:slowverb/domain/entities/render_job.dart';
+import 'package:slowverb/services/ffmpeg_service.dart';
 
 /// FFmpeg-based implementation of AudioEngine
-///
-/// Uses FFmpeg filters for tempo, pitch, and reverb effects.
-/// This implementation works across all desktop and mobile platforms.
 class FFmpegAudioEngine implements AudioEngine {
+  final FFmpegService? _ffmpegService;
+
   bool _isInitialized = false;
   StreamController<double>? _renderProgressController;
 
+  FFmpegAudioEngine([this._ffmpegService]);
+
   @override
   Future<void> initialize() async {
-    // TODO: Initialize FFmpeg kit
     _isInitialized = true;
   }
 
@@ -40,7 +49,6 @@ class FFmpegAudioEngine implements AudioEngine {
 
   @override
   Future<bool> isAvailable() async {
-    // TODO: Check FFmpeg availability
     return true;
   }
 
@@ -50,13 +58,6 @@ class FFmpegAudioEngine implements AudioEngine {
     required Map<String, double> params,
   }) async {
     _ensureInitialized();
-
-    // final filterChain = _buildFilterChain(params);
-
-    // TODO: Generate preview using FFmpeg
-    // For now, return a placeholder path
-    // final command = '-i "$sourcePath" -af "$filterChain" -t 30 "$outputPath"';
-
     return sourcePath; // Placeholder
   }
 
@@ -100,44 +101,128 @@ class FFmpegAudioEngine implements AudioEngine {
     if (controller == null) return;
 
     try {
-      // final filterChain = _buildFilterChain(params);
-      // final bitrateArg = bitrateKbps != null ? '-b:a ${bitrateKbps}k' : '';
+      final filterChain = _buildFilterChain(params);
+      final bitrateArg = bitrateKbps != null ? '-b:a ${bitrateKbps}k' : '';
 
-      // Build FFmpeg command
-      // Command construction commented out until implementation
-      /*
-      final command =
-          '-i "$sourcePath" '
+      // Build FFmpeg command arguments (inner part)
+      // Note: For native process execution we need individual args, not one string.
+      // For ffmpeg_kit we need one string.
+
+      final commandStr =
+          '-y -i "$sourcePath" '
           '-af "$filterChain" '
           '$bitrateArg '
           '-threads 0 '
           '"$outputPath"';
-      */
 
-      // TODO: Execute using ffmpeg_kit_flutter
-      // For now, simulate progress
-      for (var i = 0; i <= 100; i += 10) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (controller.isClosed) return;
-        controller.add(i / 100);
+      // Execute based on platform
+      if (Platform.isWindows) {
+        await _executeWindowsRender(commandStr, controller);
+      } else {
+        await _executeMobileRender(commandStr, controller);
       }
-
-      controller.add(1.0);
     } catch (e) {
-      controller.addError(e);
-    } finally {
-      await controller.close();
+      if (!controller.isClosed) {
+        controller.addError(e);
+        controller.close();
+      }
     }
+  }
+
+  Future<void> _executeWindowsRender(
+    String commandArgsString,
+    StreamController<double> controller,
+  ) async {
+    // Use the path from FFmpegService if available, otherwise fallback to 'ffmpeg'
+    final ffmpegExe = _ffmpegService?.executablePath ?? 'ffmpeg';
+
+    print('Executing Windows FFmpeg: $ffmpegExe $commandArgsString');
+
+    try {
+      final process = await Process.start(
+        ffmpegExe,
+        _splitArgs(commandArgsString),
+        runInShell: true,
+      );
+
+      // Capture stdout/stderr
+      process.stderr.transform(utf8.decoder).listen((data) {
+        // print('FFmpeg Stderr: $data');
+        controller.add(0.5); // Indeterminate progress
+      });
+
+      final exitCode = await process.exitCode;
+      if (exitCode == 0) {
+        controller.add(1.0);
+        controller.close();
+      } else {
+        controller.addError('FFmpeg exited with code $exitCode');
+        controller.close();
+      }
+    } catch (e) {
+      controller.addError('Failed to run ffmpeg ($ffmpegExe). Error: $e');
+      controller.close();
+    }
+  }
+
+  Future<void> _executeMobileRender(
+    String command,
+    StreamController<double> controller,
+  ) async {
+    await FFmpegKit.executeAsync(
+      command,
+      (session) async {
+        final returnCode = await session.getReturnCode();
+        if (ReturnCode.isSuccess(returnCode)) {
+          controller.add(1.0);
+          controller.close();
+        } else {
+          final logs = await session.getLogsAsString();
+          controller.addError('FFmpeg failed: $logs');
+          controller.close();
+        }
+      },
+      (log) {},
+      (statistics) {
+        controller.add(0.5);
+      },
+    );
+  }
+
+  // Basic arg splitter that handles quotes
+  List<String> _splitArgs(String command) {
+    final args = <String>[];
+    var current = '';
+    var inQuote = false;
+
+    for (var i = 0; i < command.length; i++) {
+      final char = command[i];
+      if (char == '"') {
+        inQuote = !inQuote;
+      } else if (char == ' ' && !inQuote) {
+        if (current.isNotEmpty) {
+          args.add(current);
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    if (current.isNotEmpty) args.add(current);
+    return args;
   }
 
   @override
   Future<void> cancelRender() async {
-    // TODO: Cancel FFmpeg execution
+    if (!Platform.isWindows) {
+      await FFmpegKit.cancel();
+    }
+    // On Windows, we'd need the process object to kill it.
+    // Simplified for now.
     await _renderProgressController?.close();
     _renderProgressController = null;
   }
 
-  /*
   /// Build the FFmpeg filter chain from parameters
   String _buildFilterChain(Map<String, double> params) {
     final tempo = params['tempo'] ?? 1.0;
@@ -163,39 +248,33 @@ class FFmpegAudioEngine implements AudioEngine {
 
     return filters.isEmpty ? 'anull' : filters.join(',');
   }
-  */
 
-  /*
   /// Build atempo filter, chaining if needed for extreme values
   String _buildTempoFilter(double tempo) {
     // atempo only supports 0.5 to 2.0, chain for more extreme values
     if (tempo >= 0.5 && tempo <= 2.0) {
-      return 'atempo=\$tempo';
+      return 'atempo=$tempo';
     } else if (tempo < 0.5) {
       // Chain multiple atempo filters
       final factor1 = 0.5;
       final factor2 = tempo / factor1;
-      return 'atempo=\$factor1,atempo=\$factor2';
+      return 'atempo=$factor1,atempo=$factor2';
     } else {
       // tempo > 2.0
       final factor1 = 2.0;
       final factor2 = tempo / factor1;
-      return 'atempo=\$factor1,atempo=\$factor2';
+      return 'atempo=$factor1,atempo=$factor2';
     }
   }
-  */
 
-  /*
   /// Build pitch shift filter using asetrate + aresample
   String _buildPitchFilter(double semitones) {
     // Convert semitones to rate multiplier
-    // Each semitone is a factor of 2^(1/12) ≈ 1.0595
+    // Each semitone is a factor of 2^(1/12) approx 1.0595
     final multiplier = 1.0 + (semitones * 0.0595);
-    return 'asetrate=44100*\$multiplier,aresample=44100';
+    return 'asetrate=44100*$multiplier,aresample=44100';
   }
-  */
 
-  /*
   /// Build reverb filter using aecho
   String _buildReverbFilter(double amount) {
     // Map amount (0-1) to aecho parameters
@@ -203,13 +282,108 @@ class FFmpegAudioEngine implements AudioEngine {
     final decay = 0.2 + (amount * 0.5); // 0.2 to 0.7
     final delay = 40 + (amount * 80).toInt(); // 40ms to 120ms
 
-    return 'aecho=0.8:0.88:\$delay:\$decay';
+    return 'aecho=0.8:0.88:$delay:$decay';
   }
-  */
 
   void _ensureInitialized() {
     if (!_isInitialized) {
       throw StateError('AudioEngine not initialized. Call initialize() first.');
     }
   }
+
+  // Batch interface implementation
+  @override
+  Stream<BatchRenderProgress> renderBatch({
+    required List<BatchInputFile> files,
+    required EffectPreset defaultPreset,
+    required ExportOptions options,
+    int concurrency = 1,
+  }) async* {
+    var completedCount = 0;
+    var failedCount = 0;
+
+    // Initial progress yield
+    yield BatchRenderProgress.initial(files.length);
+
+    for (var i = 0; i < files.length; i++) {
+      final item = files[i];
+
+      // Update progress: started processing file i
+      yield BatchRenderProgress(
+        totalFiles: files.length,
+        completedFiles: completedCount,
+        failedFiles: failedCount,
+        currentFileIndex: i,
+        currentFileProgress: 0.0,
+        overallProgress: i / files.length,
+      );
+
+      final completer = Completer<void>();
+      final controller = StreamController<double>();
+      _renderProgressController =
+          controller; // Hijack controller for single-thread
+
+      final preset = item.presetOverride ?? defaultPreset;
+      final params = preset.toParametersMap();
+
+      _executeRender(
+        sourcePath: item.sourcePath,
+        params: params,
+        outputPath: _generateOutputPath(item.sourcePath, options),
+        format: options.format,
+        bitrateKbps: options.bitrateKbps,
+      );
+
+      controller.stream.listen(
+        (progress) {},
+        onError: (e) {
+          failedCount++;
+          completer.complete();
+        },
+        onDone: () {
+          completedCount++;
+          completer.complete();
+        },
+      );
+
+      await completer.future;
+
+      // Update progress: finished processing file i
+      yield BatchRenderProgress(
+        totalFiles: files.length,
+        completedFiles: completedCount,
+        failedFiles: failedCount,
+        currentFileIndex: i,
+        currentFileProgress: 1.0,
+        overallProgress: (i + 1) / files.length,
+      );
+    }
+
+    // Final completion yield
+    yield BatchRenderProgress(
+      totalFiles: files.length,
+      completedFiles: completedCount,
+      failedFiles: failedCount,
+      currentFileIndex: -1,
+      overallProgress: 1.0,
+    );
+  }
+
+  // Helper to generate output path (simplified)
+  String _generateOutputPath(String source, ExportOptions options) {
+    final dir = File(source).parent.path;
+    final name = File(source).uri.pathSegments.last.split('.').first;
+    return '$dir/${name}_slowed.${options.format}';
+  }
+
+  @override
+  Future<void> cancelBatch() async {
+    await cancelRender();
+  }
+
+  @override
+  Future<void> pauseBatch() async {}
+
+  @override
+  Future<void> resumeBatch() async {}
 }

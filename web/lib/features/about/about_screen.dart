@@ -15,6 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:slowverb_web/app/colors.dart';
 
@@ -161,6 +162,32 @@ class AboutScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: SlowverbColors.textSecondary,
                           fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // GitHub Link
+                  Center(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        html.window.open(
+                          'https://github.com/soficis/Slowverb',
+                          '_blank',
+                        );
+                      },
+                      icon: const Icon(Icons.code, size: 18),
+                      label: const Text('View Source on GitHub'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: SlowverbColors.accentCyan,
+                        side: const BorderSide(
+                          color: SlowverbColors.accentCyan,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
                         ),
                       ),
                     ),

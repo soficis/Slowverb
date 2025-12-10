@@ -2,6 +2,24 @@ import 'package:flutter/material.dart';
 
 /// Central design tokens for the VaporXP Luna aesthetic across platforms.
 abstract final class SlowverbTokens {
+  // === RESPONSIVE BREAKPOINTS ===
+  static const double breakpointMobile = 600.0;
+  static const double breakpointTablet = 900.0;
+  static const double breakpointDesktop = 1200.0;
+
+  /// Check if screen is mobile-sized (<600px)
+  static bool isMobile(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < breakpointMobile;
+
+  /// Check if screen is tablet-sized (600-900px)
+  static bool isTablet(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= breakpointMobile &&
+      MediaQuery.sizeOf(context).width < breakpointTablet;
+
+  /// Check if screen is desktop-sized (>=900px)
+  static bool isDesktop(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= breakpointTablet;
+
   // === PRIMARY PALETTE (Vaporwave) ===
   static const Color primaryPink = Color(0xFFFF71CE); // HSL(320, 100%, 72%)
   static const Color primaryPurple = Color(0xFFB967FF); // HSL(274, 100%, 70%)
@@ -55,10 +73,7 @@ abstract final class SlowverbTokens {
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color(0xFF2B1A3D),
-      Color(0xFF0F1628),
-    ],
+    colors: [Color(0xFF2B1A3D), Color(0xFF0F1628)],
   );
 
   static const LinearGradient titleBarGradient = LinearGradient(

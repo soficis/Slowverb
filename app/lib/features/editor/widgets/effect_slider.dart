@@ -51,13 +51,13 @@ class EffectSlider extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.tune, size: 18, color: SlowverbColors.neonCyan),
+              const Icon(Icons.tune, size: 18, color: SlowverbColors.neonCyan),
               const SizedBox(width: SlowverbTokens.spacingXs),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: SlowverbColors.onSurface,
-                    ),
+                  color: SlowverbColors.onSurface,
+                ),
               ),
               const Spacer(),
               _ValuePill(text: formatValue(value)),
@@ -68,8 +68,9 @@ class EffectSlider extends StatelessWidget {
             data: Theme.of(context).copyWith(
               sliderTheme: SliderThemeData(
                 activeTrackColor: SlowverbColors.hotPink,
-                inactiveTrackColor:
-                    SlowverbColors.onSurfaceMuted.withOpacity(0.35),
+                inactiveTrackColor: SlowverbColors.onSurfaceMuted.withOpacity(
+                  0.35,
+                ),
                 thumbColor: SlowverbColors.neonCyan,
                 overlayColor: SlowverbColors.neonCyan.withOpacity(0.2),
                 trackHeight: 6,
@@ -84,7 +85,6 @@ class EffectSlider extends StatelessWidget {
               value: value,
               min: min,
               max: max,
-              divisions: (max - min).toInt(),
               label: '${formatValue(value)} $unit',
               onChanged: onChanged,
               onChangeEnd: onChangeEnd,
@@ -98,14 +98,14 @@ class EffectSlider extends StatelessWidget {
                 Text(
                   formatValue(min),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: SlowverbColors.onSurfaceMuted,
-                      ),
+                    color: SlowverbColors.onSurfaceMuted,
+                  ),
                 ),
                 Text(
                   formatValue(max),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: SlowverbColors.onSurfaceMuted,
-                      ),
+                    color: SlowverbColors.onSurfaceMuted,
+                  ),
                 ),
               ],
             ),
@@ -131,17 +131,15 @@ class _ValuePill extends StatelessWidget {
       decoration: BoxDecoration(
         color: SlowverbColors.surfaceVariant,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
-        border: Border.all(
-          color: SlowverbColors.hotPink.withOpacity(0.25),
-        ),
+        border: Border.all(color: SlowverbColors.hotPink.withOpacity(0.25)),
       ),
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: SlowverbColors.hotPink,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+          fontWeight: FontWeight.w600,
+          color: SlowverbColors.hotPink,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }

@@ -23,6 +23,7 @@ import 'package:go_router/go_router.dart';
 import 'package:slowverb/app/colors.dart';
 import 'package:slowverb/app/router.dart';
 import 'package:slowverb/features/editor/editor_provider.dart';
+import 'package:slowverb/services/codec_detector.dart';
 
 /// Export screen for rendering and saving processed audio
 class ExportScreen extends ConsumerStatefulWidget {
@@ -37,6 +38,30 @@ class ExportScreen extends ConsumerStatefulWidget {
 class _ExportScreenState extends ConsumerState<ExportScreen> {
   String _selectedFormat = 'mp3';
   String _selectedQuality = 'high';
+  bool? _isSourceLossless; // null = checking, true/false = result
+  final _codecDetector = CodecDetector();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSourceCodec();
+  }
+
+  Future<void> _checkSourceCodec() async {
+    final state = ref.read(editorProvider);
+    final project = state.currentProject;
+
+    if (project != null) {
+      final isLossless = await _codecDetector.isSourceLossless(
+        project.sourcePath,
+      );
+      if (mounted) {
+        setState(() {
+          _isSourceLossless = isLossless;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,34 +239,58 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   Widget _buildFormatOptions() {
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: [
         _buildFormatChip('MP3', 'mp3'),
-        const SizedBox(width: 12),
         _buildFormatChip('WAV', 'wav'),
-        const SizedBox(width: 12),
         _buildFormatChip('AAC', 'aac'),
+        _buildFormatChip(
+          'FLAC',
+          'flac',
+          enabled: _isSourceLossless == true,
+          tooltip: _isSourceLossless == false
+              ? 'FLAC is only available when the original source is lossless (WAV, FLAC, AIFF, etc.)'
+              : null,
+        ),
       ],
     );
   }
 
-  Widget _buildFormatChip(String label, String value) {
+  Widget _buildFormatChip(
+    String label,
+    String value, {
+    bool enabled = true,
+    String? tooltip,
+  }) {
     final isSelected = _selectedFormat == value;
-    return ChoiceChip(
+    final widget = ChoiceChip(
       label: Text(label),
       selected: isSelected,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() => _selectedFormat = value);
-        }
-      },
+      onSelected: enabled
+          ? (selected) {
+              if (selected) {
+                setState(() => _selectedFormat = value);
+              }
+            }
+          : null,
       selectedColor: SlowverbColors.hotPink,
-      backgroundColor: SlowverbColors.surface,
+      backgroundColor: enabled
+          ? SlowverbColors.surface
+          : SlowverbColors.surface.withValues(alpha: 0.3),
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : SlowverbColors.onSurface,
+        color: enabled
+            ? (isSelected ? Colors.white : SlowverbColors.onSurface)
+            : SlowverbColors.onSurfaceMuted,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
     );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: widget);
+    }
+    return widget;
   }
 
   Widget _buildQualityOptions() {

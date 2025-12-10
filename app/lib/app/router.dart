@@ -21,6 +21,8 @@ import 'package:slowverb/features/effects/effect_selection_screen.dart';
 import 'package:slowverb/features/export/export_screen.dart';
 import 'package:slowverb/features/library/library_screen.dart';
 import 'package:slowverb/features/splash/splash_screen.dart';
+import 'package:slowverb/features/history/history_screen.dart';
+import 'package:slowverb/features/batch/batch_import_screen.dart';
 
 /// Application route paths
 abstract final class RoutePaths {
@@ -29,6 +31,8 @@ abstract final class RoutePaths {
   static const effects = '/effects';
   static const editor = '/editor/:projectId';
   static const export = '/export/:projectId';
+  static const history = '/history';
+  static const batch = '/batch';
 
   /// Build editor path with project ID
   static String editorWithId(String projectId) => '/editor/$projectId';
@@ -87,6 +91,22 @@ final GoRouter appRouter = GoRouter(
         );
       },
     ),
+    GoRoute(
+      path: RoutePaths.history,
+      name: 'history',
+      pageBuilder: (context, state) => _buildPageWithSlideTransition(
+        state: state,
+        child: const HistoryScreen(),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.batch,
+      name: 'batch',
+      pageBuilder: (context, state) => _buildPageWithSlideTransition(
+        state: state,
+        child: const BatchImportScreen(),
+      ),
+    ),
   ],
 );
 
@@ -117,7 +137,10 @@ CustomTransitionPage<void> _buildPageWithSlideTransition({
       const end = Offset.zero;
       const curve = Curves.easeInOutCubic;
 
-      final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+      final tween = Tween(
+        begin: begin,
+        end: end,
+      ).chain(CurveTween(curve: curve));
 
       return SlideTransition(position: animation.drive(tween), child: child);
     },

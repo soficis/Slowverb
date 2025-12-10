@@ -23,6 +23,7 @@ import 'package:slowverb/data/providers/project_providers.dart';
 import 'package:slowverb/domain/entities/project.dart';
 import 'package:slowverb/features/editor/editor_provider.dart';
 import 'package:slowverb/features/library/widgets/project_card.dart';
+import 'package:slowverb/features/youtube/youtube_import_dialog.dart';
 
 /// Home screen showing the project library
 ///
@@ -107,11 +108,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              'Your Projects',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: SlowverbColors.onSurfaceMuted,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Your Projects',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: SlowverbColors.onSurfaceMuted,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => context.go(RoutePaths.batch),
+                  icon: const Icon(Icons.layers, size: 16),
+                  label: const Text('Batch'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.go(RoutePaths.history),
+                  icon: const Icon(Icons.history, size: 16),
+                  label: const Text('History'),
+                ),
+              ],
             ),
           ],
         ),
@@ -304,6 +320,47 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _handleImportTrack(BuildContext context) async {
+    // Show import options menu
+    final importType = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Audio'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.file_upload),
+              title: const Text('From File'),
+              subtitle: const Text('Import from your device'),
+              onTap: () => Navigator.pop(context, 'file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('From YouTube'),
+              subtitle: const Text('Download audio from YouTube'),
+              onTap: () => Navigator.pop(context, 'youtube'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (importType == null || !context.mounted) return;
+
+    if (importType == 'file') {
+      await _handleFileImport(context);
+    } else if (importType == 'youtube') {
+      await _handleYouTubeImport(context);
+    }
+  }
+
+  Future<void> _handleFileImport(BuildContext context) async {
     final notifier = ref.read(editorProvider.notifier);
 
     // Show loading indicator
@@ -335,6 +392,44 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _handleYouTubeImport(BuildContext context) async {
+    // Show YouTube import dialog
+    final downloadedFile = await showDialog<String>(
+      context: context,
+      builder: (context) => const YouTubeImportDialog(),
+    );
+
+    if (downloadedFile == null || !context.mounted) return;
+
+    // Import the downloaded file
+    final notifier = ref.read(editorProvider.notifier);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: SlowverbColors.hotPink),
+      ),
+    );
+
+    final success = await notifier.importAudioFileFromPath(downloadedFile);
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
+
+    if (success && context.mounted) {
+      context.go(RoutePaths.effects);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to import YouTube audio'),
+          backgroundColor: SlowverbColors.error,
+        ),
+      );
     }
   }
 
