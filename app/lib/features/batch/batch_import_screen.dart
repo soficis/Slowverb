@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/effect_preset.dart';
 import 'package:slowverb/domain/entities/render_job.dart';
 import 'package:slowverb/features/batch/batch_processor.dart';
+import 'package:path_provider/path_provider.dart';
 
 class BatchImportScreen extends ConsumerStatefulWidget {
   const BatchImportScreen({super.key});
@@ -23,11 +26,33 @@ class _BatchImportScreenState extends ConsumerState<BatchImportScreen> {
   String _selectedFormat = 'mp3';
   int _selectedBitrate = 320;
   String? _outputFolder;
+  String? _appOutputFolder;
+  bool _useCustomOutput = false;
   bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDefaultOutput();
+  }
+
+  Future<void> _initDefaultOutput() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final dir = await getApplicationDocumentsDirectory();
+      if (!mounted) return;
+      setState(() {
+        _appOutputFolder = dir.path;
+        if (!_useCustomOutput) {
+          _outputFolder = dir.path;
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final batchState = ref.watch(batchProcessorProvider);
+    final lastOutputDir = _lastOutputDir(batchState);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,178 +66,246 @@ class _BatchImportScreenState extends ConsumerState<BatchImportScreen> {
         decoration: const BoxDecoration(
           gradient: SlowverbColors.backgroundGradient,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // File selection
-              _buildSection(
-                title: 'Audio Files',
-                child: Column(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _isProcessing ? null : _pickFiles,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Audio Files'),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_selectedFiles.isNotEmpty)
-                      Container(
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: SlowverbColors.surface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ListView.builder(
-                          itemCount: _selectedFiles.length,
-                          itemBuilder: (context, index) {
-                            final file = _selectedFiles[index];
-                            return ListTile(
-                              leading: const Icon(Icons.audio_file),
-                              title: Text(
-                                p.basename(file),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: _isProcessing
-                                    ? null
-                                    : () => setState(() {
-                                        _selectedFiles.removeAt(index);
-                                      }),
-                              ),
-                            );
-                          },
-                        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // File selection
+                _buildSection(
+                  title: 'Audio Files',
+                  child: Column(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isProcessing ? null : _pickFiles,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Audio Files'),
                       ),
-                    if (_selectedFiles.isEmpty)
-                      Container(
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: SlowverbColors.surface.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'No files selected',
-                            style: TextStyle(color: Colors.white54),
+                      const SizedBox(height: 12),
+                      if (_selectedFiles.isNotEmpty)
+                        Container(
+                          height: 150,
+                          decoration: BoxDecoration(
+                            color: SlowverbColors.surface,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListView.builder(
+                            itemCount: _selectedFiles.length,
+                            itemBuilder: (context, index) {
+                              final file = _selectedFiles[index];
+                              return ListTile(
+                                leading: const Icon(Icons.audio_file),
+                                title: Text(
+                                  p.basename(file),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: _isProcessing
+                                      ? null
+                                      : () => setState(() {
+                                          _selectedFiles.removeAt(index);
+                                        }),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Preset selection
-              _buildSection(
-                title: 'Effect Preset',
-                child: Wrap(
-                  spacing: 8,
-                  children: Presets.all.map((preset) {
-                    return ChoiceChip(
-                      label: Text(preset.name),
-                      selected: _selectedPresetId == preset.id,
-                      onSelected: _isProcessing
-                          ? null
-                          : (selected) {
-                              if (selected) {
-                                setState(() => _selectedPresetId = preset.id);
-                              }
-                            },
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Format & Quality
-              _buildSection(
-                title: 'Export Format',
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        children: ['mp3', 'wav', 'flac'].map((fmt) {
-                          return ChoiceChip(
-                            label: Text(fmt.toUpperCase()),
-                            selected: _selectedFormat == fmt,
-                            onSelected: _isProcessing
-                                ? null
-                                : (selected) {
-                                    if (selected) {
-                                      setState(() => _selectedFormat = fmt);
-                                    }
-                                  },
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    if (_selectedFormat == 'mp3') ...[
-                      const SizedBox(width: 16),
-                      DropdownButton<int>(
-                        value: _selectedBitrate,
-                        items: [128, 192, 256, 320].map((br) {
-                          return DropdownMenuItem(
-                            value: br,
-                            child: Text('$br kbps'),
-                          );
-                        }).toList(),
-                        onChanged: _isProcessing
-                            ? null
-                            : (v) {
-                                if (v != null) {
-                                  setState(() => _selectedBitrate = v);
-                                }
-                              },
-                      ),
+                      if (_selectedFiles.isEmpty)
+                        Container(
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: SlowverbColors.surface.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'No files selected',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                        ),
                     ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Output folder
-              _buildSection(
-                title: 'Output Folder',
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _pickOutputFolder,
-                  icon: const Icon(Icons.folder_open),
-                  label: Text(_outputFolder ?? 'Choose folder...'),
-                ),
-              ),
-              const Spacer(),
-
-              // Progress indicator
-              if (batchState != null) ...[
-                LinearProgressIndicator(
-                  value: batchState.overallProgress,
-                  backgroundColor: SlowverbColors.surface,
-                  valueColor: const AlwaysStoppedAnimation(
-                    SlowverbColors.neonCyan,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${batchState.completedCount}/${batchState.totalCount} completed',
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 16),
-              ],
+                const SizedBox(height: 24),
 
-              // Start button
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _canStart() ? _startBatchProcessing : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(_isProcessing ? 'Processing...' : 'Start Batch'),
+                // Preset selection
+                _buildSection(
+                  title: 'Effect Preset',
+                  child: Wrap(
+                    spacing: 8,
+                    children: Presets.all.map((preset) {
+                      return ChoiceChip(
+                        label: Text(preset.name),
+                        selected: _selectedPresetId == preset.id,
+                        onSelected: _isProcessing
+                            ? null
+                            : (selected) {
+                                if (selected) {
+                                  setState(() => _selectedPresetId = preset.id);
+                                }
+                              },
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 24),
+
+                // Format & Quality
+                _buildSection(
+                  title: 'Export Format',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          children: ['mp3', 'wav', 'flac'].map((fmt) {
+                            return ChoiceChip(
+                              label: Text(fmt.toUpperCase()),
+                              selected: _selectedFormat == fmt,
+                              onSelected: _isProcessing
+                                  ? null
+                                  : (selected) {
+                                      if (selected) {
+                                        setState(() => _selectedFormat = fmt);
+                                      }
+                                    },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      if (_selectedFormat == 'mp3') ...[
+                        const SizedBox(width: 16),
+                        DropdownButton<int>(
+                          value: _selectedBitrate,
+                          items: [128, 192, 256, 320].map((br) {
+                            return DropdownMenuItem(
+                              value: br,
+                              child: Text('$br kbps'),
+                            );
+                          }).toList(),
+                          onChanged: _isProcessing
+                              ? null
+                              : (v) {
+                                  if (v != null) {
+                                    setState(() => _selectedBitrate = v);
+                                  }
+                                },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Output folder
+                _buildSection(
+                  title: 'Output Folder',
+                  child: Platform.isAndroid
+                      ? Column(
+                          children: [
+                            RadioListTile<bool>(
+                              value: false,
+                              groupValue: _useCustomOutput,
+                              onChanged: _isProcessing
+                                  ? null
+                                  : (v) {
+                                      if (v == null) return;
+                                      setState(() {
+                                        _useCustomOutput = false;
+                                        _outputFolder = _appOutputFolder;
+                                      });
+                                    },
+                              title: const Text('Use app storage (default)'),
+                              subtitle: Text(
+                                _appOutputFolder ??
+                                    'Loading app storage path...',
+                              ),
+                            ),
+                            RadioListTile<bool>(
+                              value: true,
+                              groupValue: _useCustomOutput,
+                              onChanged: _isProcessing
+                                  ? null
+                                  : (v) {
+                                      if (v == null) return;
+                                      setState(() => _useCustomOutput = true);
+                                    },
+                              title: const Text('Custom folder'),
+                              subtitle: Text(
+                                _outputFolder ?? 'Choose folder...',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              secondary: OutlinedButton.icon(
+                                onPressed: _isProcessing
+                                    ? null
+                                    : (_useCustomOutput
+                                          ? _pickOutputFolder
+                                          : null),
+                                icon: const Icon(Icons.folder_open),
+                                label: const Text('Pick'),
+                              ),
+                            ),
+                          ],
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: _isProcessing ? null : _pickOutputFolder,
+                          icon: const Icon(Icons.folder_open),
+                          label: Text(_outputFolder ?? 'Choose folder...'),
+                        ),
+                ),
+                if (lastOutputDir != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last outputs saved to: $lastOutputDir',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => context.push(RoutePaths.batchPlaylist),
+                    icon: const Icon(Icons.queue_music),
+                    label: const Text('Open batch playlist'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Progress indicator
+                if (batchState != null) ...[
+                  LinearProgressIndicator(
+                    value: batchState.overallProgress,
+                    backgroundColor: SlowverbColors.surface,
+                    valueColor: const AlwaysStoppedAnimation(
+                      SlowverbColors.neonCyan,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${batchState.completedCount}/${batchState.totalCount} completed',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Start button
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _canStart() ? _startBatchProcessing : null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(
+                      _isProcessing ? 'Processing...' : 'Start Batch',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -257,6 +350,28 @@ class _BatchImportScreenState extends ConsumerState<BatchImportScreen> {
   }
 
   Future<void> _pickOutputFolder() async {
+    if (Platform.isAndroid && !_useCustomOutput) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Using app storage for batch exports on mobile.'),
+          backgroundColor: SlowverbColors.electricBlue,
+        ),
+      );
+      return;
+    }
+
+    if (Platform.isAndroid && _useCustomOutput) {
+      final result = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select Output Folder',
+      );
+
+      if (result != null) {
+        setState(() => _outputFolder = result);
+      }
+      return;
+    }
+
     final result = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select Output Folder',
     );
@@ -310,5 +425,18 @@ class _BatchImportScreenState extends ConsumerState<BatchImportScreen> {
         ),
       );
     }
+  }
+
+  String? _lastOutputDir(BatchJob? batch) {
+    final outputs =
+        batch?.items
+            .where((item) => item.status == RenderJobStatus.success)
+            .map((item) => item.outputPath)
+            .whereType<String>()
+            .where((p) => p.isNotEmpty)
+            .toList() ??
+        <String>[];
+    if (outputs.isEmpty) return null;
+    return p.dirname(outputs.last);
   }
 }

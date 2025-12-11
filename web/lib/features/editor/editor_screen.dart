@@ -24,6 +24,7 @@ import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_controls.dart';
 import 'package:slowverb_web/features/editor/widgets/transport_bar.dart';
@@ -35,8 +36,9 @@ import 'package:slowverb_web/providers/audio_playback_provider.dart';
 /// Main audio editor screen
 class EditorScreen extends ConsumerStatefulWidget {
   final AudioFileData? fileData;
+  final Project? project;
 
-  const EditorScreen({super.key, this.fileData});
+  const EditorScreen({super.key, this.fileData, this.project});
 
   @override
   ConsumerState<EditorScreen> createState() => _EditorScreenState();
@@ -49,7 +51,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
     if (widget.fileData != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(audioEditorProvider.notifier).loadAudioFile(widget.fileData!);
+        ref
+            .read(audioEditorProvider.notifier)
+            .loadAudioFile(widget.fileData!, project: widget.project);
       });
     }
   }
@@ -65,14 +69,14 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         .watch(playbackPositionProvider)
         .maybeWhen(data: (pos) => pos, orElse: () => Duration.zero);
     final totalDuration =
-        ref.watch(playbackDurationProvider).maybeWhen(
-              data: (dur) => dur,
-              orElse: () => null,
-            ) ??
+        ref
+            .watch(playbackDurationProvider)
+            .maybeWhen(data: (dur) => dur, orElse: () => null) ??
         editorState.audioDuration ??
         const Duration(minutes: 3, seconds: 45);
-    final waveformTotalMs =
-        totalDuration.inMilliseconds <= 0 ? 1 : totalDuration.inMilliseconds;
+    final waveformTotalMs = totalDuration.inMilliseconds <= 0
+        ? 1
+        : totalDuration.inMilliseconds;
     final waveformPosition = totalDuration.inMilliseconds <= 0
         ? 0.0
         : (currentPosition.inMilliseconds / waveformTotalMs).clamp(0.0, 1.0);
@@ -156,13 +160,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             currentPosition: currentPosition,
             totalDuration: totalDuration,
             isPlaying: isPlaying,
+            isLoading: state.isLoading,
             effectValues: effectValues,
             selectedPreset: state.selectedPreset,
-            onPlayPause: () => _handlePlayPause(
-              editorNotifier,
-              playbackNotifier,
-              audioPlayer,
-            ),
+            onPlayPause: () =>
+                _handlePlayPause(editorNotifier, playbackNotifier, audioPlayer),
             onPreview: () => _handlePreview(editorNotifier, playbackNotifier),
             onStop: () => _handleStop(editorNotifier, playbackNotifier),
             onSeek: (position) => _handleSeek(
@@ -188,13 +190,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             currentPosition: currentPosition,
             totalDuration: totalDuration,
             isPlaying: isPlaying,
+            isLoading: state.isLoading,
             effectValues: effectValues,
             selectedPreset: state.selectedPreset,
-            onPlayPause: () => _handlePlayPause(
-              editorNotifier,
-              playbackNotifier,
-              audioPlayer,
-            ),
+            onPlayPause: () =>
+                _handlePlayPause(editorNotifier, playbackNotifier, audioPlayer),
             onPreview: () => _handlePreview(editorNotifier, playbackNotifier),
             onStop: () => _handleStop(editorNotifier, playbackNotifier),
             onSeek: (position) => _handleSeek(
@@ -217,10 +217,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           );
 
     return Stack(
-      children: [
-        content,
-        if (state.isLoading) const _LoadingOverlay(),
-      ],
+      children: [content, if (state.isLoading) const _LoadingOverlay()],
     );
   }
 
@@ -253,9 +250,8 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   ) async {
     final selectedPreset = await showDialog<EffectPreset>(
       context: context,
-      builder: (context) => PresetSelectorDialog(
-        currentPreset: state.selectedPreset,
-      ),
+      builder: (context) =>
+          PresetSelectorDialog(currentPreset: state.selectedPreset),
     );
 
     if (selectedPreset != null) {
@@ -352,12 +348,12 @@ class _EditorTitleBar extends StatelessWidget {
         Text(
           'Slowverb Editor',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Colors.white,
-                letterSpacing: 1.2,
-                shadows: const [
-                  Shadow(color: Colors.black54, offset: Offset(0, 1)),
-                ],
-              ),
+            color: Colors.white,
+            letterSpacing: 1.2,
+            shadows: const [
+              Shadow(color: Colors.black54, offset: Offset(0, 1)),
+            ],
+          ),
         ),
         const Spacer(),
         _PresetBadge(presetName: presetName),
@@ -413,9 +409,7 @@ class _FileInfoBanner extends StatelessWidget {
         color: SlowverbColors.surface.withOpacity(0.85),
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
         boxShadow: [SlowverbTokens.shadowCard],
-        border: Border.all(
-          color: SlowverbColors.accentPink.withOpacity(0.25),
-        ),
+        border: Border.all(color: SlowverbColors.accentPink.withOpacity(0.25)),
       ),
       child: Row(
         children: [
@@ -433,7 +427,7 @@ class _FileInfoBanner extends StatelessWidget {
                 ),
                 if (metadata != null)
                   Text(
-                    'Duration: ${_formatDuration(metadata!.duration)} · ${metadata!.sampleRate}Hz · ${metadata!.channels}ch',
+                    'Duration: ${metadata!.duration != null ? _formatDuration(metadata!.duration!) : 'Unknown'} · ${metadata!.sampleRate}Hz · ${metadata!.channels}ch',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
               ],
@@ -455,6 +449,7 @@ class _WideEditorLayout extends StatelessWidget {
   final Duration currentPosition;
   final Duration totalDuration;
   final bool isPlaying;
+  final bool isLoading;
   final _EffectValues effectValues;
   final EffectPreset selectedPreset;
   final Future<void> Function() onPlayPause;
@@ -473,6 +468,7 @@ class _WideEditorLayout extends StatelessWidget {
     required this.currentPosition,
     required this.totalDuration,
     required this.isPlaying,
+    this.isLoading = false,
     required this.effectValues,
     required this.selectedPreset,
     required this.onPlayPause,
@@ -499,6 +495,7 @@ class _WideEditorLayout extends StatelessWidget {
             currentPosition: currentPosition,
             totalDuration: totalDuration,
             isPlaying: isPlaying,
+            isLoading: isLoading,
             onPlayPause: onPlayPause,
             onPreview: onPreview,
             onStop: onStop,
@@ -529,6 +526,7 @@ class _StackedEditorLayout extends StatelessWidget {
   final Duration currentPosition;
   final Duration totalDuration;
   final bool isPlaying;
+  final bool isLoading;
   final _EffectValues effectValues;
   final EffectPreset selectedPreset;
   final Future<void> Function() onPlayPause;
@@ -547,6 +545,7 @@ class _StackedEditorLayout extends StatelessWidget {
     required this.currentPosition,
     required this.totalDuration,
     required this.isPlaying,
+    this.isLoading = false,
     required this.effectValues,
     required this.selectedPreset,
     required this.onPlayPause,
@@ -571,6 +570,7 @@ class _StackedEditorLayout extends StatelessWidget {
             currentPosition: currentPosition,
             totalDuration: totalDuration,
             isPlaying: isPlaying,
+            isLoading: isLoading,
             onPlayPause: onPlayPause,
             onPreview: onPreview,
             onStop: onStop,
@@ -598,6 +598,7 @@ class _WaveformTransportCard extends StatelessWidget {
   final Duration currentPosition;
   final Duration totalDuration;
   final bool isPlaying;
+  final bool isLoading;
   final Future<void> Function() onPlayPause;
   final Future<void> Function() onPreview;
   final Future<void> Function() onStop;
@@ -608,6 +609,7 @@ class _WaveformTransportCard extends StatelessWidget {
     required this.currentPosition,
     required this.totalDuration,
     required this.isPlaying,
+    this.isLoading = false,
     required this.onPlayPause,
     required this.onPreview,
     required this.onStop,
@@ -635,6 +637,7 @@ class _WaveformTransportCard extends StatelessWidget {
           const SizedBox(height: SlowverbTokens.spacingMd),
           TransportBar(
             isPlaying: isPlaying,
+            isLoading: isLoading,
             currentTime: currentPosition,
             totalTime: totalDuration,
             onPlayPause: onPlayPause,
@@ -723,10 +726,7 @@ class _PresetQuickSwitch extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Quick Presets',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('Quick Presets', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: SlowverbTokens.spacingSm),
         Wrap(
           spacing: SlowverbTokens.spacingSm,
@@ -740,10 +740,10 @@ class _PresetQuickSwitch extends StatelessWidget {
               selectedColor: SlowverbColors.accentPink.withOpacity(0.2),
               backgroundColor: SlowverbColors.surfaceVariant,
               labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isSelected
-                        ? SlowverbColors.accentPink
-                        : SlowverbColors.textPrimary,
-                  ),
+                color: isSelected
+                    ? SlowverbColors.accentPink
+                    : SlowverbColors.textPrimary,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
                 side: BorderSide(
@@ -808,9 +808,9 @@ class _PresetBadge extends StatelessWidget {
           Text(
             presetName,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
+              color: Colors.white,
+              letterSpacing: 1.2,
+            ),
           ),
         ],
       ),
@@ -825,9 +825,7 @@ class _LoadingOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.45),
-        ),
+        decoration: BoxDecoration(color: Colors.black.withOpacity(0.45)),
         child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

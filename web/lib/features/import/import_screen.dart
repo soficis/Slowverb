@@ -21,6 +21,7 @@ import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/router.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
+import 'package:slowverb_web/utils/file_system_access.dart';
 
 /// Import screen for selecting audio files
 ///
@@ -47,6 +48,21 @@ class _ImportScreenState extends State<ImportScreen> {
 
   Future<void> _pickFile() async {
     try {
+      // Try File System Access API first for handle reuse.
+      final fsaFile = await FileSystemAccess.pickAudioFile();
+      if (fsaFile != null) {
+        setState(() => _isLoading = true);
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (mounted) {
+          setState(() => _isLoading = false);
+          context.push(
+            AppRoutes.editor,
+            extra: EditorScreenArgs(fileData: fsaFile),
+          );
+        }
+        return;
+      }
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg'],
@@ -84,7 +100,10 @@ class _ImportScreenState extends State<ImportScreen> {
             bytes: file.bytes!,
           );
 
-          context.push(AppRoutes.editor, extra: fileData);
+          context.push(
+            AppRoutes.editor,
+            extra: EditorScreenArgs(fileData: fileData),
+          );
         }
       }
     } catch (e) {
@@ -236,6 +255,13 @@ class _ImportScreenState extends State<ImportScreen> {
                                 ),
                         ),
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: () => context.push(AppRoutes.library),
+                      icon: const Icon(Icons.library_music),
+                      label: const Text('Open Library'),
                     ),
 
                     const SizedBox(height: 48),

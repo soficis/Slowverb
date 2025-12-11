@@ -14,6 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -108,7 +110,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
               children: [
                 Text(
                   'Your Projects',
@@ -116,16 +122,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     color: SlowverbColors.onSurfaceMuted,
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => context.go(RoutePaths.batch),
-                  icon: const Icon(Icons.layers, size: 16),
-                  label: const Text('Batch'),
-                ),
-                TextButton.icon(
-                  onPressed: () => context.go(RoutePaths.history),
-                  icon: const Icon(Icons.history, size: 16),
-                  label: const Text('History'),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => context.go(RoutePaths.batch),
+                      icon: const Icon(Icons.layers, size: 16),
+                      label: const Text('Batch'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => context.go(RoutePaths.history),
+                      icon: const Icon(Icons.history, size: 16),
+                      label: const Text('History'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -334,12 +344,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               subtitle: const Text('Import from your device'),
               onTap: () => Navigator.pop(context, 'file'),
             ),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('From YouTube'),
-              subtitle: const Text('Download audio from YouTube'),
-              onTap: () => Navigator.pop(context, 'youtube'),
-            ),
+            if (!Platform.isAndroid && !Platform.isIOS)
+              ListTile(
+                leading: const Icon(Icons.link),
+                title: const Text('From YouTube'),
+                subtitle: const Text('Download audio from YouTube'),
+                onTap: () => Navigator.pop(context, 'youtube'),
+              ),
           ],
         ),
         actions: [

@@ -6,7 +6,7 @@ import FlutterMacOS
 import Foundation
 
 import audio_session
-import ffmpeg_kit_flutter_audio
+import ffmpeg_kit_flutter_new_audio
 import file_picker
 import just_audio
 import path_provider_foundation

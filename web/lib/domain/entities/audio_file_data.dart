@@ -21,8 +21,13 @@ import 'dart:typed_data';
 class AudioFileData {
   final String filename;
   final Uint8List bytes;
+  final Object? fileHandle; // File System Access API handle (if available)
 
-  const AudioFileData({required this.filename, required this.bytes});
+  const AudioFileData({
+    required this.filename,
+    required this.bytes,
+    this.fileHandle,
+  });
 
   /// Get file extension
   String get extension {

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/effect_preset.dart';
 import 'package:slowverb/domain/entities/render_job.dart';
@@ -18,6 +19,32 @@ class BatchProcessor extends StateNotifier<BatchJob?> {
   Future<void> startBatch(BatchJob job, String destinationFolder) async {
     // Initialize audio engine
     await _audioEngine.initialize();
+
+    // Resolve app-private working dir (always inside app storage to avoid SAF issues)
+    final appDocsDir = await getApplicationDocumentsDirectory();
+    final workDir = Directory(path.join(appDocsDir.path, '.work'));
+    if (!workDir.existsSync()) {
+      workDir.createSync(recursive: true);
+    }
+
+    // Ensure output directory exists
+    var effectiveDestination = destinationFolder;
+    try {
+      final outDir = Directory(effectiveDestination);
+      if (!outDir.existsSync()) {
+        outDir.createSync(recursive: true);
+      }
+    } catch (_) {
+      // Fallback to app storage if external path is not writeable (Android SAF)
+      effectiveDestination = appDocsDir.path;
+      final outDir = Directory(effectiveDestination);
+      if (!outDir.existsSync()) {
+        outDir.createSync(recursive: true);
+      }
+      print(
+        '[Batch] Destination not writable, using app storage: $effectiveDestination',
+      );
+    }
 
     state = job.copyWith(
       status: BatchJobStatus.running,
@@ -49,23 +76,44 @@ class BatchProcessor extends StateNotifier<BatchJob?> {
         // Determine preset and parameters (use default or override)
         final preset = item.presetOverride ?? job.defaultPreset;
 
-        // Build output path
+        // Copy source into app-owned working dir to ensure readable path
         final sourceFile = File(item.filePath!);
-        final baseName = path.basenameWithoutExtension(sourceFile.path);
-        final extension = job.exportOptions.format;
+        final safeSourcePath = await _copyToWorkDir(
+          sourceFile,
+          workDir.path,
+          item.fileName,
+        );
+
+        // Build output path
+        final baseName = path.basenameWithoutExtension(safeSourcePath);
+        final effectiveFormat = Platform.isAndroid
+            ? 'wav'
+            : job.exportOptions.format;
+        final effectiveBitrate = Platform.isAndroid
+            ? null
+            : job.exportOptions.bitrateKbps;
+        final extension = effectiveFormat;
         final outputPath = path.join(
-          destinationFolder,
+          effectiveDestination,
           '${baseName}_${preset.id}.$extension',
         );
 
+        print('[Batch] Processing ${item.fileName} -> $outputPath');
+
         // Process using FFmpegAudioEngine with actual effects
         await _processWithEffects(
-          sourcePath: item.filePath!,
+          sourcePath: safeSourcePath,
           outputPath: outputPath,
           preset: preset,
-          format: job.exportOptions.format,
-          bitrateKbps: job.exportOptions.bitrateKbps,
+          format: effectiveFormat,
+          bitrateKbps: effectiveBitrate,
         );
+
+        // Verify output exists
+        final outFile = File(outputPath);
+        if (!outFile.existsSync()) {
+          throw Exception('Output file missing after render');
+        }
 
         // Mark as complete
         state = state!.updateItem(
@@ -76,6 +124,8 @@ class BatchProcessor extends StateNotifier<BatchJob?> {
             outputPath: outputPath,
           ),
         );
+
+        print('[Batch] Success ${item.fileName}');
       } catch (e) {
         // Mark as failed
         state = state!.updateItem(
@@ -85,6 +135,7 @@ class BatchProcessor extends StateNotifier<BatchJob?> {
             errorMessage: e.toString(),
           ),
         );
+        print('[Batch] Failed ${item.fileName}: $e');
       }
     }
 
@@ -100,6 +151,33 @@ class BatchProcessor extends StateNotifier<BatchJob?> {
           : BatchJobStatus.failed,
       completedAt: DateTime.now(),
     );
+
+    print(
+      '[Batch] Done. success=${state!.completedCount} failed=${state!.failedCount}',
+    );
+  }
+
+  /// Copy source file into a local working directory (especially for Android SAF paths)
+  Future<String> _copyToWorkDir(
+    File source,
+    String workDir,
+    String originalName,
+  ) async {
+    final ext = path.extension(originalName);
+    final base = path.basenameWithoutExtension(originalName);
+    final safeBase = base.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final dest = path.join(workDir, '$safeBase$ext');
+
+    try {
+      await source.copy(dest);
+      return dest;
+    } catch (e) {
+      // Fallback: try reading bytes then writing
+      final bytes = await source.readAsBytes();
+      final destFile = File(dest);
+      await destFile.writeAsBytes(bytes, flush: true);
+      return dest;
+    }
   }
 
   /// Process a file with actual audio effects using FFmpegAudioEngine

@@ -22,6 +22,7 @@ import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 /// Transport controls for audio playback
 class TransportBar extends StatelessWidget {
   final bool isPlaying;
+  final bool isLoading;
   final Duration currentTime;
   final Duration totalTime;
   final VoidCallback onPlayPause;
@@ -32,6 +33,7 @@ class TransportBar extends StatelessWidget {
   const TransportBar({
     super.key,
     required this.isPlaying,
+    this.isLoading = false,
     required this.currentTime,
     required this.totalTime,
     required this.onPlayPause,
@@ -44,17 +46,16 @@ class TransportBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalMs = totalTime.inMilliseconds;
     final safeTotalMs = totalMs <= 0 ? 1 : totalMs;
-    final progress =
-        totalMs <= 0 ? 0.0 : currentTime.inMilliseconds / safeTotalMs;
+    final progress = totalMs <= 0
+        ? 0.0
+        : currentTime.inMilliseconds / safeTotalMs;
 
     return Container(
       padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
       decoration: BoxDecoration(
         color: SlowverbColors.surfaceVariant,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
-        border: Border.all(
-          color: SlowverbColors.accentPink.withOpacity(0.25),
-        ),
+        border: Border.all(color: SlowverbColors.accentPink.withOpacity(0.25)),
         boxShadow: [SlowverbTokens.shadowCard],
       ),
       child: LayoutBuilder(
@@ -64,16 +65,19 @@ class TransportBar extends StatelessWidget {
             progress: progress,
             currentTime: currentTime,
             totalTime: totalTime,
-            onSeek: (value) => onSeek(
-              Duration(milliseconds: (value * safeTotalMs).toInt()),
-            ),
+            onSeek: (value) =>
+                onSeek(Duration(milliseconds: (value * safeTotalMs).toInt())),
           );
           final transportControls = _TransportControls(
             isPlaying: isPlaying,
+            isLoading: isLoading,
             onPlayPause: onPlayPause,
             onStop: onStop,
           );
-          final previewButton = _PreviewButton(onPreview: onPreview);
+          final previewButton = _PreviewButton(
+            onPreview: onPreview,
+            isLoading: isLoading,
+          );
 
           if (isCompact) {
             return Column(
@@ -135,8 +139,8 @@ class _SeekSection extends StatelessWidget {
         Text(
           '${_formatDuration(currentTime)} / ${_formatDuration(totalTime)}',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ],
     );
@@ -145,11 +149,13 @@ class _SeekSection extends StatelessWidget {
 
 class _TransportControls extends StatelessWidget {
   final bool isPlaying;
+  final bool isLoading;
   final VoidCallback onPlayPause;
   final VoidCallback onStop;
 
   const _TransportControls({
     required this.isPlaying,
+    this.isLoading = false,
     required this.onPlayPause,
     required this.onStop,
   });
@@ -159,11 +165,7 @@ class _TransportControls extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ChromeIconButton(
-          icon: Icons.stop,
-          tooltip: 'Stop',
-          onPressed: onStop,
-        ),
+        _ChromeIconButton(icon: Icons.stop, tooltip: 'Stop', onPressed: onStop),
         const SizedBox(width: SlowverbTokens.spacingSm),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -177,12 +179,28 @@ class _TransportControls extends StatelessWidget {
               ),
             ],
           ),
-          child: IconButton(
-            onPressed: onPlayPause,
-            icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-            iconSize: 32,
-            tooltip: isPlaying ? 'Pause' : 'Play',
-            color: Colors.white,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                onPressed: isLoading ? null : onPlayPause,
+                icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                iconSize: 32,
+                tooltip: isLoading
+                    ? 'Processing...'
+                    : (isPlaying ? 'Pause' : 'Play'),
+                color: Colors.white,
+              ),
+              if (isLoading)
+                const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 3,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -192,13 +210,14 @@ class _TransportControls extends StatelessWidget {
 
 class _PreviewButton extends StatelessWidget {
   final VoidCallback onPreview;
+  final bool isLoading;
 
-  const _PreviewButton({required this.onPreview});
+  const _PreviewButton({required this.onPreview, this.isLoading = false});
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: onPreview,
+      onPressed: isLoading ? null : onPreview,
       style: ElevatedButton.styleFrom(
         backgroundColor: SlowverbColors.surface,
         foregroundColor: SlowverbColors.textPrimary,
@@ -207,8 +226,14 @@ class _PreviewButton extends StatelessWidget {
           vertical: SlowverbTokens.spacingSm,
         ),
       ),
-      icon: const Icon(Icons.headphones, size: 20),
-      label: const Text('Preview Full'),
+      icon: isLoading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.refresh, size: 20),
+      label: Text(isLoading ? 'Processing...' : 'Re-process'),
     );
   }
 }

@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:slowverb/domain/entities/project.dart';
 
@@ -24,15 +25,39 @@ class ProjectRepository {
 
   /// Initialize the repository
   Future<void> initialize() async {
-    await Hive.initFlutter();
-    _box = await Hive.openBox<Map>(_boxName);
+    // Hive is initialized in main.dart; re-calling init here crashes on Android.
+    if (Hive.isBoxOpen(_boxName)) {
+      _box = Hive.box<Map>(_boxName);
+      return;
+    }
+
+    try {
+      _box = await Hive.openBox<Map>(_boxName);
+    } catch (e, st) {
+      // If the box is corrupted or unreadable, fall back to a fresh box so the
+      // app can still boot instead of showing a white screen.
+      debugPrint(
+        'Failed to open Hive box "$_boxName": $e\n$st\n'
+        'Recreating projects box (existing entries may be ignored).',
+      );
+      // Keep the same box name so future launches continue to use the clean box.
+      await Hive.deleteBoxFromDisk(_boxName);
+      _box = await Hive.openBox<Map>(_boxName);
+    }
   }
 
   /// Get all projects sorted by last updated
   List<Project> getAllProjects() {
-    final projects = _box.values
-        .map((json) => _projectFromJson(Map<String, dynamic>.from(json)))
-        .toList();
+    final projects = <Project>[];
+
+    for (final raw in _box.values) {
+      try {
+        projects.add(_projectFromJson(Map<String, dynamic>.from(raw)));
+      } catch (e, st) {
+        // Skip corrupt or legacy entries instead of crashing the app.
+        debugPrint('Skipping corrupt project entry: $e\n$st');
+      }
+    }
 
     projects.sort((a, b) {
       final aDate = a.updatedAt ?? a.createdAt ?? DateTime(1970);
@@ -47,7 +72,12 @@ class ProjectRepository {
   Project? getProject(String id) {
     final json = _box.get(id);
     if (json == null) return null;
-    return _projectFromJson(Map<String, dynamic>.from(json));
+    try {
+      return _projectFromJson(Map<String, dynamic>.from(json));
+    } catch (e, st) {
+      debugPrint('Corrupt project $id skipped: $e\n$st');
+      return null;
+    }
   }
 
   /// Save a project (create or update)

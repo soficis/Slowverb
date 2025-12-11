@@ -30,7 +30,11 @@ class DownloadProgress {
       DownloadProgress(progress: -1, message: message);
 
   factory DownloadProgress.complete(String outputPath) =>
-      DownloadProgress(progress: 1.0, message: 'Complete', isComplete: true);
+      const DownloadProgress(
+        progress: 1.0,
+        message: 'Complete',
+        isComplete: true,
+      );
 
   factory DownloadProgress.error(String error) => DownloadProgress(
     progress: 0,
@@ -49,14 +53,8 @@ class YtDlpManager {
   Directory? _appRoot;
 
   Future<void> _ensureInitialized() async {
-    if (_appSupportDir == null) {
-      _appSupportDir = await getApplicationSupportDirectory();
-    }
-    if (_appRoot == null) {
-      // In a Flutter app, the executable is typically in a platform-specific location
-      // For development/debug builds, we'll use the current directory
-      _appRoot = Directory.current;
-    }
+    _appSupportDir ??= await getApplicationSupportDirectory();
+    _appRoot ??= Directory.current;
   }
 
   Directory get _toolsDir => Directory(p.join(_appSupportDir!.path, 'tools'));
@@ -112,6 +110,12 @@ class YtDlpManager {
 
     if (await isAvailable()) {
       return ToolStatus.installed;
+    }
+
+    // On Android/iOS, we cannot auto-download yt-dlp
+    // User needs to install termux or use a different method
+    if (Platform.isAndroid || Platform.isIOS) {
+      return ToolStatus.downloadFailed;
     }
 
     // Create tools directory

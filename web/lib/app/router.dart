@@ -18,12 +18,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
+import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/import/import_screen.dart';
 import 'package:slowverb_web/features/editor/editor_screen.dart';
 import 'package:slowverb_web/features/export/export_screen.dart';
 import 'package:slowverb_web/features/about/about_screen.dart';
 import 'package:slowverb_web/features/youtube/youtube_stream_screen.dart';
+import 'package:slowverb_web/features/library/library_screen.dart';
+import 'package:slowverb_web/features/settings/settings_screen.dart';
 import 'package:slowverb_web/app/app_config.dart';
+
+/// Arguments for navigating to the editor.
+class EditorScreenArgs {
+  final AudioFileData? fileData;
+  final Project? project;
+
+  const EditorScreenArgs({this.fileData, this.project});
+}
 
 /// App navigation routes
 class AppRoutes {
@@ -33,6 +44,8 @@ class AppRoutes {
   static const export = '/export';
   static const about = '/about';
   static const youtube = '/youtube';
+  static const library = '/library';
+  static const settings = '/settings';
 }
 
 /// Router configuration for Slowverb Web
@@ -48,8 +61,16 @@ final appRouter = GoRouter(
       path: AppRoutes.editor,
       name: 'editor',
       builder: (context, state) {
-        final fileData = state.extra as AudioFileData?;
-        return EditorScreen(fileData: fileData);
+        final extra = state.extra;
+        AudioFileData? fileData;
+        Project? project;
+        if (extra is EditorScreenArgs) {
+          fileData = extra.fileData;
+          project = extra.project;
+        } else if (extra is AudioFileData) {
+          fileData = extra;
+        }
+        return EditorScreen(fileData: fileData, project: project);
       },
     ),
     GoRoute(
@@ -71,6 +92,16 @@ final appRouter = GoRouter(
       path: AppRoutes.about,
       name: 'about',
       builder: (context, state) => const AboutScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.library,
+      name: 'library',
+      builder: (context, state) => const LibraryScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      name: 'settings',
+      builder: (context, state) => const SettingsScreen(),
     ),
     // YouTube streaming (experimental)
     if (AppConfig.enableExperimentalYouTubeMode)

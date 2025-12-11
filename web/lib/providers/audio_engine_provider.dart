@@ -16,7 +16,15 @@
  */
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:slowverb_web/engine/streaming_audio_engine.dart';
 import 'package:slowverb_web/engine/wasm_audio_engine.dart';
+
+/// Provider for the streaming audio engine singleton
+final streamingAudioEngineProvider = Provider<StreamingAudioEngine>((ref) {
+  final engine = StreamingAudioEngine();
+  ref.onDispose(() => engine.dispose());
+  return engine;
+});
 
 /// Provider for the audio engine singleton
 final audioEngineProvider = Provider<WasmAudioEngine>((ref) {

@@ -15,12 +15,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/providers/project_repository_provider.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
+import 'package:uuid/uuid.dart';
 
 /// State for audio editor
 class AudioEditorState {
@@ -33,6 +38,10 @@ class AudioEditorState {
   final EffectPreset selectedPreset;
   final Map<String, double> currentParameters;
   final String? error;
+  final String? projectId;
+  final String? projectName;
+  final DateTime? projectCreatedAt;
+  final Object? fileHandle;
 
   const AudioEditorState({
     this.audioFileName,
@@ -44,6 +53,10 @@ class AudioEditorState {
     required this.selectedPreset,
     required this.currentParameters,
     this.error,
+    this.projectId,
+    this.projectName,
+    this.projectCreatedAt,
+    this.fileHandle,
   });
 
   Duration? get audioDuration => metadata?.duration;
@@ -58,6 +71,10 @@ class AudioEditorState {
     EffectPreset? selectedPreset,
     Map<String, double>? currentParameters,
     String? error,
+    String? projectId,
+    String? projectName,
+    DateTime? projectCreatedAt,
+    Object? fileHandle,
   }) {
     return AudioEditorState(
       audioFileName: audioFileName ?? this.audioFileName,
@@ -69,6 +86,10 @@ class AudioEditorState {
       selectedPreset: selectedPreset ?? this.selectedPreset,
       currentParameters: currentParameters ?? this.currentParameters,
       error: error,
+      projectId: projectId ?? this.projectId,
+      projectName: projectName ?? this.projectName,
+      projectCreatedAt: projectCreatedAt ?? this.projectCreatedAt,
+      fileHandle: fileHandle ?? this.fileHandle,
     );
   }
 }
@@ -86,11 +107,28 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       );
 
   /// Load audio file
-  Future<void> loadAudioFile(AudioFileData fileData) async {
+  Future<void> loadAudioFile(AudioFileData fileData, {Project? project}) async {
+    final preset = project != null
+        ? (Presets.getById(project.presetId) ?? Presets.slowedReverb)
+        : Presets.slowedReverb;
+    final initialParams = Map<String, double>.from(preset.parameters);
+    if (project != null && project.parameters.isNotEmpty) {
+      initialParams.addAll(project.parameters);
+    }
+    final now = DateTime.now();
+    final projectId = project?.id ?? const Uuid().v4();
+    final createdAt = project?.createdAt ?? now;
+
     state = state.copyWith(
       isLoading: true,
       audioFileName: fileData.filename,
       error: null,
+      selectedPreset: preset,
+      currentParameters: initialParams,
+      projectId: projectId,
+      projectName: project?.name ?? fileData.filename,
+      projectCreatedAt: createdAt,
+      fileHandle: fileData.fileHandle,
     );
 
     try {
@@ -114,6 +152,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
       // Load waveform in background
       _ref.read(waveformProvider.notifier).loadWaveform(fileId);
+
+      // Persist project snapshot with metadata
+      unawaited(_persistProjectSnapshot());
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -128,6 +169,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       selectedPreset: preset,
       currentParameters: Map.from(preset.parameters),
     );
+    unawaited(_persistProjectSnapshot());
   }
 
   /// Update single parameter
@@ -135,6 +177,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     final newParams = Map<String, double>.from(state.currentParameters);
     newParams[key] = value;
     state = state.copyWith(currentParameters: newParams);
+    unawaited(_persistProjectSnapshot());
   }
 
   /// Toggle playback
@@ -167,11 +210,11 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         state.currentParameters,
       );
 
-      // Render 10-second preview
+      // Render full audio with effects applied
       final previewUri = await engine.renderPreview(
         fileId: state.fileId!,
         config: config,
-        duration: const Duration(seconds: 10),
+        duration: state.metadata?.duration, // Process entire file
       );
 
       state = state.copyWith(isLoading: false);
@@ -189,6 +232,70 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   /// Clear error
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  /// Persist export metadata for the current project.
+  Future<void> recordExport({
+    required String format,
+    int? bitrateKbps,
+    String? path,
+  }) async {
+    final projectId = state.projectId;
+    if (projectId == null) return;
+
+    final repo = _ref.read(projectRepositoryProvider);
+    await repo.initialize();
+
+    final project = Project(
+      id: projectId,
+      name: state.projectName ?? state.audioFileName ?? 'Untitled',
+      sourcePath: null,
+      sourceHandleId: state.fileHandle != null ? projectId : null,
+      sourceFileName: state.audioFileName,
+      sourceTitle: null,
+      sourceArtist: null,
+      durationMs: state.metadata?.duration?.inMilliseconds ?? 0,
+      presetId: state.selectedPreset.id,
+      parameters: state.currentParameters,
+      createdAt: state.projectCreatedAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+      lastExportPath: path,
+      lastExportFormat: format,
+      lastExportBitrateKbps: bitrateKbps,
+      lastExportDate: DateTime.now(),
+    );
+
+    await repo.saveProject(project, fileHandle: state.fileHandle);
+  }
+
+  Future<void> _persistProjectSnapshot() async {
+    final repo = _ref.read(projectRepositoryProvider);
+    await repo.initialize();
+
+    final projectId = state.projectId;
+    if (projectId == null) return;
+
+    final createdAt = state.projectCreatedAt ?? DateTime.now();
+    if (state.projectCreatedAt == null) {
+      state = state.copyWith(projectCreatedAt: createdAt);
+    }
+
+    final project = Project(
+      id: projectId,
+      name: state.projectName ?? state.audioFileName ?? 'Untitled',
+      sourcePath: null,
+      sourceHandleId: state.fileHandle != null ? projectId : null,
+      sourceFileName: state.audioFileName,
+      sourceTitle: null,
+      sourceArtist: null,
+      durationMs: state.metadata?.duration?.inMilliseconds ?? 0,
+      presetId: state.selectedPreset.id,
+      parameters: state.currentParameters,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    await repo.saveProject(project, fileHandle: state.fileHandle);
   }
 }
 

@@ -18,7 +18,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -477,13 +480,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
       } else if (state.exportDirectory != null) {
         outputDir = Directory(state.exportDirectory!);
       } else {
-        final vDrive = Directory('V:\\Documents\\Slowverb');
-        if (await Directory('V:\\').exists()) {
-          outputDir = vDrive;
-        } else {
-          final docsDir = await getApplicationDocumentsDirectory();
-          outputDir = Directory('${docsDir.path}\\Slowverb');
-        }
+        outputDir = await _resolveDefaultExportDir();
       }
 
       if (!await outputDir.exists()) {
@@ -563,6 +560,25 @@ class EditorNotifier extends StateNotifier<EditorState> {
         errorMessage: 'Export failed: $e',
       );
       return false;
+    }
+  }
+
+  /// Resolve a safe default export directory on all platforms with fallbacks.
+  Future<Directory> _resolveDefaultExportDir() async {
+    // Windows portable path (legacy behavior)
+    final vDrive = Directory('V:\\Documents\\Slowverb');
+    if (Platform.isWindows && await Directory('V:\\').exists()) {
+      return vDrive;
+    }
+
+    // Preferred: app documents
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      return Directory('${docsDir.path}${Platform.pathSeparator}Slowverb');
+    } catch (e) {
+      // Fallback: app cache/temp
+      final temp = Directory.systemTemp;
+      return Directory('${temp.path}${Platform.pathSeparator}Slowverb');
     }
   }
 
@@ -654,9 +670,6 @@ class EditorNotifier extends StateNotifier<EditorState> {
     required String format,
     required String bitrate,
   }) async {
-    final ffmpegPath = await _findFFmpeg();
-    if (ffmpegPath == null) return false;
-
     try {
       // Update progress
       state = state.copyWith(exportProgress: 0.1);
@@ -674,15 +687,93 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
       state = state.copyWith(exportProgress: 0.2);
 
-      final result = await Process.run(ffmpegPath, [
-        '-y',
-        '-i',
-        inputPath,
-        '-af',
-        filterChain,
-        ...codecArgs,
-        outputPath,
-      ]);
+      // Use FFmpeg Kit on Android, Process on Desktop
+      if (Platform.isAndroid) {
+        return await _runFFmpegExportAndroid(
+          inputPath: inputPath,
+          outputPath: outputPath,
+          filterChain: filterChain,
+          codecArgs: codecArgs,
+        );
+      } else {
+        return await _runFFmpegExportDesktop(
+          inputPath: inputPath,
+          outputPath: outputPath,
+          filterChain: filterChain,
+          codecArgs: codecArgs,
+        );
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Run FFmpeg export on Android using ffmpeg_kit_flutter
+  Future<bool> _runFFmpegExportAndroid({
+    required String inputPath,
+    required String outputPath,
+    required String filterChain,
+    required List<String> codecArgs,
+  }) async {
+    try {
+      final args = _buildFFmpegArgs(
+        inputPath: inputPath,
+        outputPath: outputPath,
+        filterChain: filterChain,
+        codecArgs: codecArgs,
+      );
+
+      if (kDebugMode) {
+        debugPrint('FFmpegKit args: $args');
+      }
+
+      final session = await FFmpegKit.executeWithArguments(args);
+      final returnCode = await session.getReturnCode();
+
+      state = state.copyWith(exportProgress: 0.9);
+
+      if (ReturnCode.isSuccess(returnCode)) {
+        return true;
+      } else {
+        if (kDebugMode) {
+          final failStack = await session.getFailStackTrace();
+          final logs = await session.getAllLogsAsString();
+          debugPrint('FFmpegKit failed: code=$returnCode');
+          if (failStack != null) {
+            debugPrint('FFmpegKit stack: $failStack');
+          }
+          debugPrint('FFmpegKit logs:\n$logs');
+        }
+        return false;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('FFmpegKit exception: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Run FFmpeg export on Desktop using Process
+  Future<bool> _runFFmpegExportDesktop({
+    required String inputPath,
+    required String outputPath,
+    required String filterChain,
+    required List<String> codecArgs,
+  }) async {
+    final ffmpegPath = await _findFFmpeg();
+    if (ffmpegPath == null) return false;
+
+    try {
+      final result = await Process.run(
+        ffmpegPath,
+        _buildFFmpegArgs(
+          inputPath: inputPath,
+          outputPath: outputPath,
+          filterChain: filterChain,
+          codecArgs: codecArgs,
+        ),
+      );
 
       state = state.copyWith(exportProgress: 0.9);
 
@@ -690,6 +781,28 @@ class EditorNotifier extends StateNotifier<EditorState> {
     } catch (e) {
       return false;
     }
+  }
+
+  /// Build FFmpeg command string for use with FFmpeg Kit
+  List<String> _buildFFmpegArgs({
+    required String inputPath,
+    required String outputPath,
+    required String filterChain,
+    required List<String> codecArgs,
+  }) {
+    final args = [
+      '-y',
+      '-i',
+      inputPath,
+      '-map',
+      '0:a:0',
+      '-vn',
+      '-af',
+      filterChain,
+      ...codecArgs,
+      outputPath,
+    ];
+    return args;
   }
 
   /// Save current project

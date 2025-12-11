@@ -96,19 +96,21 @@ void main() {
     vec2 resolution = vec2(uResolutionX, uResolutionY);
     vec2 uv = (fragCoord * 2.0 - resolution) / min(resolution.x, resolution.y);
     
-    // Camera setup
-    vec3 ro = vec3(0.0, 0.0, 4.0);
-    vec3 rd = normalize(vec3(uv, -1.5));
-    
-    // Rotate view based on time
-    rd.xz *= rot(uTime * 0.1);
-    rd.yz *= rot(sin(uTime * 0.15) * 0.3);
+    // Camera setup (orbiting so pipes stay in view)
+    float orbit = uTime * 0.35;
+    vec3 ro = vec3(sin(orbit) * 3.0, sin(uTime * 0.2) * 1.5 + 0.4, cos(orbit) * 3.0);
+    vec3 target = vec3(0.0, 0.0, -1.5);
+    vec3 forward = normalize(target - ro);
+    vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0)));
+    vec3 up = normalize(cross(right, forward));
+    vec3 rd = normalize(forward + uv.x * right * 1.4 + uv.y * up * 1.1);
     
     // Raymarching
     float t = 0.0;
-    vec3 col = vec3(0.02, 0.02, 0.05); // Dark background
+    vec3 col = vec3(0.05, 0.04, 0.08); // Dark vaporwave background
+    float fog = 0.0;
     
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 96; i++) {
         vec3 p = ro + rd * t;
         float d = map(p);
         
@@ -128,20 +130,25 @@ void main() {
             else pipeColor = vec3(0.0, 0.5, 1.0);                    // Blue
             
             // Simple lighting
-            vec3 light = normalize(vec3(1.0, 1.0, 1.0));
+            vec3 light = normalize(vec3(1.0, 1.2, 1.0));
             float diff = max(dot(n, light), 0.0);
-            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 32.0);
+            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 24.0);
             
-            col = pipeColor * (0.3 + diff * 0.5) + vec3(1.0) * spec * 0.3;
+            col = pipeColor * (0.35 + diff * 0.5) + vec3(1.0) * spec * 0.35;
             
             // Audio reactive glow
-            col += pipeColor * uLevel * 0.5;
+            col += pipeColor * uLevel * 0.6;
             break;
         }
         
+        // Accumulate subtle fog so the background isn't empty if we miss a pipe
+        fog += exp(-0.08 * t) * 0.01;
         t += d;
-        if (t > 20.0) break;
+        if (t > 30.0) break;
     }
+    
+    // Nebula-like fog tint
+    col += fog * vec3(0.4, 0.2, 0.6);
     
     // Vignette
     vec2 q = fragCoord / resolution;

@@ -19,6 +19,8 @@ import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/streaming_source.dart';
+import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
 /// Abstract interface for audio processing operations
 ///
@@ -101,13 +103,30 @@ abstract class AudioEngine {
 
   /// Resume a paused batch operation
   Future<void> resumeBatch();
+
+  // --- Streaming / live remix mode (web-only, optional) ---
+
+  /// Attach a streaming source (YouTube or direct media URL) for live processing.
+  Future<StreamingCapability> attachStreamingSource(StreamingSource source);
+
+  /// Analysis frames for visualizers in streaming mode.
+  Stream<AudioAnalysisFrame> getStreamingAnalysisStream();
+
+  /// Start playback for the attached streaming source.
+  Future<void> playStreaming();
+
+  /// Pause playback for the attached streaming source.
+  Future<void> pauseStreaming();
+
+  /// Seek within the streaming source when supported.
+  Future<void> seekStreaming(Duration position);
 }
 
 /// Metadata extracted from an audio file
 class AudioMetadata {
   final String fileId;
   final String filename;
-  final Duration duration;
+  final Duration? duration; // null = unknown/process entire file
   final int sampleRate;
   final int channels;
   final String format; // 'mp3', 'wav', 'flac', etc.

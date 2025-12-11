@@ -84,7 +84,7 @@ logs/
 coverage/
 *.lcov
 
-# Documentation (accessible for editing)
+# Documentation
 docs/
 # Temporary files
 *.tmp

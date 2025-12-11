@@ -16,7 +16,7 @@
  */
 
 import 'dart:async';
-import 'dart:html' as html;
+import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -25,6 +25,7 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:web/web.dart' as web;
 
 /// Export screen for rendering and downloading final audio
 class ExportScreen extends ConsumerStatefulWidget {
@@ -37,6 +38,7 @@ class ExportScreen extends ConsumerStatefulWidget {
 class _ExportScreenState extends ConsumerState<ExportScreen> {
   String _selectedFormat = 'mp3';
   int _mp3Bitrate = 320;
+  int _aacBitrate = 256;
   int _flacCompressionLevel = 8;
   bool _isExporting = false;
   double _exportProgress = 0.0;
@@ -128,6 +130,22 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: _FormatButton(
+                label: 'AAC',
+                description: 'High quality, modern codec',
+                icon: Icons.high_quality_outlined,
+                isSelected: _selectedFormat == 'aac',
+                onTap: () => setState(() => _selectedFormat = 'aac'),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        Row(
+          children: [
+            Expanded(
+              child: _FormatButton(
                 label: 'WAV',
                 description: 'Uncompressed, max quality',
                 icon: Icons.graphic_eq,
@@ -178,6 +196,43 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                 ),
                 child: Text(
                   '$_mp3Bitrate kbps',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: SlowverbColors.accentPink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+
+        if (_selectedFormat == 'aac') ...[
+          Text('AAC BITRATE', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: _aacBitrate.toDouble(),
+                  min: 128,
+                  max: 256,
+                  divisions: 2,
+                  label: '$_aacBitrate kbps',
+                  onChanged: (value) =>
+                      setState(() => _aacBitrate = value.toInt()),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: SlowverbColors.backgroundLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$_aacBitrate kbps',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: SlowverbColors.accentPink,
                     fontWeight: FontWeight.w600,
@@ -544,8 +599,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     _cleanupDownloadUrl();
 
     final mimeType = _mimeTypeForFormat(format);
-    final blob = html.Blob([bytes], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: mimeType),
+    );
+    final url = web.URL.createObjectURL(blob);
     final filename = _deriveDownloadName(originalName, format);
 
     _progressSub = null;
@@ -557,6 +615,21 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       _downloadFilename = filename;
       _activeJobId = null;
     });
+
+    // Persist export metadata to the current project.
+    unawaited(
+      ref
+          .read(audioEditorProvider.notifier)
+          .recordExport(
+            format: format,
+            bitrateKbps: _selectedFormat == 'mp3'
+                ? _mp3Bitrate
+                : _selectedFormat == 'aac'
+                ? _aacBitrate
+                : null,
+            path: filename,
+          ),
+    );
 
     _triggerDownload();
 
@@ -573,10 +646,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   void _triggerDownload() {
     if (_downloadUrl == null) return;
 
-    final anchor = html.AnchorElement(href: _downloadUrl!)
+    final anchor = web.HTMLAnchorElement()
+      ..href = _downloadUrl!
       ..download = _downloadFilename ?? 'slowverb-export'
       ..style.display = 'none';
-    html.document.body?.append(anchor);
+    web.document.body?.append(anchor);
     anchor.click();
     anchor.remove();
   }
@@ -585,6 +659,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     switch (_selectedFormat) {
       case 'mp3':
         return ExportOptions(format: 'mp3', bitrateKbps: _mp3Bitrate);
+      case 'aac':
+        return ExportOptions(format: 'aac', bitrateKbps: _aacBitrate);
       case 'flac':
         return ExportOptions(
           format: 'flac',
@@ -606,7 +682,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
 
   void _cleanupDownloadUrl() {
     if (_downloadUrl != null) {
-      html.Url.revokeObjectUrl(_downloadUrl!);
+      web.URL.revokeObjectURL(_downloadUrl!);
       _downloadUrl = null;
       _downloadFilename = null;
     }

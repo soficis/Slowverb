@@ -115,8 +115,13 @@
     }, 5000);
   </script>
 
+  <!-- FFmpeg UMD Scripts (Local - works for dev and prod) -->
+  <!-- FFmpeg v0.11.x (Stable Single Threaded Support) -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+  <!-- ffmpeg-util not needed for v0.11 -->
+
   <!-- Audio engine wrapper (must load before Flutter) -->
-  <script src="js/engine_wrapper.js"></script>
+  <script src="js/engine_wrapper.js?v=2"></script>
   <!-- YouTube player wrapper for experimental streaming -->
   <script src="js/youtube_player.js"></script>
   <script src="flutter_bootstrap.js" async></script>

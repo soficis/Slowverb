@@ -23,6 +23,7 @@ import 'package:slowverb/features/library/library_screen.dart';
 import 'package:slowverb/features/splash/splash_screen.dart';
 import 'package:slowverb/features/history/history_screen.dart';
 import 'package:slowverb/features/batch/batch_import_screen.dart';
+import 'package:slowverb/features/batch/batch_playlist_screen.dart';
 
 /// Application route paths
 abstract final class RoutePaths {
@@ -33,6 +34,7 @@ abstract final class RoutePaths {
   static const export = '/export/:projectId';
   static const history = '/history';
   static const batch = '/batch';
+  static const batchPlaylist = '/batch/playlist';
 
   /// Build editor path with project ID
   static String editorWithId(String projectId) => '/editor/$projectId';
@@ -105,6 +107,14 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) => _buildPageWithSlideTransition(
         state: state,
         child: const BatchImportScreen(),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.batchPlaylist,
+      name: 'batch_playlist',
+      pageBuilder: (context, state) => _buildPageWithSlideTransition(
+        state: state,
+        child: const BatchPlaylistScreen(),
       ),
     ),
   ],

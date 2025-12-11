@@ -18,8 +18,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:ffmpeg_kit_flutter_audio/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_audio/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
 import 'package:slowverb/domain/repositories/audio_engine.dart';
 import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/batch_render_progress.dart';

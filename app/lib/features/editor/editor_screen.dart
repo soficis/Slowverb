@@ -30,13 +30,21 @@ import 'package:slowverb/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb/features/visualizer/visualizer_panel.dart';
 
 /// Main editor screen with VaporXP layout shared with the web experience.
-class EditorScreen extends ConsumerWidget {
+class EditorScreen extends ConsumerStatefulWidget {
   final String projectId;
 
   const EditorScreen({super.key, required this.projectId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends ConsumerState<EditorScreen> {
+  bool _showControls = true;
+  bool _isFullscreenVisualizer = false;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(editorProvider);
     final notifier = ref.read(editorProvider.notifier);
     final project = state.currentProject;
@@ -94,92 +102,175 @@ class EditorScreen extends ConsumerWidget {
           ),
 
           // Content Overlay
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Top Bar
-                  _EditorTitleBar(
-                    presetName: presetName,
-                    onBack: () {
-                      notifier.stopPlayback();
-                      context.go(RoutePaths.home);
-                    },
-                    onExport: () =>
-                        context.push(RoutePaths.exportWithId(projectId)),
-                  ),
+          if (!_isFullscreenVisualizer)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Top Bar with Fullscreen Toggle
+                    _EditorTitleBar(
+                      presetName: presetName,
+                      onBack: () {
+                        notifier.stopPlayback();
+                        context.go(RoutePaths.home);
+                      },
+                      onExport: () => context.push(
+                        RoutePaths.exportWithId(widget.projectId),
+                      ),
+                      onFullscreen: () {
+                        setState(() => _isFullscreenVisualizer = true);
+                      },
+                    ),
 
-                  const Spacer(),
+                    const SizedBox(height: SlowverbTokens.spacingMd),
 
-                  // Bottom Controls
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 900;
+                    // Controls with minimize option
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isWide = constraints.maxWidth >= 900;
+                          final isLandscape =
+                              constraints.maxWidth > constraints.maxHeight;
 
-                      if (isWide) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _WaveformTransportCard(
-                                projectName: project.name,
-                                position: state.position,
-                                duration: state.duration,
-                                isPlaying: state.isPlaying,
-                                isGeneratingPreview: state.isGeneratingPreview,
-                                onPlayPause: notifier.togglePlayback,
-                                onSeek: (pos) => notifier.seekTo(
-                                  Duration(milliseconds: pos),
+                          if (!_showControls) {
+                            return Align(
+                              alignment: Alignment.bottomRight,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: SlowverbTokens.spacingMd,
+                                  right: SlowverbTokens.spacingMd,
                                 ),
-                                onSeekBackward: notifier.seekBackward,
-                                onSeekForward: notifier.seekForward,
+                                child: FloatingActionButton.small(
+                                  onPressed: () =>
+                                      setState(() => _showControls = true),
+                                  tooltip: 'Show Controls',
+                                  child: const Icon(Icons.unfold_more),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: SlowverbTokens.spacingLg),
-                            Expanded(
-                              flex: 2,
-                              child: _EffectColumn(
-                                state: state,
-                                onPresetSelected: notifier.selectPreset,
-                                onUpdateParam: notifier.updateParameter,
-                              ),
-                            ),
-                          ],
-                        );
-                      } else {
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _WaveformTransportCard(
-                              projectName: project.name,
-                              position: state.position,
-                              duration: state.duration,
-                              isPlaying: state.isPlaying,
-                              isGeneratingPreview: state.isGeneratingPreview,
-                              onPlayPause: notifier.togglePlayback,
-                              onSeek: (pos) =>
-                                  notifier.seekTo(Duration(milliseconds: pos)),
-                              onSeekBackward: notifier.seekBackward,
-                              onSeekForward: notifier.seekForward,
-                            ),
-                            const SizedBox(height: SlowverbTokens.spacingMd),
-                            _EffectColumn(
-                              state: state,
-                              onPresetSelected: notifier.selectPreset,
-                              onUpdateParam: notifier.updateParameter,
-                            ),
-                          ],
-                        );
-                      }
-                    },
-                  ),
-                ],
+                            );
+                          }
+
+                          final controls = (isWide || isLandscape)
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: isLandscape ? 2 : 3,
+                                      child: SingleChildScrollView(
+                                        child: _WaveformTransportCard(
+                                          projectName: project.name,
+                                          position: state.position,
+                                          duration: state.duration,
+                                          isPlaying: state.isPlaying,
+                                          isGeneratingPreview:
+                                              state.isGeneratingPreview,
+                                          onPlayPause: notifier.togglePlayback,
+                                          onSeek: (pos) => notifier.seekTo(
+                                            Duration(milliseconds: pos),
+                                          ),
+                                          onSeekBackward: notifier.seekBackward,
+                                          onSeekForward: notifier.seekForward,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: SlowverbTokens.spacingMd,
+                                    ),
+                                    Expanded(
+                                      flex: isLandscape ? 1 : 2,
+                                      child: SingleChildScrollView(
+                                        child: _EffectColumn(
+                                          state: state,
+                                          onPresetSelected:
+                                              notifier.selectPreset,
+                                          onUpdateParam:
+                                              notifier.updateParameter,
+                                          onMinimize: () => setState(
+                                            () => _showControls = false,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: _WaveformTransportCard(
+                                          projectName: project.name,
+                                          position: state.position,
+                                          duration: state.duration,
+                                          isPlaying: state.isPlaying,
+                                          isGeneratingPreview:
+                                              state.isGeneratingPreview,
+                                          onPlayPause: notifier.togglePlayback,
+                                          onSeek: (pos) => notifier.seekTo(
+                                            Duration(milliseconds: pos),
+                                          ),
+                                          onSeekBackward: notifier.seekBackward,
+                                          onSeekForward: notifier.seekForward,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      height: SlowverbTokens.spacingMd,
+                                    ),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: _EffectColumn(
+                                          state: state,
+                                          onPresetSelected:
+                                              notifier.selectPreset,
+                                          onUpdateParam:
+                                              notifier.updateParameter,
+                                          onMinimize: () => setState(
+                                            () => _showControls = false,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+
+                          return controls;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          // Fullscreen Exit Buttons
+          if (_isFullscreenVisualizer)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    FloatingActionButton.small(
+                      onPressed: () {
+                        notifier.stopPlayback();
+                        context.go(RoutePaths.home);
+                      },
+                      tooltip: 'Back',
+                      child: const Icon(Icons.arrow_back),
+                    ),
+                    FloatingActionButton.small(
+                      onPressed: () {
+                        setState(() => _isFullscreenVisualizer = false);
+                      },
+                      tooltip: 'Exit Fullscreen',
+                      child: const Icon(Icons.fullscreen_exit),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -198,18 +289,24 @@ class _EditorTitleBar extends StatelessWidget {
   final String presetName;
   final VoidCallback onBack;
   final VoidCallback onExport;
+  final VoidCallback onFullscreen;
 
   const _EditorTitleBar({
     required this.presetName,
     required this.onBack,
     required this.onExport,
+    required this.onFullscreen,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: SlowverbTokens.spacingLg,
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow
+            ? SlowverbTokens.spacingSm
+            : SlowverbTokens.spacingLg,
         vertical: SlowverbTokens.spacingSm,
       ),
       decoration: BoxDecoration(
@@ -221,27 +318,38 @@ class _EditorTitleBar extends StatelessWidget {
         children: [
           _ChromeButton(icon: Icons.arrow_back, onTap: onBack),
           const SizedBox(width: SlowverbTokens.spacingSm),
-          const _VisualizerSelector(),
-          const SizedBox(width: SlowverbTokens.spacingSm),
-          Text(
-            'Slowverb Editor',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: Colors.white,
-              letterSpacing: 1.2,
-              shadows: const [
-                Shadow(color: Colors.black54, offset: Offset(0, 1)),
-              ],
+          const Flexible(child: _VisualizerSelector()),
+          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
+          if (!isNarrow)
+            Flexible(
+              child: Text(
+                'Slowverb Editor',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  letterSpacing: 1.2,
+                  shadows: const [
+                    Shadow(color: Colors.black54, offset: Offset(0, 1)),
+                  ],
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-
           const Spacer(),
-          _PresetBadge(presetName: presetName),
+          _ChromeButton(icon: Icons.fullscreen, onTap: onFullscreen),
+          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
+          if (!isNarrow) Flexible(child: _PresetBadge(presetName: presetName)),
           const SizedBox(width: SlowverbTokens.spacingSm),
-          ElevatedButton.icon(
-            onPressed: onExport,
-            icon: const Icon(Icons.download),
-            label: const Text('Export'),
-          ),
+          isNarrow
+              ? IconButton(
+                  onPressed: onExport,
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Export',
+                )
+              : ElevatedButton.icon(
+                  onPressed: onExport,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Export'),
+                ),
         ],
       ),
     );
@@ -312,13 +420,18 @@ class _WaveformTransportCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: SlowverbTokens.spacingSm),
-          PlaybackControls(
-            isPlaying: isPlaying,
-            onPlayPause: onPlayPause,
-            onSeekBackward: onSeekBackward,
-            onSeekForward: onSeekForward,
-            onLoop: () {},
-            isProcessing: isGeneratingPreview,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Center(
+              child: PlaybackControls(
+                isPlaying: isPlaying,
+                onPlayPause: onPlayPause,
+                onSeekBackward: onSeekBackward,
+                onSeekForward: onSeekForward,
+                onLoop: () {},
+                isProcessing: isGeneratingPreview,
+              ),
+            ),
           ),
         ],
       ),
@@ -330,11 +443,13 @@ class _EffectColumn extends StatelessWidget {
   final EditorState state;
   final ValueChanged<String> onPresetSelected;
   final void Function(String, double) onUpdateParam;
+  final VoidCallback onMinimize;
 
   const _EffectColumn({
     required this.state,
     required this.onPresetSelected,
     required this.onUpdateParam,
+    required this.onMinimize,
   });
 
   @override
@@ -349,9 +464,54 @@ class _EffectColumn extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _QuickPresetChips(
-            selectedId: state.selectedPresetId ?? 'slowed_reverb',
-            onPresetSelected: onPresetSelected,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Quick Presets',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              _ChromeButton(icon: Icons.unfold_less, onTap: onMinimize),
+            ],
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: Presets.all.map((preset) {
+                final isSelected =
+                    preset.id == (state.selectedPresetId ?? 'slowed_reverb');
+                return Padding(
+                  padding: const EdgeInsets.only(
+                    right: SlowverbTokens.spacingSm,
+                  ),
+                  child: ChoiceChip(
+                    label: Text(preset.name),
+                    selected: isSelected,
+                    onSelected: (_) => onPresetSelected(preset.id),
+                    selectedColor: SlowverbColors.hotPink.withOpacity(0.2),
+                    backgroundColor: SlowverbColors.surfaceVariant,
+                    labelStyle: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(
+                          color: isSelected
+                              ? SlowverbColors.hotPink
+                              : SlowverbColors.onSurface,
+                        ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        SlowverbTokens.radiusSm,
+                      ),
+                      side: BorderSide(
+                        color: isSelected
+                            ? SlowverbColors.hotPink
+                            : SlowverbColors.surfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           const SizedBox(height: SlowverbTokens.spacingMd),
           EffectSlider(
@@ -395,54 +555,6 @@ class _EffectColumn extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _QuickPresetChips extends StatelessWidget {
-  final String selectedId;
-  final ValueChanged<String> onPresetSelected;
-
-  const _QuickPresetChips({
-    required this.selectedId,
-    required this.onPresetSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Quick Presets', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: SlowverbTokens.spacingSm),
-        Wrap(
-          spacing: SlowverbTokens.spacingSm,
-          runSpacing: SlowverbTokens.spacingSm,
-          children: Presets.all.map((preset) {
-            final isSelected = preset.id == selectedId;
-            return ChoiceChip(
-              label: Text(preset.name),
-              selected: isSelected,
-              onSelected: (_) => onPresetSelected(preset.id),
-              selectedColor: SlowverbColors.hotPink.withOpacity(0.2),
-              backgroundColor: SlowverbColors.surfaceVariant,
-              labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: isSelected
-                    ? SlowverbColors.hotPink
-                    : SlowverbColors.onSurface,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-                side: BorderSide(
-                  color: isSelected
-                      ? SlowverbColors.hotPink
-                      : SlowverbColors.surfaceVariant,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 }
@@ -496,11 +608,14 @@ class _VisualizerSelector extends ConsumerWidget {
           children: [
             const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
             const SizedBox(width: SlowverbTokens.spacingXs),
-            Text(
-              currentPreset.name,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-                letterSpacing: 0.8,
+            Flexible(
+              child: Text(
+                currentPreset.name,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Colors.white,
+                  letterSpacing: 0.8,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 4),
@@ -577,11 +692,14 @@ class _PresetBadge extends StatelessWidget {
         children: [
           const Icon(Icons.bolt, size: 16, color: Colors.white),
           const SizedBox(width: SlowverbTokens.spacingXs),
-          Text(
-            presetName,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
-              letterSpacing: 1.2,
+          Flexible(
+            child: Text(
+              presetName,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Colors.white,
+                letterSpacing: 1.2,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

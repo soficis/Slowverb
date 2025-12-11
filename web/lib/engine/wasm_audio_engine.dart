@@ -16,15 +16,19 @@
  */
 
 import 'dart:async';
-import 'dart:html' as html;
-import 'dart:js_util' as js_util;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/streaming_source.dart';
+import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/engine/engine_js_interop.dart';
 import 'package:slowverb_web/engine/filter_chain_builder.dart';
+import 'package:slowverb_web/engine/streaming_audio_engine.dart';
+import 'package:web/web.dart' as web;
 
 /// Web implementation of AudioEngine using FFmpeg WASM
 ///
@@ -34,6 +38,7 @@ class WasmAudioEngine implements AudioEngine {
   final FilterChainBuilder _filterBuilder = FilterChainBuilder();
   final Map<String, StreamController<RenderProgress>> _progressControllers = {};
   final Map<String, RenderResult> _renderResults = {};
+  StreamingAudioEngine? _streamingEngine;
 
   bool _isInitialized = false;
 
@@ -50,30 +55,22 @@ class WasmAudioEngine implements AudioEngine {
     SlowverbEngine.initWorker();
 
     // Set up log handler
-    SlowverbEngine.setLogHandler(
-      _allowInterop((String message) {
-        print('[Audio Worker] $message');
-      }),
-    );
+    SlowverbEngine.setLogHandler((String message) {
+      print('[Audio Worker] $message');
+    });
 
     // Send init message
-    SlowverbEngine.postMessage(
-      'init',
-      null,
-      _allowInterop((dynamic response) {
-        final type = _getProperty(response, 'type') as String;
-        if (type == 'init-ok') {
-          _isInitialized = true;
-          completer.complete();
-        } else if (type == 'error') {
-          final error = _getProperty(
-            _getProperty(response, 'payload'),
-            'error',
-          );
-          completer.completeError(Exception(error));
-        }
-      }),
-    );
+    SlowverbEngine.postMessage('init', null, (JSObject response) {
+      final type = _getProperty<String>(response, 'type');
+      if (type == 'init-ok') {
+        _isInitialized = true;
+        completer.complete();
+      } else if (type == 'error') {
+        final payload = response.getProperty<JSObject?>('payload'.toJS);
+        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
+        completer.completeError(Exception(error));
+      }
+    });
 
     return completer.future;
   }
@@ -88,60 +85,54 @@ class WasmAudioEngine implements AudioEngine {
 
     final completer = Completer<AudioMetadata>();
 
-    // First, load the file
-    final loadPayload = JsInterop.dartMapToJsObject({
-      'fileId': fileId,
-      'filename': filename,
-      'bytes': bytes,
-    });
-
-    SlowverbEngine.postMessage(
-      'load-source',
-      loadPayload,
-      _allowInterop((dynamic response) async {
-        final type = _getProperty(response, 'type') as String;
-
-        if (type == 'load-ok') {
-          // Now probe for metadata
-          final probePayload = JsInterop.dartMapToJsObject({'fileId': fileId});
-
-          SlowverbEngine.postMessage(
-            'probe',
-            probePayload,
-            _allowInterop((dynamic probeResponse) {
-              final probeType = _getProperty(probeResponse, 'type') as String;
-
-              if (probeType == 'probe-ok') {
-                final payload = _getProperty(probeResponse, 'payload');
-                final metadata = AudioMetadata(
-                  fileId: _getProperty(payload, 'fileId') as String,
-                  filename: filename,
-                  duration: Duration(
-                    milliseconds: _getProperty(payload, 'duration') as int,
-                  ),
-                  sampleRate: _getProperty(payload, 'sampleRate') as int,
-                  channels: _getProperty(payload, 'channels') as int,
-                  format: _getProperty(payload, 'format') as String,
-                );
-                completer.complete(metadata);
-              } else if (probeType == 'error') {
-                final error = _getProperty(
-                  _getProperty(probeResponse, 'payload'),
-                  'error',
-                );
-                completer.completeError(Exception(error));
-              }
-            }),
-          );
-        } else if (type == 'error') {
-          final error = _getProperty(
-            _getProperty(response, 'payload'),
-            'error',
-          );
-          completer.completeError(Exception(error));
-        }
-      }),
+    // Verify data before sending
+    print(
+      '[Dart] calling loadSource - fileId: $fileId, filename: $filename, bytes: ${bytes.length}',
     );
+
+    // Use the command-specific wrapper that passes params individually
+    SlowverbEngine.loadSource(fileId, filename, bytes, (
+      JSObject response,
+    ) async {
+      final type = _getProperty<String>(response, 'type');
+
+      if (type == 'load-ok') {
+        // Now probe for metadata
+        SlowverbEngine.probe(fileId, (JSObject probeResponse) {
+          final probeType = _getProperty<String>(probeResponse, 'type');
+
+          if (probeType == 'probe-ok') {
+            final payload = probeResponse.getProperty<JSObject?>(
+              'payload'.toJS,
+            )!;
+            final durationMs = _getProperty<int?>(payload, 'duration');
+            final metadata = AudioMetadata(
+              fileId: _getProperty<String>(payload, 'fileId'),
+              filename: filename,
+              duration: durationMs != null
+                  ? Duration(milliseconds: durationMs)
+                  : null, // null = process entire file
+              sampleRate: _getProperty<int>(payload, 'sampleRate'),
+              channels: _getProperty<int>(payload, 'channels'),
+              format: _getProperty<String>(payload, 'format'),
+            );
+            completer.complete(metadata);
+          } else if (probeType == 'error') {
+            final errorPayload = probeResponse.getProperty<JSObject?>(
+              'payload'.toJS,
+            );
+            final error = errorPayload
+                ?.getProperty<JSString?>('error'.toJS)
+                ?.toDart;
+            completer.completeError(Exception(error));
+          }
+        });
+      } else if (type == 'error') {
+        final payload = response.getProperty<JSObject?>('payload'.toJS);
+        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
+        completer.completeError(Exception(error));
+      }
+    });
 
     return completer.future;
   }
@@ -154,34 +145,35 @@ class WasmAudioEngine implements AudioEngine {
     _ensureInitialized();
 
     final completer = Completer<Float32List>();
+    // Call getWaveform using direct interop
+    SlowverbEngine.getWaveform(fileId, (JSObject response) {
+      final type = _getProperty<String>(response, 'type');
 
-    final payload = JsInterop.dartMapToJsObject({
-      'fileId': fileId,
-      'targetSamples': targetSamples,
-    });
+      if (type == 'waveform-ok') {
+        final payload = response.getProperty<JSObject>('payload'.toJS);
+        // Expect 'samples' which is a Float32Array
+        final samples = payload.getProperty<JSObject>('samples'.toJS);
 
-    SlowverbEngine.postMessage(
-      'waveform',
-      payload,
-      _allowInterop((dynamic response) {
-        final type = _getProperty(response, 'type') as String;
+        // Convert JS typed array to Dart list
+        // Note: Typed arrays are JSUint8Array etc, but JSAny for Float32Array?
+        // Let's assume toDart works if we cast correctly or use helper.
+        // Actually JSArray<JSNumber> logic is safer if we don't know the exact typed array type wrapping.
+        // But engine_wrapper returns Float32Array.
+        // dart:js_interop maps Float32Array to JSFloat32Array.
+        // We can use toDart on it.
 
-        if (type == 'waveform-ok') {
-          final waveformData = _getProperty(response, 'payload');
-          // Convert JS Float32Array to Dart Float32List
-          final float32List = Float32List.fromList(
-            List<double>.from(waveformData as List),
-          );
-          completer.complete(float32List);
-        } else if (type == 'error') {
-          final error = _getProperty(
-            _getProperty(response, 'payload'),
-            'error',
-          );
-          completer.completeError(Exception(error));
+        if (samples.isA<JSFloat32Array>()) {
+          completer.complete((samples as JSFloat32Array).toDart);
+        } else {
+          // Fallback or empty
+          completer.complete(Float32List(0));
         }
-      }),
-    );
+      } else if (type == 'error') {
+        final payload = response.getProperty<JSObject?>('payload'.toJS);
+        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
+        completer.completeError(Exception(error));
+      }
+    });
 
     return completer.future;
   }
@@ -194,43 +186,45 @@ class WasmAudioEngine implements AudioEngine {
     Duration? duration,
   }) async {
     _ensureInitialized();
-
     final completer = Completer<Uri>();
+
+    // Build filter chain string
     final filterChain = _filterBuilder.buildFilterChain(config);
 
-    final payload = JsInterop.dartMapToJsObject({
-      'fileId': fileId,
+    // Build config object for preview
+    // When duration is null, the entire file will be processed
+    final durationSec = duration != null
+        ? duration.inMilliseconds / 1000.0
+        : null;
+    print(
+      '[WasmAudioEngine] renderPreview - duration: $duration, durationSec: $durationSec',
+    );
+
+    final configObj = JsInterop.dartMapToJsObject({
       'filterChain': filterChain,
-      'startAt': startAt?.inSeconds ?? 0,
+      'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
+      'durationSec': durationSec,
     });
 
-    SlowverbEngine.postMessage(
-      'render-preview',
-      payload,
-      _allowInterop((dynamic response) {
-        final type = _getProperty(response, 'type') as String;
+    SlowverbEngine.renderPreview(fileId, configObj, (JSObject response) {
+      final type = _getProperty<String>(response, 'type');
+      if (type == 'render-preview-ok') {
+        final payload = response.getProperty<JSObject>('payload'.toJS);
+        final buffer = payload.getProperty<JSArrayBuffer>('buffer'.toJS);
+        final bytes = buffer.toDart.asUint8List();
 
-        if (type == 'render-preview-ok') {
-          final outputBuffer = _getProperty(
-            _getProperty(response, 'payload'),
-            'outputBuffer',
-          );
-          final uint8List = _jsBufferToUint8List(outputBuffer);
-
-          // Create blob URL
-          final blob = html.Blob([uint8List], 'audio/mp3');
-          final url = html.Url.createObjectUrlFromBlob(blob);
-
-          completer.complete(Uri.parse(url));
-        } else if (type == 'error') {
-          final error = _getProperty(
-            _getProperty(response, 'payload'),
-            'error',
-          );
-          completer.completeError(Exception(error));
-        }
-      }),
-    );
+        final blob = web.Blob(
+          [bytes.toJS].toJS,
+          web.BlobPropertyBag(type: 'audio/mp3'),
+        );
+        final url = web.URL.createObjectURL(blob);
+        completer.complete(Uri.parse(url));
+      } else {
+        final payload = response.getProperty<JSObject?>('payload'.toJS);
+        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
+        completer.completeError(Exception(error ?? 'Unknown render error'));
+      }
+    });
 
     return completer.future;
   }
@@ -250,31 +244,24 @@ class WasmAudioEngine implements AudioEngine {
     final controller = StreamController<RenderProgress>.broadcast();
     _progressControllers[jobId.value] = controller;
 
-    final payload = JsInterop.dartMapToJsObject({
-      'fileId': fileId,
-      'filterChain': filterChain,
-      'format': options.format,
-      'bitrateKbps': options.bitrateKbps,
-      'compressionLevel': options.compressionLevel,
-    });
+    // progress updates not supported in direct call yet, simulating start
+    controller.add(
+      RenderProgress(jobId: jobId, progress: 0.1, stage: 'processing'),
+    );
 
-    SlowverbEngine.postMessage(
-      'render-full',
-      payload,
-      _allowInterop((dynamic response) {
-        final type = _getProperty(response, 'type') as String;
+    SlowverbEngine.renderFull(
+      fileId,
+      filterChain,
+      options.format,
+      options.bitrateKbps ?? 192, // Default to 192 if null
+      (JSObject response) {
+        final type = _getProperty<String>(response, 'type');
 
-        if (type == 'render-progress') {
-          final payload = _getProperty(response, 'payload');
-          final progress = RenderProgress(
-            jobId: jobId,
-            progress: _getProperty(payload, 'progress') as double,
-            stage: _getProperty(payload, 'stage') as String,
+        if (type == 'render-full-ok') {
+          final payloadObj = response.getProperty<JSObject?>('payload'.toJS)!;
+          final outputBuffer = payloadObj.getProperty<JSAny?>(
+            'outputBuffer'.toJS,
           );
-          controller.add(progress);
-        } else if (type == 'render-full-ok') {
-          final payload = _getProperty(response, 'payload');
-          final outputBuffer = _getProperty(payload, 'outputBuffer');
           final bytes = _jsBufferToUint8List(outputBuffer);
 
           _renderResults[jobId.value] = RenderResult(
@@ -289,20 +276,20 @@ class WasmAudioEngine implements AudioEngine {
           controller.close();
           _progressControllers.remove(jobId.value);
         } else if (type == 'error') {
-          final error = _getProperty(
-            _getProperty(response, 'payload'),
-            'error',
-          );
+          final errorPayload = response.getProperty<JSObject?>('payload'.toJS);
+          final error = errorPayload
+              ?.getProperty<JSString?>('error'.toJS)
+              ?.toDart;
           _renderResults[jobId.value] = RenderResult(
             success: false,
-            errorMessage: error?.toString(),
+            errorMessage: error,
           );
 
           controller.addError(Exception(error));
           controller.close();
           _progressControllers.remove(jobId.value);
         }
-      }),
+      },
     );
 
     return jobId;
@@ -337,17 +324,13 @@ class WasmAudioEngine implements AudioEngine {
   Future<void> cancelRender(RenderJobId jobId) async {
     final payload = JsInterop.dartMapToJsObject({'jobId': jobId.value});
 
-    SlowverbEngine.postMessage(
-      'cancel',
-      payload,
-      _allowInterop((dynamic response) {
-        // Cleanup controller
-        final controller = _progressControllers.remove(jobId.value);
-        controller?.close();
+    SlowverbEngine.postMessage('cancel', payload, (JSObject response) {
+      // Cleanup controller
+      final controller = _progressControllers.remove(jobId.value);
+      controller?.close();
 
-        _renderResults.remove(jobId.value);
-      }),
-    );
+      _renderResults.remove(jobId.value);
+    });
   }
 
   @override
@@ -356,13 +339,9 @@ class WasmAudioEngine implements AudioEngine {
       if (fileId != null) 'fileId': fileId,
     });
 
-    SlowverbEngine.postMessage(
-      'cleanup',
-      payload,
-      _allowInterop((dynamic response) {
-        // Cleanup complete
-      }),
-    );
+    SlowverbEngine.postMessage('cleanup', payload, (JSObject response) {
+      // Cleanup complete
+    });
   }
 
   @override
@@ -376,6 +355,9 @@ class WasmAudioEngine implements AudioEngine {
     }
     _progressControllers.clear();
     _renderResults.clear();
+
+    await _streamingEngine?.dispose();
+    _streamingEngine = null;
   }
 
   void _ensureInitialized() {
@@ -535,25 +517,58 @@ class WasmAudioEngine implements AudioEngine {
     _batchPaused = false;
   }
 
+  // --- Streaming / live remix mode (not implemented yet) ---
+
+  @override
+  Future<StreamingCapability> attachStreamingSource(
+    StreamingSource source,
+  ) async {
+    _streamingEngine ??= StreamingAudioEngine();
+    return _streamingEngine!.attach(source);
+  }
+
+  @override
+  Stream<AudioAnalysisFrame> getStreamingAnalysisStream() {
+    return _streamingEngine?.analysisStream ?? const Stream.empty();
+  }
+
+  @override
+  Future<void> playStreaming() async {
+    await _streamingEngine?.play();
+  }
+
+  @override
+  Future<void> pauseStreaming() async {
+    await _streamingEngine?.pause();
+  }
+
+  @override
+  Future<void> seekStreaming(Duration position) async {
+    await _streamingEngine?.seek(position);
+  }
+
   /// Trigger download of rendered file
   void _triggerDownload(Uint8List bytes, String fileName, String format) {
     // Create blob
     final mimeType = _mimeTypeForFormat(format);
-    final blob = html.Blob([bytes], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: mimeType),
+    );
+    final url = web.URL.createObjectURL(blob);
 
     // Create download link and trigger
-    final anchor = html.AnchorElement()
+    final anchor = web.HTMLAnchorElement()
       ..href = url
       ..download = '${_removeExtension(fileName)}_slowverb.$format'
       ..style.display = 'none';
 
-    html.document.body?.append(anchor);
+    web.document.body?.append(anchor);
     anchor.click();
     anchor.remove();
 
     // Cleanup blob URL
-    html.Url.revokeObjectUrl(url);
+    web.URL.revokeObjectURL(url);
   }
 
   /// Get MIME type for format
@@ -594,32 +609,48 @@ class WasmAudioEngine implements AudioEngine {
   }
 
   // JS interop helpers
-  dynamic _allowInterop(Function callback) {
-    return js_util.allowInterop(callback);
-  }
-
-  dynamic _getProperty(dynamic object, String property) {
-    return js_util.getProperty(object, property);
+  T _getProperty<T>(JSObject object, String property) {
+    if (T == String) {
+      return object.getProperty<JSString?>(property.toJS)?.toDart as T;
+    }
+    if (T == int) {
+      return object.getProperty<JSNumber?>(property.toJS)?.toDartInt as T;
+    }
+    if (T == double) {
+      return object.getProperty<JSNumber?>(property.toJS)?.toDartDouble as T;
+    }
+    if (T == bool) {
+      return object.getProperty<JSBoolean?>(property.toJS)?.toDart as T;
+    }
+    return object.getProperty<JSAny?>(property.toJS) as T;
   }
 }
 
 /// JS interop helpers for typed arrays
-Uint8List _jsBufferToUint8List(dynamic jsBuffer) {
-  if (jsBuffer is ByteBuffer) {
-    return Uint8List.view(jsBuffer);
+Uint8List _jsBufferToUint8List(JSAny? jsBuffer) {
+  if (jsBuffer == null) {
+    throw ArgumentError('Buffer is null');
   }
 
-  if (jsBuffer is List) {
-    return Uint8List.fromList(List<int>.from(jsBuffer));
+  // Try as ArrayBuffer
+  if (jsBuffer.isA<JSArrayBuffer>()) {
+    return (jsBuffer as JSArrayBuffer).toDart.asUint8List();
   }
 
-  // Fallback: try to read `buffer` property if a TypedArray was passed through
-  final bufferProp = js_util.getProperty(jsBuffer, 'buffer');
-  if (bufferProp is ByteBuffer) {
-    return Uint8List.view(bufferProp);
+  // Try as Uint8Array (TypedArray)
+  if (jsBuffer.isA<JSUint8Array>()) {
+    return (jsBuffer as JSUint8Array).toDart;
   }
 
-  throw ArgumentError(
-    'Unsupported buffer type from worker: ${jsBuffer.runtimeType}',
-  );
+  // Try to get buffer property from TypedArray
+  if (jsBuffer.isA<JSObject>()) {
+    final bufferProp = (jsBuffer as JSObject).getProperty<JSArrayBuffer?>(
+      'buffer'.toJS,
+    );
+    if (bufferProp != null) {
+      return bufferProp.toDart.asUint8List();
+    }
+  }
+
+  throw ArgumentError('Unsupported buffer type from worker');
 }

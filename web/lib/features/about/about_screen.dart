@@ -15,8 +15,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:slowverb_web/app/colors.dart';
 
 /// About screen with app information and credits
@@ -172,11 +172,16 @@ class AboutScreen extends StatelessWidget {
                   // GitHub Link
                   Center(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        html.window.open(
+                      onPressed: () async {
+                        final uri = Uri.parse(
                           'https://github.com/soficis/Slowverb',
-                          '_blank',
                         );
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
                       },
                       icon: const Icon(Icons.code, size: 18),
                       label: const Text('View Source on GitHub'),

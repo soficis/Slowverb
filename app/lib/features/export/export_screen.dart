@@ -438,13 +438,14 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             if (state.errorMessage != null) ...[
               const SizedBox(height: 12),
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: SlowverbColors.warning.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Icon(
                       Icons.info_outline,
@@ -452,10 +453,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       size: 16,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      state.errorMessage!,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: SlowverbColors.warning,
+                    Expanded(
+                      child: Text(
+                        state.errorMessage!,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: SlowverbColors.warning,
+                        ),
+                        softWrap: true,
                       ),
                     ),
                   ],
@@ -463,10 +467,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               ),
             ],
             const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                OutlinedButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 360;
+
+                final openButton = OutlinedButton.icon(
                   onPressed: _openFileLocation,
                   icon: const Icon(Icons.folder_open),
                   label: const Text('Open Folder'),
@@ -478,9 +483,9 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       vertical: 12,
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
+                );
+
+                final doneButton = ElevatedButton.icon(
                   onPressed: () => context.go(RoutePaths.home),
                   icon: const Icon(Icons.done),
                   label: const Text('Done'),
@@ -489,9 +494,28 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       horizontal: 24,
                       vertical: 12,
                     ),
+                    minimumSize: isNarrow
+                        ? const Size.fromHeight(48)
+                        : const Size(0, 0),
                   ),
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      openButton,
+                      const SizedBox(height: 12),
+                      doneButton,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [openButton, const SizedBox(width: 16), doneButton],
+                );
+              },
             ),
           ],
         ),

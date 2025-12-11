@@ -171,7 +171,10 @@ class _YouTubeImportDialogState extends ConsumerState<YouTubeImportDialog> {
 
       if (status == ToolStatus.downloadFailed) {
         setState(() {
-          _error = 'Failed to download yt-dlp tool. Please try again.';
+          _error = Platform.isAndroid || Platform.isIOS
+              ? 'YouTube import is not available on mobile devices. '
+                    'Please use the file import feature instead.'
+              : 'Failed to download yt-dlp tool. Please try again.';
           _isLoading = false;
         });
         return;

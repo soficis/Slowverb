@@ -81,7 +81,7 @@ class VisualizerController extends StateNotifier<VisualizerState> {
   VisualizerController(this.ref)
     : super(
         VisualizerState(
-          activePreset: _presets[0],
+          activePreset: _presets[3], // 3D Maze as default
           currentFrame: AudioAnalysisFrame.empty(),
         ),
       ) {

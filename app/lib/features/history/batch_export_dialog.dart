@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/history_entry.dart';
 import 'package:slowverb/features/batch/batch_processor.dart';
@@ -20,9 +21,29 @@ class _BatchExportDialogState extends ConsumerState<BatchExportDialog> {
   String _selectedFormat = 'mp3';
   int _selectedBitrate = 320;
   String? _destinationFolder;
+  String? _defaultAppFolder;
+  bool _useCustomDestination = false;
 
   final List<String> _formats = ['mp3', 'wav', 'aac', 'flac'];
   final List<int> _bitrates = [128, 192, 256, 320];
+
+  @override
+  void initState() {
+    super.initState();
+    _initDefaultDestination();
+  }
+
+  Future<void> _initDefaultDestination() async {
+    if (!Platform.isAndroid) return;
+    final dir = await getApplicationDocumentsDirectory();
+    if (!mounted) return;
+    setState(() {
+      _defaultAppFolder = dir.path;
+      if (!_useCustomDestination) {
+        _destinationFolder = dir.path;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,14 +145,55 @@ class _BatchExportDialogState extends ConsumerState<BatchExportDialog> {
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _pickDestination,
-              icon: const Icon(Icons.folder_open),
-              label: Text(
-                _destinationFolder ?? 'Choose folder...',
-                overflow: TextOverflow.ellipsis,
+            if (Platform.isAndroid)
+              Column(
+                children: [
+                  RadioListTile<bool>(
+                    value: false,
+                    groupValue: _useCustomDestination,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _useCustomDestination = false;
+                        _destinationFolder = _defaultAppFolder;
+                      });
+                    },
+                    title: const Text('Use app storage (default)'),
+                    subtitle: Text(
+                      _defaultAppFolder ?? 'Loading app storage path...',
+                    ),
+                  ),
+                  RadioListTile<bool>(
+                    value: true,
+                    groupValue: _useCustomDestination,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _useCustomDestination = true);
+                    },
+                    title: const Text('Custom folder'),
+                    subtitle: Text(
+                      _destinationFolder ?? 'Choose folder...',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    secondary: OutlinedButton.icon(
+                      onPressed: _useCustomDestination
+                          ? _pickDestination
+                          : null,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Pick'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: _pickDestination,
+                icon: const Icon(Icons.folder_open),
+                label: Text(
+                  _destinationFolder ?? 'Choose folder...',
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
           ],
         ),
       ),

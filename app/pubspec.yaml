@@ -31,7 +31,7 @@ dependencies:
   hive_flutter: ^1.1.0
 
   # FFmpeg for mobile (iOS/Android) - bundled, no separate install needed
-  ffmpeg_kit_flutter_audio: ^6.0.3
+  ffmpeg_kit_flutter_new_audio: ^2.0.0
 
   # Utilities
   uuid: ^4.5.1

@@ -1,23 +1,30 @@
 import 'dart:async';
-import 'dart:math' show sin;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/app/colors.dart';
+
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
+import 'package:slowverb_web/domain/entities/streaming_source.dart';
+import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 import 'package:slowverb_web/engine/youtube_player_interop.dart';
+import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
+import 'package:slowverb_web/providers/audio_engine_provider.dart';
 import 'package:web/web.dart' as web;
 
 /// YouTube streaming screen with embedded player and visualizer sync
 /// Note: Audio effects cannot be applied due to CORS/DRM restrictions
-class YouTubeStreamScreen extends StatefulWidget {
+class YouTubeStreamScreen extends ConsumerStatefulWidget {
   const YouTubeStreamScreen({super.key});
 
   @override
-  State<YouTubeStreamScreen> createState() => _YouTubeStreamScreenState();
+  ConsumerState<YouTubeStreamScreen> createState() =>
+      _YouTubeStreamScreenState();
 }
 
-class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
+class _YouTubeStreamScreenState extends ConsumerState<YouTubeStreamScreen> {
   final _urlController = TextEditingController();
   String? _videoId;
   String? _error;
@@ -27,6 +34,7 @@ class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
   double _duration = 0;
   bool _isPlaying = false;
   StreamSubscription? _timeSubscription;
+  VisualizerPreset _activePreset = VisualizerPresets.wmpRetro;
 
   @override
   void initState() {
@@ -54,6 +62,8 @@ class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final streamingEngine = ref.watch(streamingAudioEngineProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('YouTube Stream'),
@@ -237,25 +247,78 @@ class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
                       ),
                     ),
 
-                    // Simple visualizer (time-based)
-                    Container(
-                      height: 80,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: SlowverbColors.surface,
-                        borderRadius: BorderRadius.circular(
-                          SlowverbTokens.radiusSm,
-                        ),
+                    // Visualizer Panel
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: VisualizerPanel(
+                        analysisStream: streamingEngine.analysisStream,
+                        height: 120,
+                        isPlaying: _isPlaying,
+                        preset: _activePreset,
                       ),
-                      child: CustomPaint(
-                        painter: _SimpleVisualizerPainter(
-                          time: _currentTime,
-                          isPlaying: _isPlaying,
-                          progress: _duration > 0
-                              ? _currentTime / _duration
-                              : 0,
-                        ),
-                        size: const Size(double.infinity, 80),
+                    ),
+
+                    // Preset Selector
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom: 4,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            'VISUALIZER:',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: SlowverbColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            height: 32,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: SlowverbColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: SlowverbColors.primaryPurple.withOpacity(
+                                  0.3,
+                                ),
+                              ),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<VisualizerPreset>(
+                                value: _activePreset,
+                                icon: const Icon(
+                                  Icons.arrow_drop_down,
+                                  color: SlowverbColors.primaryPurple,
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                dropdownColor: SlowverbColors.surface,
+                                items: VisualizerPresets.all.map((preset) {
+                                  return DropdownMenuItem(
+                                    value: preset,
+                                    child: Text(preset.name),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _activePreset = value);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
@@ -355,6 +418,15 @@ class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
     });
 
     try {
+      // Connect streaming engine (generates fake visualizer data for YouTube)
+      final source = StreamingSource(
+        url: Uri.parse(urlText),
+        isYouTube: true,
+        title: 'YouTube Stream',
+      );
+
+      await ref.read(streamingAudioEngineProvider).attach(source);
+
       // Register the platform view
       _registerYouTubeView(videoId);
 
@@ -406,91 +478,5 @@ class _YouTubeStreamScreenState extends State<YouTubeStreamScreen> {
     final mins = (seconds / 60).floor();
     final secs = (seconds % 60).floor();
     return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
-  }
-}
-
-/// Simple time-based visualizer painter
-class _SimpleVisualizerPainter extends CustomPainter {
-  final double time;
-  final bool isPlaying;
-  final double progress;
-
-  _SimpleVisualizerPainter({
-    required this.time,
-    required this.isPlaying,
-    required this.progress,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    // Draw progress bar background
-    paint.color = Colors.white.withOpacity(0.1);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, size.height - 4, size.width, 4),
-        const Radius.circular(2),
-      ),
-      paint,
-    );
-
-    // Draw progress
-    paint.color = SlowverbColors.neonCyan;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, size.height - 4, size.width * progress, 4),
-        const Radius.circular(2),
-      ),
-      paint,
-    );
-
-    // Draw animated bars based on time
-    if (isPlaying) {
-      final barCount = 32;
-      final barWidth = size.width / barCount - 2;
-
-      for (var i = 0; i < barCount; i++) {
-        // Generate pseudo-random height based on time and position
-        final phase = i * 0.3 + time * 2;
-        final height =
-            (0.3 + 0.7 * ((sin(phase) + 1) / 2)) * (size.height - 10);
-
-        final gradient = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [SlowverbColors.hotPink, SlowverbColors.neonCyan],
-        );
-
-        paint.shader = gradient.createShader(
-          Rect.fromLTWH(
-            i * (barWidth + 2),
-            size.height - 10 - height,
-            barWidth,
-            height,
-          ),
-        );
-
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(
-              i * (barWidth + 2),
-              size.height - 10 - height,
-              barWidth,
-              height,
-            ),
-            const Radius.circular(2),
-          ),
-          paint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SimpleVisualizerPainter oldDelegate) {
-    return oldDelegate.time != time ||
-        oldDelegate.isPlaying != isPlaying ||
-        oldDelegate.progress != progress;
   }
 }

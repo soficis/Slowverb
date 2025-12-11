@@ -218,4 +218,13 @@ abstract final class Presets {
     slowMotion,
     manual,
   ];
+
+  /// Get preset by ID, or null if not found.
+  static EffectPreset? getById(String id) {
+    try {
+      return all.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 }
