@@ -4,6 +4,9 @@
 
 This is the web version of Slowverb, a Flutter web application that brings all the audio editing capabilities to modern web browsers. All audio processing happens locally on the user's device—no files are ever uploaded to a server.
 
+**⚠️ Beta Software Notice**  
+This software is currently in beta. Not all features may work as expected, and you may encounter bugs or incomplete functionality. Use at your own risk.
+
 ## 🎯 Features
 
 - ✅ **Complete Local Processing** - All reverb, tempo, and pitch processing occurs in the browser
@@ -13,6 +16,14 @@ This is the web version of Slowverb, a Flutter web application that brings all t
 - ✅ **WASM-Powered** - Uses WebAssembly FFmpeg for high-performance audio processing
 - ✅ **PWA Support** - Install as a web app on any device
 - ✅ **IndexedDB Storage** - Browser-based file persistence
+- ✅ **YouTube Import** - Download and process audio from YouTube URLs
+- ✅ **Batch Processing** - Process multiple files simultaneously
+- ✅ **Audio Visualizer** - Real-time visual effects (Pipes, Starfield, Maze, Fractal, WMP Retro)
+- ✅ **Shader Effects** - GPU-accelerated visual shaders
+- ✅ **History & Undo** - Track and revert changes
+- ✅ **Waveform Analysis** - Detailed audio visualization
+- ✅ **Settings Management** - Customizable app preferences
+- ✅ **About Screen** - Information and credits
 
 ## 🚀 Quick Start
 
@@ -326,7 +337,11 @@ Before pushing to production:
 - [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 - [WebAssembly Docs](https://webassembly.org/)
 
-## 🔗 Links
+## � License
+
+This project is licensed under the **GNU General Public License v3.0** (GPLv3).
+
+## �🔗 Links
 
 - **Main Repository**: [GitHub](https://github.com/soficis/slowverb)
 - **Main README**: See [README.md](../README.md) for desktop/mobile information

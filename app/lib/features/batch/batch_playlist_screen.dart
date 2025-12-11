@@ -7,7 +7,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:slowverb/app/colors.dart';
-import 'package:slowverb/app/router.dart';
 import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/render_job.dart';
 import 'package:slowverb/features/batch/batch_processor.dart';

@@ -32,7 +32,7 @@ class ProjectRepositoryWeb implements ProjectRepository {
         return;
       }
 
-      _db = await _factory!.open(
+      _db = await _factory.open(
         _dbName,
         version: _dbVersion,
         onUpgradeNeeded: (VersionChangeEvent e) {

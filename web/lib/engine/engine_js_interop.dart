@@ -222,7 +222,7 @@ class JsInterop {
         if (name != null &&
             name.isA<JSString>() &&
             (name as JSString).toDart == 'Object') {
-          return jsObjectToDartMap(value as JSObject);
+          return jsObjectToDartMap(value);
         }
       }
     }

@@ -102,7 +102,7 @@ class SettingsScreen extends ConsumerWidget {
                           .read(experimentalFeaturesProvider.notifier)
                           .setStreamingAudioEnabled(value);
                     },
-                    activeColor: SlowverbColors.neonCyan,
+                    activeThumbColor: SlowverbColors.neonCyan,
                   ),
                 ],
               ),

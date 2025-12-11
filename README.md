@@ -4,6 +4,9 @@
 
 Slowverb is a cross-platform audio processing application that transforms any song into dreamy, vaporwave-style remixes with  48kHz audio processing, multi-stage reverb, and bass enhancement.
 
+**⚠️ Beta Software Notice**  
+This software is currently in beta. Not all features may work as expected, and you may encounter bugs or incomplete functionality. Use at your own risk.
+
 ---
 
 ## ✨ Features
@@ -17,6 +20,16 @@ Slowverb is a cross-platform audio processing application that transforms any so
 - **Custom Save Location** - Choose where to save exports
 - **Unified Preset Catalog** - Same 12 presets across web, desktop, and mobile (Slowed + Reverb, Vaporwave Chill, Nightcore, Echo Slow, Lo-Fi, Ambient, Deep Bass, Crystal Clear, Underwater, Synthwave, Slow Motion, Manual)
 - **VaporXP Responsive UI** - Shared VaporXP Luna aesthetic with responsive layout on all platforms
+- **YouTube Import** - Download and process audio directly from YouTube URLs
+- **Batch Processing** - Process multiple audio files at once
+- **Audio Visualizer** - Real-time visual effects synchronized with audio (Pipes, Starfield, Maze, Fractal, WMP Retro presets)
+- **Shader Effects** - GPU-accelerated visual shaders for enhanced aesthetics
+- **History & Undo** - Track changes and revert edits
+- **Waveform Analysis** - Detailed audio waveform visualization
+- **Codec Detection** - Automatic detection of audio formats and codecs
+- **PWA Support** - Install web version as a progressive web app
+- **Offline Functionality** - Web version works without internet connection
+- **IndexedDB Storage** - Browser-based project persistence
 
 ---
 
