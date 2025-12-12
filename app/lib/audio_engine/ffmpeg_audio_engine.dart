@@ -24,7 +24,6 @@ import 'package:slowverb/domain/repositories/audio_engine.dart';
 import 'package:slowverb/domain/entities/batch_job.dart';
 import 'package:slowverb/domain/entities/batch_render_progress.dart';
 import 'package:slowverb/domain/entities/effect_preset.dart';
-import 'package:slowverb/domain/entities/render_job.dart';
 import 'package:slowverb/services/ffmpeg_service.dart';
 
 /// FFmpeg-based implementation of AudioEngine

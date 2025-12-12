@@ -101,12 +101,16 @@ class _StartupAppState extends State<_StartupApp> {
     }
 
     final ffmpegService = FFmpegService();
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       try {
+        debugPrint('Initializing FFmpeg for ${Platform.operatingSystem}...');
         await ffmpegService.initialize();
+        debugPrint(
+          'FFmpeg initialization complete: ${ffmpegService.executablePath}',
+        );
       } catch (e, st) {
         debugPrint('FFmpeg initialization failed: $e\n$st');
-        // Non-fatal on mobile; continue without FFmpeg on desktop.
+        // Non-fatal - continue without FFmpeg on desktop.
       }
     } else if (Platform.isAndroid) {
       // Initialize FFmpeg for Android via ffmpeg_kit_flutter

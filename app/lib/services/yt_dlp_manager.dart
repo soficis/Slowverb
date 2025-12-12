@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -123,39 +124,86 @@ class YtDlpManager {
       await _toolsDir.create(recursive: true);
     }
 
-    // Find setup script
-    final scriptsDir = Directory(p.join(_appRoot!.path, 'scripts'));
-    final scriptPath = p.join(
-      scriptsDir.path,
-      Platform.isWindows ? 'setup_yt_dlp.ps1' : 'setup_yt_dlp.sh',
-    );
+    // Download yt-dlp directly from GitHub releases
+    // This works regardless of whether we're in a bundled app or development
+    try {
+      final downloadUrl = _getDownloadUrl();
+      if (downloadUrl == null) {
+        print('YtDlpManager: No download URL for platform');
+        return ToolStatus.downloadFailed;
+      }
 
-    if (!await File(scriptPath).exists()) {
-      // Script missing - can't auto-download
-      return ToolStatus.downloadFailed;
-    }
+      print('YtDlpManager: Downloading from $downloadUrl');
+      print('YtDlpManager: Target path: $_binaryPath');
 
-    // Run setup script
-    ProcessResult result;
-    if (Platform.isWindows) {
-      result = await Process.run('powershell', [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        scriptPath,
-        '-TargetDir',
-        _toolsDir.path,
-      ]);
-    } else {
-      result = await Process.run('bash', [scriptPath, _toolsDir.path]);
-    }
+      // Use http package which handles redirects automatically
+      final response = await http.get(Uri.parse(downloadUrl));
 
-    // Check if download succeeded
-    if (result.exitCode == 0 && await File(_binaryPath).exists()) {
-      return ToolStatus.downloadedNow;
+      if (response.statusCode != 200) {
+        print(
+          'YtDlpManager: Download failed with status ${response.statusCode}',
+        );
+        return ToolStatus.downloadFailed;
+      }
+
+      print(
+        'YtDlpManager: Download complete, ${response.bodyBytes.length} bytes',
+      );
+
+      // Write bytes to file
+      final file = File(_binaryPath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      print('YtDlpManager: File written to $_binaryPath');
+
+      // Make executable on Unix systems
+      if (!Platform.isWindows) {
+        final chmodResult = await Process.run('chmod', ['+x', _binaryPath]);
+        print('YtDlpManager: chmod result: ${chmodResult.exitCode}');
+
+        // Remove macOS quarantine attribute to allow execution
+        if (Platform.isMacOS) {
+          // Use -c flag to suppress error if attribute doesn't exist
+          final xattrResult = await Process.run('xattr', [
+            '-d',
+            'com.apple.quarantine',
+            _binaryPath,
+          ]);
+          print('YtDlpManager: xattr result: ${xattrResult.exitCode}');
+        }
+      }
+
+      // Verify the download
+      if (await File(_binaryPath).exists()) {
+        final stat = await File(_binaryPath).stat();
+        print('YtDlpManager: Binary exists, size: ${stat.size}');
+        if (stat.size > 1000) {
+          // Sanity check - yt-dlp should be several MB
+          return ToolStatus.downloadedNow;
+        } else {
+          print('YtDlpManager: File too small, download may have failed');
+          await File(_binaryPath).delete();
+        }
+      }
+    } catch (e, stackTrace) {
+      print('YtDlpManager: Download error: $e');
+      print('YtDlpManager: Stack trace: $stackTrace');
     }
 
     return ToolStatus.downloadFailed;
+  }
+
+  /// Get the download URL for yt-dlp based on platform
+  String? _getDownloadUrl() {
+    const baseUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download';
+    if (Platform.isWindows) {
+      return '$baseUrl/yt-dlp.exe';
+    } else if (Platform.isMacOS) {
+      return '$baseUrl/yt-dlp_macos';
+    } else if (Platform.isLinux) {
+      return '$baseUrl/yt-dlp';
+    }
+    return null;
   }
 
   /// Start downloading audio from URL using video title as filename
@@ -178,8 +226,12 @@ class YtDlpManager {
     // %(title)s = video title, sanitized for filesystem
     final outputTemplate = p.join(outputDir, '%(title)s.%(ext)s');
 
-    // Run yt-dlp with audio extraction
-    return Process.start(binary, [
+    // Find FFmpeg for audio conversion
+    final ffmpegPath = await _findFFmpegPath();
+    print('YtDlpManager: FFmpeg path: $ffmpegPath');
+
+    // Build arguments
+    final args = <String>[
       '-x', // Extract audio only
       '--audio-format', audioFormat,
       '-o', outputTemplate, // Use title template
@@ -187,8 +239,65 @@ class YtDlpManager {
       '--newline', // Progress on new lines
       '--restrict-filenames', // Safe characters only
       '--print', 'after_move:filepath', // Print final filepath after conversion
-      url.toString(),
-    ]);
+    ];
+
+    // Add FFmpeg location if found
+    if (ffmpegPath != null) {
+      // yt-dlp needs the directory containing ffmpeg, not the executable itself
+      final ffmpegDir = p.dirname(ffmpegPath);
+      args.addAll(['--ffmpeg-location', ffmpegDir]);
+    }
+
+    args.add(url.toString());
+
+    print('YtDlpManager: Running yt-dlp with args: $args');
+
+    // Run yt-dlp with audio extraction
+    return Process.start(binary, args);
+  }
+
+  /// Find FFmpeg executable path
+  Future<String?> _findFFmpegPath() async {
+    await _ensureInitialized();
+
+    // Check app's FFmpeg download location first (from FFmpegService)
+    final appFFmpegPath = p.join(
+      _appSupportDir!.path,
+      'ffmpeg',
+      'bin',
+      'ffmpeg',
+    );
+    if (await File(appFFmpegPath).exists()) {
+      print('YtDlpManager: Found app FFmpeg at $appFFmpegPath');
+      return appFFmpegPath;
+    }
+
+    // Check system PATH
+    try {
+      final which = Platform.isWindows ? 'where' : 'which';
+      final result = await Process.run(which, ['ffmpeg']);
+      if (result.exitCode == 0) {
+        final pathFromPath = (result.stdout as String).split('\n').first.trim();
+        if (pathFromPath.isNotEmpty) {
+          return pathFromPath;
+        }
+      }
+    } catch (_) {}
+
+    // Check common Homebrew locations on macOS
+    if (Platform.isMacOS) {
+      const homebrewPaths = [
+        '/opt/homebrew/bin/ffmpeg', // Apple Silicon
+        '/usr/local/bin/ffmpeg', // Intel
+      ];
+      for (final path in homebrewPaths) {
+        if (await File(path).exists()) {
+          return path;
+        }
+      }
+    }
+
+    return null;
   }
 
   /// Parse yt-dlp progress output
