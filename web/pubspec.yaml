@@ -51,6 +51,13 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # GPU visualizer shaders
+  shaders:
+    - shaders/maze_3d.frag
+    - shaders/starfield.frag
+    - shaders/pipes_3d.frag
+    - shaders/wmp_retro.frag
+
   # WASM assets and worker scripts
   assets:
     - assets/wasm/

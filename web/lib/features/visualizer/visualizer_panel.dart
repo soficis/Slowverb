@@ -1,31 +1,65 @@
 import 'dart:async';
 import 'dart:math' show sin, cos, pi, max, min, sqrt;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
-/// Web-optimized visualizer panel with nostalgic Windows Media Player-style bars.
-/// Uses CustomPainter for smooth 60fps rendering via CanvasKit.
-class VisualizerPanel extends StatefulWidget {
+/// Provides loaded GPU shaders for visualizers.
+/// Returns empty map if shaders fail to load, triggering CPU fallback.
+final webShaderProvider = FutureProvider<Map<String, ui.FragmentProgram>>((
+  ref,
+) async {
+  try {
+    final wmpRetro = await ui.FragmentProgram.fromAsset(
+      'shaders/wmp_retro.frag',
+    );
+    final starfield = await ui.FragmentProgram.fromAsset(
+      'shaders/starfield.frag',
+    );
+    final pipes3d = await ui.FragmentProgram.fromAsset('shaders/pipes_3d.frag');
+    final maze3d = await ui.FragmentProgram.fromAsset('shaders/maze_3d.frag');
+
+    return {
+      'wmp_retro': wmpRetro,
+      'starfield_warp': starfield,
+      'pipes_vaporwave': pipes3d,
+      'maze_neon': maze3d,
+    };
+  } catch (e) {
+    debugPrint('Failed to load GPU shaders: $e');
+    return {};
+  }
+});
+
+/// Rendering mode indicator
+enum VisualizerRenderMode { gpu, cpu, loading }
+
+/// Web-optimized visualizer panel with GPU-accelerated shaders and CPU fallback.
+/// Uses FragmentProgram for GPU rendering via CanvasKit/WebGL.
+class VisualizerPanel extends ConsumerStatefulWidget {
   final Stream<AudioAnalysisFrame>? analysisStream;
   final VisualizerPreset? preset;
-  final double height;
+  final double? height;
   final bool isPlaying;
+  final VoidCallback? onDoubleTap;
 
   const VisualizerPanel({
     super.key,
     this.analysisStream,
     this.preset,
-    this.height = 120,
+    this.height,
     this.isPlaying = false,
+    this.onDoubleTap,
   });
 
   @override
-  State<VisualizerPanel> createState() => _VisualizerPanelState();
+  ConsumerState<VisualizerPanel> createState() => _VisualizerPanelState();
 }
 
-class _VisualizerPanelState extends State<VisualizerPanel>
+class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   StreamSubscription<AudioAnalysisFrame>? _sub;
@@ -47,7 +81,8 @@ class _VisualizerPanelState extends State<VisualizerPanel>
       duration: const Duration(seconds: 1),
     )..addListener(_tick);
 
-    if (widget.isPlaying) _controller.repeat();
+    // Always animate the visualizer for visual appeal
+    _controller.repeat();
     _subscribeToAnalysis();
     _fpsWatch.start();
   }
@@ -58,10 +93,9 @@ class _VisualizerPanelState extends State<VisualizerPanel>
     if (widget.analysisStream != oldWidget.analysisStream) {
       _subscribeToAnalysis();
     }
-    if (widget.isPlaying && !_controller.isAnimating) {
+    // Keep animation running always - visualizers should always be alive
+    if (!_controller.isAnimating) {
       _controller.repeat();
-    } else if (!widget.isPlaying && _controller.isAnimating) {
-      _controller.stop();
     }
   }
 
@@ -114,63 +148,120 @@ class _VisualizerPanelState extends State<VisualizerPanel>
   @override
   Widget build(BuildContext context) {
     final presetId = widget.preset?.id ?? 'wmp_retro';
+    final shadersAsync = ref.watch(webShaderProvider);
 
-    return Container(
-      height: widget.height,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: SlowverbColors.primaryPurple.withOpacity(0.3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: SlowverbColors.neonCyan.withOpacity(0.1),
-            blurRadius: 12,
+    return GestureDetector(
+      onDoubleTap: widget.onDoubleTap,
+      child: Container(
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: SlowverbColors.primaryPurple.withValues(alpha: 0.3),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          children: [
-            // Visualizer
-            CustomPaint(
-              painter: _getVisualizerPainter(presetId),
-              size: Size.infinite,
+          boxShadow: [
+            BoxShadow(
+              color: SlowverbColors.neonCyan.withValues(alpha: 0.1),
+              blurRadius: 12,
             ),
-
-            // Preset label
-            Positioned(
-              bottom: 6,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.graphic_eq,
-                      size: 10,
-                      color: SlowverbColors.neonCyan,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.preset?.name.toUpperCase() ?? 'WMP RETRO',
-                      style: const TextStyle(
-                        color: SlowverbColors.neonCyan,
-                        fontSize: 9,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.bold,
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              // Visualizer - GPU or CPU
+              shadersAsync.when(
+                data: (shaders) {
+                  final shader = shaders[presetId];
+                  if (shader != null) {
+                    return CustomPaint(
+                      painter: GpuVisualizerPainter(
+                        shader: shader,
+                        frame: _currentFrame,
+                        time: _time,
                       ),
-                    ),
-                  ],
+                      size: Size.infinite,
+                      isComplex: true,
+                      willChange: true,
+                      child: Container(),
+                    );
+                  }
+                  // Fallback to CPU painter
+                  return CustomPaint(
+                    painter: _getCpuPainter(presetId),
+                    size: Size.infinite,
+                  );
+                },
+                loading: () => _buildLoadingView(),
+                error: (_, __) => CustomPaint(
+                  painter: _getCpuPainter(presetId),
+                  size: Size.infinite,
                 ),
               ),
+
+              // Preset label with GPU/CPU indicator
+              Positioned(
+                bottom: 6,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        shadersAsync.maybeWhen(
+                          data: (shaders) => shaders[presetId] != null
+                              ? Icons.memory
+                              : Icons.computer,
+                          orElse: () => Icons.computer,
+                        ),
+                        size: 10,
+                        color: SlowverbColors.neonCyan,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${shadersAsync.maybeWhen(data: (shaders) => shaders[presetId] != null ? 'GPU' : 'CPU', loading: () => '...', orElse: () => 'CPU')} · ${widget.preset?.name.toUpperCase() ?? 'WMP RETRO'}',
+                        style: const TextStyle(
+                          color: SlowverbColors.neonCyan,
+                          fontSize: 9,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingView() {
+    return Container(
+      color: const Color(0xFF0A0A12),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation(SlowverbColors.neonCyan),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Loading GPU shaders...',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
         ),
@@ -178,7 +269,7 @@ class _VisualizerPanelState extends State<VisualizerPanel>
     );
   }
 
-  CustomPainter _getVisualizerPainter(String presetId) {
+  CustomPainter _getCpuPainter(String presetId) {
     switch (presetId) {
       case 'starfield_warp':
         return _StarfieldPainter(
@@ -213,6 +304,52 @@ class _VisualizerPanelState extends State<VisualizerPanel>
     }
   }
 }
+
+/// GPU-accelerated painter using FragmentShader
+class GpuVisualizerPainter extends CustomPainter {
+  final ui.FragmentProgram shader;
+  final AudioAnalysisFrame frame;
+  final double time;
+
+  GpuVisualizerPainter({
+    required this.shader,
+    required this.frame,
+    required this.time,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fragmentShader = shader.fragmentShader();
+
+    // Set uniforms matching shader declarations:
+    // uniform float uTime;
+    // uniform float uResolutionX;
+    // uniform float uResolutionY;
+    // uniform float uLevel;
+    fragmentShader.setFloat(0, time);
+    fragmentShader.setFloat(1, size.width);
+    fragmentShader.setFloat(2, size.height);
+    fragmentShader.setFloat(3, _calculateLevel());
+
+    final paint = Paint()..shader = fragmentShader;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+  }
+
+  double _calculateLevel() {
+    // Combine RMS with bass for a punchy audio-reactive response
+    final level = (frame.rms * 0.6 + frame.bass * 0.4).clamp(0.0, 1.0);
+    return level;
+  }
+
+  @override
+  bool shouldRepaint(covariant GpuVisualizerPainter oldDelegate) {
+    return oldDelegate.time != time || oldDelegate.frame.rms != frame.rms;
+  }
+}
+
+// =============================================================================
+// CPU Fallback Painters (unchanged from original implementation)
+// =============================================================================
 
 /// Windows Media Player-style frequency bars
 class _WmpRetroPainter extends CustomPainter {

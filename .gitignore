@@ -101,5 +101,4 @@ run_with_logging.bat
 lints.txt
 lints_utf8.txt
 export_crash_test.dart
-test/
-web/test/widget_test.dart
+tests/

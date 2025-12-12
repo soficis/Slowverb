@@ -25,11 +25,13 @@ import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
+import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_controls.dart';
 import 'package:slowverb_web/features/editor/widgets/transport_bar.dart';
 import 'package:slowverb_web/features/editor/widgets/waveform_panel.dart';
 import 'package:slowverb_web/features/presets/preset_selector_dialog.dart';
+import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_playback_provider.dart';
 
@@ -45,9 +47,16 @@ class EditorScreen extends ConsumerStatefulWidget {
 }
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
+  // Visualizer state - randomly selected on track import (excluding WMP Retro)
+  late VisualizerPreset _visualizerPreset;
+  bool _isFullscreenVisualizer = false;
+
   @override
   void initState() {
     super.initState();
+
+    // Randomly select a visualizer when importing a track (excludes WMP Retro)
+    _visualizerPreset = VisualizerPresets.random();
 
     if (widget.fileData != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,53 +100,126 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     _showErrorIfNeeded(context, editorState, editorNotifier);
 
     return ResponsiveScaffold(
-      background: const _EditorBackdrop(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _EditorTitleBar(
-            presetName: editorState.selectedPreset.name,
-            onBack: () => context.go('/'),
-            onOpenPresets: () =>
-                _openPresetDialog(context, editorState, editorNotifier),
-            onExport: () => context.push('/export'),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingLg),
-          if (editorState.audioFileName != null) ...[
-            _FileInfoBanner(
-              fileName: editorState.audioFileName!,
-              metadata: editorState.metadata,
-              onChangeFile: () => context.go('/'),
-            ),
-            const SizedBox(height: SlowverbTokens.spacingLg),
-          ],
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 1100;
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: _buildContent(
-                      isWide: isWide,
-                      state: editorState,
-                      effectValues: effectValues,
-                      isPlaying: isPlaying,
-                      waveformPosition: waveformPosition,
-                      currentPosition: currentPosition,
-                      totalDuration: totalDuration,
-                      audioPlayer: audioPlayer,
-                      editorNotifier: editorNotifier,
-                      playbackNotifier: playbackNotifier,
-                    ),
+      background: VisualizerPanel(
+        preset: _visualizerPreset,
+        isPlaying: isPlaying,
+        onDoubleTap: () =>
+            setState(() => _isFullscreenVisualizer = !_isFullscreenVisualizer),
+      ),
+      child: _isFullscreenVisualizer
+          ? _buildFullscreenVisualizerOverlay(context)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _EditorTitleBar(
+                  presetName: editorState.selectedPreset.name,
+                  onBack: () => context.go('/'),
+                  onOpenPresets: () =>
+                      _openPresetDialog(context, editorState, editorNotifier),
+                  onExport: () => context.push('/export'),
+                  visualizerPreset: _visualizerPreset,
+                  onVisualizerPresetChanged: (preset) =>
+                      setState(() => _visualizerPreset = preset),
+                  onToggleFullscreen: () =>
+                      setState(() => _isFullscreenVisualizer = true),
+                ),
+                const SizedBox(height: SlowverbTokens.spacingLg),
+                if (editorState.audioFileName != null) ...[
+                  _FileInfoBanner(
+                    fileName: editorState.audioFileName!,
+                    metadata: editorState.metadata,
+                    onChangeFile: () => context.go('/'),
                   ),
-                );
-              },
+                  const SizedBox(height: SlowverbTokens.spacingLg),
+                ],
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 1100;
+                      return SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: _buildContent(
+                            isWide: isWide,
+                            state: editorState,
+                            effectValues: effectValues,
+                            isPlaying: isPlaying,
+                            waveformPosition: waveformPosition,
+                            currentPosition: currentPosition,
+                            totalDuration: totalDuration,
+                            audioPlayer: audioPlayer,
+                            editorNotifier: editorNotifier,
+                            playbackNotifier: playbackNotifier,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+    );
+  }
+
+  Widget _buildFullscreenVisualizerOverlay(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: () => context.go('/'),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  tooltip: 'Back to Home',
+                ),
+                IconButton(
+                  onPressed: () =>
+                      setState(() => _isFullscreenVisualizer = false),
+                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                  tooltip: 'Exit Fullscreen',
+                ),
+              ],
+            ),
+            const Spacer(),
+            // Visualizer preset selector at bottom
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: SlowverbTokens.spacingMd,
+                vertical: SlowverbTokens.spacingSm,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
+              ),
+              child: Wrap(
+                spacing: SlowverbTokens.spacingSm,
+                children: VisualizerPresets.all.map((preset) {
+                  final isSelected = preset.id == _visualizerPreset.id;
+                  return ChoiceChip(
+                    label: Text(preset.name),
+                    selected: isSelected,
+                    onSelected: (_) =>
+                        setState(() => _visualizerPreset = preset),
+                    selectedColor: SlowverbColors.hotPink.withValues(
+                      alpha: 0.3,
+                    ),
+                    labelStyle: TextStyle(
+                      color: isSelected
+                          ? SlowverbColors.hotPink
+                          : Colors.white70,
+                      fontSize: 12,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -309,12 +391,18 @@ class _EditorTitleBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onOpenPresets;
   final VoidCallback onExport;
+  final VisualizerPreset? visualizerPreset;
+  final ValueChanged<VisualizerPreset>? onVisualizerPresetChanged;
+  final VoidCallback? onToggleFullscreen;
 
   const _EditorTitleBar({
     required this.presetName,
     required this.onBack,
     required this.onOpenPresets,
     required this.onExport,
+    this.visualizerPreset,
+    this.onVisualizerPresetChanged,
+    this.onToggleFullscreen,
   });
 
   @override
@@ -334,7 +422,7 @@ class _EditorTitleBar extends StatelessWidget {
         children: [
           _buildHeader(context),
           const SizedBox(height: SlowverbTokens.spacingSm),
-          _buildActions(),
+          _buildActions(context),
         ],
       ),
     );
@@ -361,12 +449,28 @@ class _EditorTitleBar extends StatelessWidget {
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildActions(BuildContext context) {
     return Wrap(
       spacing: SlowverbTokens.spacingSm,
       runSpacing: SlowverbTokens.spacingSm,
       alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        // Visualizer preset selector
+        if (onVisualizerPresetChanged != null) ...[
+          _VisualizerPresetDropdown(
+            selectedPreset: visualizerPreset ?? VisualizerPresets.wmpRetro,
+            onChanged: onVisualizerPresetChanged!,
+          ),
+          if (onToggleFullscreen != null)
+            IconButton(
+              onPressed: onToggleFullscreen,
+              icon: const Icon(Icons.fullscreen, color: Colors.white70),
+              tooltip: 'Fullscreen Visualizer',
+              iconSize: 20,
+            ),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+        ],
         OutlinedButton.icon(
           onPressed: onOpenPresets,
           style: OutlinedButton.styleFrom(
@@ -386,6 +490,57 @@ class _EditorTitleBar extends StatelessWidget {
           label: const Text('Export'),
         ),
       ],
+    );
+  }
+}
+
+class _VisualizerPresetDropdown extends StatelessWidget {
+  final VisualizerPreset selectedPreset;
+  final ValueChanged<VisualizerPreset> onChanged;
+
+  const _VisualizerPresetDropdown({
+    required this.selectedPreset,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.memory, size: 16, color: SlowverbColors.neonCyan),
+          const SizedBox(width: 4),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<VisualizerPreset>(
+              value: selectedPreset,
+              icon: const Icon(
+                Icons.arrow_drop_down,
+                color: Colors.white70,
+                size: 18,
+              ),
+              isDense: true,
+              dropdownColor: SlowverbColors.surface,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              items: VisualizerPresets.all.map((preset) {
+                return DropdownMenuItem<VisualizerPreset>(
+                  value: preset,
+                  child: Text(preset.name),
+                );
+              }).toList(),
+              onChanged: (preset) {
+                if (preset != null) onChanged(preset);
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -841,40 +996,7 @@ class _LoadingOverlay extends StatelessWidget {
   }
 }
 
-class _EditorBackdrop extends StatelessWidget {
-  const _EditorBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
-        child: CustomPaint(painter: _GridPainter()),
-      ),
-    );
-  }
-}
-
-class _GridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.04)
-      ..strokeWidth = 1;
-    const double step = 32;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+// _EditorBackdrop removed - now using VisualizerPanel as background
 
 class _EffectValues {
   final double tempo;

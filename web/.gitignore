@@ -11,7 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
+tests/
 # IntelliJ related
 *.iml
 *.ipr
@@ -32,8 +32,6 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
-test/
-test/widget_test.dart
 
 # Symbolication related
 app.*.symbols

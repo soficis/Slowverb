@@ -139,6 +139,13 @@ class AudioMetadata {
     required this.channels,
     required this.format,
   });
+
+  /// Returns true if the source format is lossless.
+  /// FLAC export should only be recommended for lossless sources.
+  bool get isLossless {
+    const losslessFormats = ['wav', 'flac', 'aiff', 'alac', 'pcm', 'aif'];
+    return losslessFormats.contains(format.toLowerCase());
+  }
 }
 
 /// Effect configuration for audio processing

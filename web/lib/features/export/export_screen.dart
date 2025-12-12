@@ -111,8 +111,14 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
 
         const SizedBox(height: 32),
 
-        // Format selector
-        Text('FORMAT', style: Theme.of(context).textTheme.labelLarge),
+        // Format selector with source format indicator
+        Row(
+          children: [
+            Text('FORMAT', style: Theme.of(context).textTheme.labelLarge),
+            const Spacer(),
+            _buildSourceFormatBadge(context),
+          ],
+        ),
 
         const SizedBox(height: 12),
 
@@ -154,15 +160,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: _FormatButton(
-                label: 'FLAC',
-                description: 'Lossless compression',
-                icon: Icons.high_quality,
-                isSelected: _selectedFormat == 'flac',
-                onTap: () => setState(() => _selectedFormat = 'flac'),
-              ),
-            ),
+            Expanded(child: _buildFlacButton()),
           ],
         ),
 
@@ -699,6 +697,84 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         return 'audio/wav';
     }
   }
+
+  bool get _isSourceLossless {
+    final editorState = ref.read(audioEditorProvider);
+    return editorState.metadata?.isLossless ?? false;
+  }
+
+  String get _sourceFormat {
+    final editorState = ref.read(audioEditorProvider);
+    return editorState.metadata?.format.toUpperCase() ?? 'UNKNOWN';
+  }
+
+  Widget _buildSourceFormatBadge(BuildContext context) {
+    final isLossless = _isSourceLossless;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
+            .withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color:
+              (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
+                  .withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isLossless ? Icons.high_quality : Icons.compress,
+            size: 12,
+            color: isLossless
+                ? SlowverbColors.accentMint
+                : SlowverbColors.warning,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Source: $_sourceFormat',
+            style: TextStyle(
+              color: isLossless
+                  ? SlowverbColors.accentMint
+                  : SlowverbColors.warning,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlacButton() {
+    final isLossless = _isSourceLossless;
+
+    final button = _FormatButton(
+      label: 'FLAC',
+      description: isLossless
+          ? 'Lossless compression'
+          : 'Requires lossless source',
+      icon: Icons.high_quality,
+      isSelected: _selectedFormat == 'flac',
+      onTap: isLossless
+          ? () => setState(() => _selectedFormat = 'flac')
+          : () {},
+      isDisabled: !isLossless,
+    );
+
+    if (!isLossless) {
+      return Tooltip(
+        message:
+            'FLAC export requires a lossless source file (WAV, FLAC, AIFF).\n'
+            'Your source is $_sourceFormat which is lossy.',
+        child: button,
+      );
+    }
+
+    return button;
+  }
 }
 
 /// Format button widget
@@ -708,6 +784,7 @@ class _FormatButton extends StatelessWidget {
   final IconData icon;
   final bool isSelected;
   final VoidCallback onTap;
+  final bool isDisabled;
 
   const _FormatButton({
     required this.label,
@@ -715,54 +792,58 @@ class _FormatButton extends StatelessWidget {
     required this.icon,
     required this.isSelected,
     required this.onTap,
+    this.isDisabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: isDisabled ? null : onTap,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? SlowverbColors.primaryPurple.withOpacity(0.2)
-              : SlowverbColors.surfaceVariant,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+      child: Opacity(
+        opacity: isDisabled ? 0.5 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
             color: isSelected
-                ? SlowverbColors.primaryPurple
-                : Colors.transparent,
-            width: 2,
+                ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
+                : SlowverbColors.surfaceVariant,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected && !isDisabled
+                  ? SlowverbColors.primaryPurple
+                  : Colors.transparent,
+              width: 2,
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 32,
-              color: isSelected
-                  ? SlowverbColors.accentPink
-                  : SlowverbColors.textSecondary,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: isSelected
-                    ? SlowverbColors.textPrimary
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 32,
+                color: isSelected && !isDisabled
+                    ? SlowverbColors.accentPink
                     : SlowverbColors.textSecondary,
-                fontWeight: FontWeight.w600,
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              description,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: isSelected && !isDisabled
+                      ? SlowverbColors.textPrimary
+                      : SlowverbColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
         ),
       ),
     );
