@@ -20,6 +20,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:slowverb/app/app.dart';
 import 'package:slowverb/data/repositories/project_repository.dart';
 import 'package:slowverb/data/providers/project_providers.dart';
@@ -78,11 +79,13 @@ class _StartupAppState extends State<_StartupApp> {
       });
     }
 
-    // Initialize Hive with a fallback directory if path_provider fails.
+    final hiveDir = await _preferredHiveDir();
+
+    // Initialize Hive in an app-specific directory so sandboxed platforms can lock files.
     try {
-      await Hive.initFlutter();
+      Hive.init(hiveDir.path);
     } catch (e, st) {
-      debugPrint('Hive.initFlutter failed, falling back to temp dir: $e\n$st');
+      debugPrint('Hive.init failed for ${hiveDir.path}, falling back to temp dir: $e\n$st');
       final fallbackDir = await _fallbackHiveDir();
       Hive.init(fallbackDir.path);
     }
@@ -145,6 +148,20 @@ class _StartupAppState extends State<_StartupApp> {
         );
       },
     );
+  }
+}
+
+Future<Directory> _preferredHiveDir() async {
+  try {
+    final supportDir = await getApplicationSupportDirectory();
+    final dir = Directory('${supportDir.path}/storage');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  } catch (e, st) {
+    debugPrint('Failed to resolve application support directory: $e\n$st');
+    return _fallbackHiveDir();
   }
 }
 

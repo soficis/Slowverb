@@ -16,6 +16,7 @@
  */
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -372,9 +373,34 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _handleFileImport(BuildContext context) async {
+    final pickResult = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+    );
+
+    if (pickResult == null || pickResult.files.isEmpty) {
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    final filePath = pickResult.files.first.path;
+    if (filePath == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not access selected file'),
+            backgroundColor: SlowverbColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
     final notifier = ref.read(editorProvider.notifier);
 
-    // Show loading indicator
+    // Show loading indicator only while processing the chosen file.
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -383,17 +409,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
 
-    final success = await notifier.importAudioFile();
+    final success = await notifier.importAudioFileFromPath(filePath);
 
     // Hide loading indicator
     if (context.mounted) {
       Navigator.of(context).pop();
+    } else {
+      return;
     }
 
-    if (success && context.mounted) {
-      // Navigate to effect selection
+    if (success) {
       context.go(RoutePaths.effects);
-    } else if (context.mounted) {
+    } else {
       final state = ref.read(editorProvider);
       if (state.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(

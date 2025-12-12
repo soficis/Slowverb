@@ -144,6 +144,12 @@ The build output will be in `web/build/web/`. See [Web Version Documentation](./
 | iOS      | ✅ Full Support | iOS 12+ |
 | Web      | ✅ Full Support | Modern web browsers (Chrome, Firefox, Safari, Edge) |
 
+### Linux Audio Note
+
+Audio playback on Linux uses web-based APIs and may have limitations compared to Windows. The app will still function, but audio features might not be as robust.
+
+*Note: Linux version tested on SteamOS.*
+
 ---
 
 ## Web Version
