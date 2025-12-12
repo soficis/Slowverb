@@ -150,8 +150,21 @@ class EditorNotifier extends StateNotifier<EditorState> {
   /// Import an audio file and create a new project
   Future<bool> importAudioFile() async {
     try {
+      // Use FileType.custom to force iOS Document Picker (Files app)
+      // instead of Media Library which is used with FileType.audio
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: [
+          'mp3',
+          'wav',
+          'aac',
+          'm4a',
+          'flac',
+          'ogg',
+          'wma',
+          'aiff',
+          'alac',
+        ],
         allowMultiple: false,
       );
 
@@ -687,9 +700,9 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
       state = state.copyWith(exportProgress: 0.2);
 
-      // Use FFmpeg Kit on Android, Process on Desktop
-      if (Platform.isAndroid) {
-        return await _runFFmpegExportAndroid(
+      // Use FFmpeg Kit on mobile (Android/iOS), Process on Desktop
+      if (Platform.isAndroid || Platform.isIOS) {
+        return await _runFFmpegExportMobile(
           inputPath: inputPath,
           outputPath: outputPath,
           filterChain: filterChain,
@@ -708,8 +721,8 @@ class EditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
-  /// Run FFmpeg export on Android using ffmpeg_kit_flutter
-  Future<bool> _runFFmpegExportAndroid({
+  /// Run FFmpeg export on mobile (Android/iOS) using ffmpeg_kit_flutter
+  Future<bool> _runFFmpegExportMobile({
     required String inputPath,
     required String outputPath,
     required String filterChain,

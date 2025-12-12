@@ -373,8 +373,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _handleFileImport(BuildContext context) async {
+    // Use FileType.custom with audio extensions to force iOS to use
+    // the Document Picker (Files app) instead of the Media Library picker.
+    // FileType.audio on iOS defaults to the Media Library.
     final pickResult = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
+      type: FileType.custom,
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'aac',
+        'm4a',
+        'flac',
+        'ogg',
+        'wma',
+        'aiff',
+        'alac',
+      ],
       allowMultiple: false,
     );
 

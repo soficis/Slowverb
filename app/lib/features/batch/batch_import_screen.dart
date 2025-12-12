@@ -333,8 +333,21 @@ class _BatchImportScreenState extends ConsumerState<BatchImportScreen> {
   }
 
   Future<void> _pickFiles() async {
+    // Use FileType.custom to force iOS Document Picker (Files app)
+    // instead of Media Library which is used with FileType.audio
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
+      type: FileType.custom,
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'aac',
+        'm4a',
+        'flac',
+        'ogg',
+        'wma',
+        'aiff',
+        'alac',
+      ],
       allowMultiple: true,
     );
 
