@@ -649,18 +649,39 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
   /// Find FFmpeg executable
   Future<String?> _findFFmpeg() async {
-    // Check bundled location first
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final bundledPath = '$exeDir/ffmpeg.exe';
+
+    // Platform-specific binary name
+    final binaryName = Platform.isWindows ? 'ffmpeg.exe' : 'ffmpeg';
+
+    // Check bundled location first (next to app executable)
+    final bundledPath = '$exeDir/$binaryName';
     if (await File(bundledPath).exists()) {
       return bundledPath;
     }
 
-    // Check scripts folder
-    final scriptsPath = '$exeDir/../scripts/ffmpeg.exe';
+    // Check scripts folder (development layout)
+    final scriptsPath = '$exeDir/../scripts/$binaryName';
     if (await File(scriptsPath).exists()) {
       return scriptsPath;
     }
+
+    // Check macOS app bundle Resources
+    if (Platform.isMacOS) {
+      final resourcesPath = '$exeDir/../Resources/$binaryName';
+      if (await File(resourcesPath).exists()) {
+        return resourcesPath;
+      }
+    }
+
+    // Check FFmpegService download location (Application Support)
+    try {
+      final appSupportDir = await getApplicationSupportDirectory();
+      final ffmpegServicePath = '${appSupportDir.path}/ffmpeg/bin/$binaryName';
+      if (await File(ffmpegServicePath).exists()) {
+        return ffmpegServicePath;
+      }
+    } catch (_) {}
 
     // Check system PATH
     try {
@@ -668,6 +689,11 @@ class EditorNotifier extends StateNotifier<EditorState> {
         'ffmpeg',
       ]);
       if (result.exitCode == 0) {
+        final path = (result.stdout as String).split('\n').first.trim();
+        if (path.isNotEmpty && await File(path).exists()) {
+          return path;
+        }
+        // which succeeded - ffmpeg is in PATH
         return 'ffmpeg';
       }
     } catch (_) {}
