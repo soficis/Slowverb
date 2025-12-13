@@ -1,0 +1,20 @@
+{
+  "name": "@slowverb/core-worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/worker.js",
+  "module": "./dist/worker.js",
+  "types": "./dist/worker.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/worker.ts --format esm --dts --splitting --clean --out-dir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@slowverb/shared": "0.0.1"
+  }
+}

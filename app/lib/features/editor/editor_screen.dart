@@ -734,8 +734,9 @@ class _MobileEffectsSheet extends StatelessWidget {
                   max: param.max,
                   formatValue: (v) {
                     if (param.id == 'tempo') return '${(v * 100).toInt()}%';
-                    if (param.id == 'pitch')
+                    if (param.id == 'pitch') {
                       return '${v.toStringAsFixed(1)} st';
+                    }
                     return '${(v * 100).toInt()}%';
                   },
                   onChanged: (v) => notifier.updateParameter(param.id, v),

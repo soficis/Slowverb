@@ -38,41 +38,19 @@ class WasmAudioEngine implements AudioEngine {
   final FilterChainBuilder _filterBuilder = FilterChainBuilder();
   final Map<String, StreamController<RenderProgress>> _progressControllers = {};
   final Map<String, RenderResult> _renderResults = {};
+  final Map<String, Uint8List> _loadedFiles = {};
   StreamingAudioEngine? _streamingEngine;
 
   bool _isInitialized = false;
+  bool _progressHandlerInstalled = false;
 
   @override
   bool get isReady => _isInitialized;
 
   @override
   Future<void> initialize() async {
-    if (_isInitialized) return;
-
-    final completer = Completer<void>();
-
-    // Initialize worker
-    SlowverbEngine.initWorker();
-
-    // Set up log handler
-    SlowverbEngine.setLogHandler((String message) {
-      print('[Audio Worker] $message');
-    });
-
-    // Send init message
-    SlowverbEngine.postMessage('init', null, (JSObject response) {
-      final type = _getProperty<String>(response, 'type');
-      if (type == 'init-ok') {
-        _isInitialized = true;
-        completer.complete();
-      } else if (type == 'error') {
-        final payload = response.getProperty<JSObject?>('payload'.toJS);
-        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
-        completer.completeError(Exception(error));
-      }
-    });
-
-    return completer.future;
+    _isInitialized = true;
+    _installProgressHandler();
   }
 
   @override
@@ -83,58 +61,28 @@ class WasmAudioEngine implements AudioEngine {
   }) async {
     _ensureInitialized();
 
-    final completer = Completer<AudioMetadata>();
-
-    // Verify data before sending
-    print(
-      '[Dart] calling loadSource - fileId: $fileId, filename: $filename, bytes: ${bytes.length}',
-    );
-
-    // Use the command-specific wrapper that passes params individually
-    SlowverbEngine.loadSource(fileId, filename, bytes, (
-      JSObject response,
-    ) async {
-      final type = _getProperty<String>(response, 'type');
-
-      if (type == 'load-ok') {
-        // Now probe for metadata
-        SlowverbEngine.probe(fileId, (JSObject probeResponse) {
-          final probeType = _getProperty<String>(probeResponse, 'type');
-
-          if (probeType == 'probe-ok') {
-            final payload = probeResponse.getProperty<JSObject?>(
-              'payload'.toJS,
-            )!;
-            final durationMs = _getProperty<int?>(payload, 'duration');
-            final metadata = AudioMetadata(
-              fileId: _getProperty<String>(payload, 'fileId'),
-              filename: filename,
-              duration: durationMs != null
-                  ? Duration(milliseconds: durationMs)
-                  : null, // null = process entire file
-              sampleRate: _getProperty<int>(payload, 'sampleRate'),
-              channels: _getProperty<int>(payload, 'channels'),
-              format: _getProperty<String>(payload, 'format'),
-            );
-            completer.complete(metadata);
-          } else if (probeType == 'error') {
-            final errorPayload = probeResponse.getProperty<JSObject?>(
-              'payload'.toJS,
-            );
-            final error = errorPayload
-                ?.getProperty<JSString?>('error'.toJS)
-                ?.toDart;
-            completer.completeError(Exception(error));
-          }
-        });
-      } else if (type == 'error') {
-        final payload = response.getProperty<JSObject?>('payload'.toJS);
-        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
-        completer.completeError(Exception(error));
-      }
+    final payload = BridgeInterop.toJsObject({
+      'source': {
+        'fileId': fileId,
+        'filename': filename,
+        'data': bytes,
+      },
     });
 
-    return completer.future;
+    final response = await BridgeInterop.loadAndProbe(payload);
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    _loadedFiles[fileId] = bytes;
+    final durationMs =
+        payloadObj.getProperty<JSNumber?>('durationMs'.toJS)?.toDartInt;
+
+    return AudioMetadata(
+      fileId: _getProperty<String>(payloadObj, 'fileId'),
+      filename: filename,
+      duration: _durationFromMs(durationMs),
+      sampleRate: _getProperty<int>(payloadObj, 'sampleRate'),
+      channels: _getProperty<int>(payloadObj, 'channels'),
+      format: _getProperty<String>(payloadObj, 'format'),
+    );
   }
 
   @override
@@ -144,38 +92,27 @@ class WasmAudioEngine implements AudioEngine {
   }) async {
     _ensureInitialized();
 
-    final completer = Completer<Float32List>();
-    // Call getWaveform using direct interop
-    SlowverbEngine.getWaveform(fileId, (JSObject response) {
-      final type = _getProperty<String>(response, 'type');
-
-      if (type == 'waveform-ok') {
-        final payload = response.getProperty<JSObject>('payload'.toJS);
-        // Expect 'samples' which is a Float32Array
-        final samples = payload.getProperty<JSObject>('samples'.toJS);
-
-        // Convert JS typed array to Dart list
-        // Note: Typed arrays are JSUint8Array etc, but JSAny for Float32Array?
-        // Let's assume toDart works if we cast correctly or use helper.
-        // Actually JSArray<JSNumber> logic is safer if we don't know the exact typed array type wrapping.
-        // But engine_wrapper returns Float32Array.
-        // dart:js_interop maps Float32Array to JSFloat32Array.
-        // We can use toDart on it.
-
-        if (samples.isA<JSFloat32Array>()) {
-          completer.complete((samples as JSFloat32Array).toDart);
-        } else {
-          // Fallback or empty
-          completer.complete(Float32List(0));
-        }
-      } else if (type == 'error') {
-        final payload = response.getProperty<JSObject?>('payload'.toJS);
-        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
-        completer.completeError(Exception(error));
-      }
+    final payload = BridgeInterop.toJsObject({
+      'source': {
+        'fileId': fileId,
+        'data': _requireFileBytes(fileId),
+      },
+      'points': targetSamples,
     });
 
-    return completer.future;
+    final response = await BridgeInterop.waveform(payload);
+    final type = _getProperty<String>(response, 'type');
+    if (type != 'waveform-ok') {
+      throw StateError('Waveform failed: $type');
+    }
+
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final samples = payloadObj.getProperty<JSObject>('samples'.toJS);
+
+    if (samples.isA<JSFloat32Array>()) {
+      return (samples as JSFloat32Array).toDart;
+    }
+    return Float32List(0);
   }
 
   @override
@@ -186,47 +123,29 @@ class WasmAudioEngine implements AudioEngine {
     Duration? duration,
   }) async {
     _ensureInitialized();
-    final completer = Completer<Uri>();
-
-    // Build filter chain string
     final filterChain = _filterBuilder.buildFilterChain(config);
-
-    // Build config object for preview
-    // When duration is null, the entire file will be processed
-    final durationSec = duration != null
-        ? duration.inMilliseconds / 1000.0
-        : null;
-    print(
-      '[WasmAudioEngine] renderPreview - duration: $duration, durationSec: $durationSec',
-    );
-
-    final configObj = JsInterop.dartMapToJsObject({
-      'filterChain': filterChain,
+    final payload = BridgeInterop.toJsObject({
+      'source': {
+        'fileId': fileId,
+        'data': _requireFileBytes(fileId),
+      },
+      'filterGraph': filterChain,
       'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
-      'durationSec': durationSec,
+      'durationSec': duration != null ? duration.inMilliseconds / 1000.0 : null,
     });
 
-    SlowverbEngine.renderPreview(fileId, configObj, (JSObject response) {
-      final type = _getProperty<String>(response, 'type');
-      if (type == 'render-preview-ok') {
-        final payload = response.getProperty<JSObject>('payload'.toJS);
-        final buffer = payload.getProperty<JSArrayBuffer>('buffer'.toJS);
-        final bytes = buffer.toDart.asUint8List();
+    final response = await BridgeInterop.renderPreview(payload);
+    final buffer = response
+        .getProperty<JSObject>('payload'.toJS)
+        .getProperty<JSObject>('buffer'.toJS);
+    final bytes = BridgeInterop.bufferToUint8List(buffer);
 
-        final blob = web.Blob(
-          [bytes.toJS].toJS,
-          web.BlobPropertyBag(type: 'audio/mp3'),
-        );
-        final url = web.URL.createObjectURL(blob);
-        completer.complete(Uri.parse(url));
-      } else {
-        final payload = response.getProperty<JSObject?>('payload'.toJS);
-        final error = payload?.getProperty<JSString?>('error'.toJS)?.toDart;
-        completer.completeError(Exception(error ?? 'Unknown render error'));
-      }
-    });
-
-    return completer.future;
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'audio/mp3'),
+    );
+    final url = web.URL.createObjectURL(blob);
+    return Uri.parse(url);
   }
 
   @override
@@ -244,53 +163,46 @@ class WasmAudioEngine implements AudioEngine {
     final controller = StreamController<RenderProgress>.broadcast();
     _progressControllers[jobId.value] = controller;
 
-    // progress updates not supported in direct call yet, simulating start
     controller.add(
-      RenderProgress(jobId: jobId, progress: 0.1, stage: 'processing'),
+      RenderProgress(jobId: jobId, progress: 0.0, stage: 'processing'),
     );
 
-    SlowverbEngine.renderFull(
-      fileId,
-      filterChain,
-      options.format,
-      options.bitrateKbps ?? 192, // Default to 192 if null
-      (JSObject response) {
-        final type = _getProperty<String>(response, 'type');
+      try {
+        final payload = BridgeInterop.toJsObject({
+          'source': {
+            'fileId': fileId,
+            'data': _requireFileBytes(fileId),
+          },
+          'filterGraph': filterChain,
+          'format': options.format,
+          'bitrateKbps': options.bitrateKbps ?? 192,
+          'jobId': jobId.value,
+        });
 
-        if (type == 'render-full-ok') {
-          final payloadObj = response.getProperty<JSObject?>('payload'.toJS)!;
-          final outputBuffer = payloadObj.getProperty<JSAny?>(
-            'outputBuffer'.toJS,
-          );
-          final bytes = _jsBufferToUint8List(outputBuffer);
+        final response = await BridgeInterop.renderFull(payload);
+        final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+        final buffer = payloadObj.getProperty<JSObject>('outputBuffer'.toJS);
+        final bytes = BridgeInterop.bufferToUint8List(buffer);
 
-          _renderResults[jobId.value] = RenderResult(
-            success: true,
-            outputBytes: bytes,
-          );
+        _renderResults[jobId.value] = RenderResult(
+          success: true,
+          outputBytes: bytes,
+        );
 
-          // Final progress
-          controller.add(
-            RenderProgress(jobId: jobId, progress: 1.0, stage: 'complete'),
-          );
-          controller.close();
-          _progressControllers.remove(jobId.value);
-        } else if (type == 'error') {
-          final errorPayload = response.getProperty<JSObject?>('payload'.toJS);
-          final error = errorPayload
-              ?.getProperty<JSString?>('error'.toJS)
-              ?.toDart;
-          _renderResults[jobId.value] = RenderResult(
-            success: false,
-            errorMessage: error,
-          );
-
-          controller.addError(Exception(error));
-          controller.close();
-          _progressControllers.remove(jobId.value);
-        }
-      },
-    );
+      controller.add(
+        RenderProgress(jobId: jobId, progress: 1.0, stage: 'complete'),
+      );
+    } catch (e) {
+      final message = e.toString();
+      _renderResults[jobId.value] = RenderResult(
+        success: false,
+        errorMessage: message,
+      );
+      controller.addError(Exception(message));
+    } finally {
+      controller.close();
+      _progressControllers.remove(jobId.value);
+    }
 
     return jobId;
   }
@@ -322,32 +234,26 @@ class WasmAudioEngine implements AudioEngine {
 
   @override
   Future<void> cancelRender(RenderJobId jobId) async {
-    final payload = JsInterop.dartMapToJsObject({'jobId': jobId.value});
-
-    SlowverbEngine.postMessage('cancel', payload, (JSObject response) {
-      // Cleanup controller
-      final controller = _progressControllers.remove(jobId.value);
-      controller?.close();
-
-      _renderResults.remove(jobId.value);
-    });
+    await BridgeInterop.cancel(jobId.value);
+    final controller = _progressControllers.remove(jobId.value);
+    await controller?.close();
+    _renderResults.remove(jobId.value);
   }
 
   @override
   Future<void> cleanup({String? fileId}) async {
-    final payload = JsInterop.dartMapToJsObject({
-      if (fileId != null) 'fileId': fileId,
-    });
-
-    SlowverbEngine.postMessage('cleanup', payload, (JSObject response) {
-      // Cleanup complete
-    });
+    if (fileId != null) {
+      _loadedFiles.remove(fileId);
+    }
   }
 
   @override
   Future<void> dispose() async {
-    SlowverbEngine.terminateWorker();
     _isInitialized = false;
+    if (_progressHandlerInstalled) {
+      BridgeInterop.setProgressHandler(null);
+      _progressHandlerInstalled = false;
+    }
 
     // Close all progress controllers
     for (final controller in _progressControllers.values) {
@@ -355,6 +261,7 @@ class WasmAudioEngine implements AudioEngine {
     }
     _progressControllers.clear();
     _renderResults.clear();
+    _loadedFiles.clear();
 
     await _streamingEngine?.dispose();
     _streamingEngine = null;
@@ -608,6 +515,45 @@ class WasmAudioEngine implements AudioEngine {
     return Duration(seconds: (avgTimePerFile * remainingFiles).round());
   }
 
+  Uint8List _requireFileBytes(String fileId) {
+    final bytes = _loadedFiles[fileId];
+    if (bytes == null) {
+      throw StateError('File bytes missing for $fileId. Call loadSource first.');
+    }
+    return bytes;
+  }
+
+  Duration? _durationFromMs(int? value) {
+    if (value == null) return null;
+    return Duration(milliseconds: value);
+  }
+
+  void _installProgressHandler() {
+    if (_progressHandlerInstalled) return;
+    _progressHandlerInstalled = true;
+
+    BridgeInterop.setProgressHandler(
+      ((JSObject event) {
+        final jobId = _getProperty<String>(event, 'jobId');
+        final value = event
+                .getProperty<JSNumber?>('value'.toJS)
+                ?.toDartDouble ??
+            0.0;
+        final stage =
+            event.getProperty<JSString?>('stage'.toJS)?.toDart ?? 'processing';
+        final controller = _progressControllers[jobId];
+        if (controller == null || controller.isClosed) return;
+        controller.add(
+          RenderProgress(
+            jobId: RenderJobId(jobId),
+            progress: value,
+            stage: stage,
+          ),
+        );
+      }).toJS,
+    );
+  }
+
   // JS interop helpers
   T _getProperty<T>(JSObject object, String property) {
     if (T == String) {
@@ -624,33 +570,4 @@ class WasmAudioEngine implements AudioEngine {
     }
     return object.getProperty<JSAny?>(property.toJS) as T;
   }
-}
-
-/// JS interop helpers for typed arrays
-Uint8List _jsBufferToUint8List(JSAny? jsBuffer) {
-  if (jsBuffer == null) {
-    throw ArgumentError('Buffer is null');
-  }
-
-  // Try as ArrayBuffer
-  if (jsBuffer.isA<JSArrayBuffer>()) {
-    return (jsBuffer as JSArrayBuffer).toDart.asUint8List();
-  }
-
-  // Try as Uint8Array (TypedArray)
-  if (jsBuffer.isA<JSUint8Array>()) {
-    return (jsBuffer as JSUint8Array).toDart;
-  }
-
-  // Try to get buffer property from TypedArray
-  if (jsBuffer.isA<JSObject>()) {
-    final bufferProp = (jsBuffer as JSObject).getProperty<JSArrayBuffer?>(
-      'buffer'.toJS,
-    );
-    if (bufferProp != null) {
-      return bufferProp.toDart.asUint8List();
-    }
-  }
-
-  throw ArgumentError('Unsupported buffer type from worker');
 }

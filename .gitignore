@@ -3,6 +3,9 @@
 # Build artifacts
 build/
 web/build/
+web/packages/**/dist/
+node_modules/
+web/node_modules/
 *.exe
 *.dll
 *.so
@@ -86,6 +89,7 @@ coverage/
 
 # Documentation
 docs/
+.cursorrules
 # Temporary files
 *.tmp
 *.temp

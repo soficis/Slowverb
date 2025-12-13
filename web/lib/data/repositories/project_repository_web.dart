@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:idb_shim/idb.dart';
 import 'package:idb_shim/idb_browser.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/project_repository.dart';

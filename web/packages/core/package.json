@@ -1,0 +1,20 @@
+{
+  "name": "@slowverb/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@slowverb/core-worker": "0.0.1",
+    "@slowverb/shared": "0.0.1"
+  }
+}
