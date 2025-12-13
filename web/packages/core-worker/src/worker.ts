@@ -1,4 +1,4 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+import createFFmpegCore from "@ffmpeg/core";
 import type {
   InitPayload,
   RenderPayload,
@@ -10,11 +10,15 @@ import type {
 
 const ctx = self as DedicatedWorkerGlobalScope;
 
+console.info("[slowverb-worker] started", {
+  hasProcess: typeof (globalThis as unknown as { process?: unknown }).process !== "undefined",
+});
+
 const DEFAULT_CORE_URL = "/js/ffmpeg-core.js";
 const DEFAULT_WASM_URL = "/js/ffmpeg-core.wasm";
 const DEFAULT_WORKER_URL: string | undefined = undefined;
 
-let ffmpeg: FFmpeg | null = null;
+let ffmpeg: any | null = null;
 let isReady = false;
 let activeJobId: string | undefined;
 const loadedFiles = new Set<string>();
@@ -28,6 +32,7 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
 };
 
 async function handleRequest(request: WorkerRequest): Promise<void> {
+  postEvent({ type: "LOG", level: "debug", message: `request:${request.type}` });
   switch (request.type) {
     case "INIT":
       return ensureFfmpeg(request.payload, request.requestId);
@@ -66,42 +71,68 @@ async function ensureFfmpeg(payload?: InitPayload, requestId?: string): Promise<
     return;
   }
 
-  ffmpeg = new FFmpeg();
-  attachFfmpegHooks(ffmpeg);
-  await loadFfmpegCore(payload);
+  postEvent({ type: "LOG", level: "info", message: "FFmpeg init: start" });
+  postEvent({ type: "LOG", level: "info", message: "FFmpeg init: loading core" });
+  ffmpeg = await createCore(payload);
   isReady = true;
+  postEvent({ type: "LOG", level: "info", message: "FFmpeg init: ready" });
   postEvent({ type: "READY", requestId });
 }
 
-function attachFfmpegHooks(instance: FFmpeg): void {
-  instance.on("log", ({ type, message }) => {
+async function createCore(payload?: InitPayload): Promise<any> {
+  const coreURL = payload?.coreURL ?? DEFAULT_CORE_URL;
+  const wasmURL = payload?.wasmURL ?? DEFAULT_WASM_URL;
+  const workerURL = payload?.workerURL ?? DEFAULT_WORKER_URL;
+
+  await logAssetStatus("wasm", wasmURL);
+
+  const mainScriptUrlOrBlob = `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`;
+  const core = await (createFFmpegCore as unknown as (options: Record<string, unknown>) => Promise<any>)({
+    mainScriptUrlOrBlob,
+  });
+
+  core.setLogger(({ type, message }: { type: string; message: string }) => {
     postEvent({ type: "LOG", level: mapLogLevel(type), message });
     recordLog(message);
   });
 
-  instance.on("progress", ({ progress }) => {
+  core.setProgress(({ progress }: { progress: number }) => {
     if (!activeJobId) return;
     const value = typeof progress === "number" ? progress : 0;
     postEvent({ type: "PROGRESS", jobId: activeJobId, value });
   });
+
+  return core;
 }
 
-async function loadFfmpegCore(payload?: InitPayload): Promise<void> {
-  if (!ffmpeg) throw new Error("FFmpeg not created");
-  const coreURL = payload?.coreURL ?? DEFAULT_CORE_URL;
-  const wasmURL = payload?.wasmURL ?? DEFAULT_WASM_URL;
-  const workerURL = payload?.workerURL ?? DEFAULT_WORKER_URL;
-  const loadOptions: Parameters<FFmpeg["load"]>[0] = { coreURL, wasmURL };
-  if (workerURL) loadOptions.workerURL = workerURL;
-  await ffmpeg.load(loadOptions);
+async function logAssetStatus(name: string, url: string): Promise<void> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    });
+    await response.body?.cancel();
+    postEvent({ type: "LOG", level: "info", message: `FFmpeg init: ${name} ${response.status} (${url})` });
+  } catch (error) {
+    postEvent({
+      type: "LOG",
+      level: "warn",
+      message: `FFmpeg init: ${name} check failed (${url}): ${String(error)}`,
+    });
+  }
 }
 
 async function handleLoadSource(request: Extract<WorkerRequest, { type: "LOAD_SOURCE" }>): Promise<void> {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const data = new Uint8Array(request.payload.data);
-  await ffmpeg.writeFile(request.payload.fileId, data);
+  ffmpeg.FS.writeFile(request.payload.fileId, data);
   loadedFiles.add(request.payload.fileId);
 
+  postEvent({
+    type: "LOG",
+    level: "info",
+    message: `load:ok (${request.payload.fileId}) size=${data.byteLength}`,
+  });
   postResult(request.requestId, { fileId: request.payload.fileId });
 }
 
@@ -109,9 +140,21 @@ async function handleProbe(request: Extract<WorkerRequest, { type: "PROBE" }>): 
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
 
   const fileId = request.payload.fileId;
-  await ffmpeg.readFile(fileId);
-  const metadata = await probeWithFfmpeg(fileId);
-  postResult(request.requestId, metadata);
+  postEvent({ type: "LOG", level: "info", message: `probe:start (${fileId})` });
+  ensureFileExists(fileId);
+  postEvent({ type: "LOG", level: "debug", message: `probe:exists (${fileId})` });
+
+  const warnTimeout = setTimeout(() => {
+    postEvent({ type: "LOG", level: "warn", message: `probe:still-running (${fileId})` });
+  }, 10_000);
+
+  try {
+    const metadata = await probeWithFfmpeg(fileId);
+    postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
+    postResult(request.requestId, metadata);
+  } finally {
+    clearTimeout(warnTimeout);
+  }
 }
 
 async function handleRender(
@@ -125,7 +168,7 @@ async function handleRender(
 
   activeJobId = jobId;
   try {
-    await ffmpeg.exec(args);
+    ffmpeg.exec(...args);
     const buffer = await readOutput(outputFile);
     postRenderResult(request, buffer);
   } finally {
@@ -201,22 +244,16 @@ function buildOutputName(fileId: string, jobId: string, format: string, isPrevie
 
 async function readOutput(path: string): Promise<ArrayBuffer> {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const data = await ffmpeg.readFile(path);
-  if (typeof data === "string") {
-    throw new Error("Expected binary output from FFmpeg");
-  }
-  const buffer = data.buffer;
-  if (buffer instanceof ArrayBuffer) {
-    return buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-  }
-  const copy = data.slice();
+  const bytes = ffmpeg.FS.readFile(path);
+  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary output from FFmpeg");
+  const copy = bytes.slice();
   return copy.buffer;
 }
 
 async function cleanupOutput(path: string): Promise<void> {
   if (!ffmpeg) return;
   try {
-    await ffmpeg.deleteFile(path);
+    ffmpeg.FS.unlink(path);
   } catch {
     // cleanup best effort
   }
@@ -268,9 +305,16 @@ async function probeWithFfmpeg(fileId: string): Promise<{
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const capture = startLogCapture(250);
   try {
-    await ffmpeg.exec(["-hide_banner", "-i", fileId]);
-  } catch {
+    postEvent({ type: "LOG", level: "debug", message: "probe:exec start" });
+    ffmpeg.exec("-hide_banner", "-i", fileId);
+    postEvent({ type: "LOG", level: "debug", message: "probe:exec done" });
+  } catch (error) {
     // Expected: "At least one output file must be specified" after printing metadata.
+    postEvent({
+      type: "LOG",
+      level: "debug",
+      message: `probe:exec threw (expected) ${String((error as Error)?.message ?? error)}`,
+    });
   } finally {
     stopLogCapture(capture);
   }
@@ -365,14 +409,14 @@ function parseChannels(line: string): number | undefined {
 
 async function buildWaveform(fileId: string, points: number, jobId: string): Promise<{ fileId: string; samples: Float32Array }> {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  await ffmpeg.readFile(fileId);
+  ensureFileExists(fileId);
   const probe = await probeWithFfmpeg(fileId);
   const durationSec = probe.durationMs != null ? probe.durationMs / 1000 : undefined;
   const sampleRate = chooseWaveformSampleRate(points, durationSec);
   const outputFile = `waveform_${jobId}.f32`;
 
   try {
-    await ffmpeg.exec([
+    ffmpeg.exec(
       "-hide_banner",
       "-i",
       fileId,
@@ -383,12 +427,11 @@ async function buildWaveform(fileId: string, points: number, jobId: string): Pro
       `${sampleRate}`,
       "-f",
       "f32le",
-      "-y",
-      outputFile,
-    ]);
+      outputFile
+    );
 
-    const bytes = await ffmpeg.readFile(outputFile);
-    if (typeof bytes === "string") throw new Error("Waveform output is not binary");
+    const bytes = ffmpeg.FS.readFile(outputFile);
+    if (!(bytes instanceof Uint8Array)) throw new Error("Waveform output is not binary");
     const sampleCount = Math.floor(bytes.byteLength / 4);
     const floatSamples = new Float32Array(bytes.buffer, bytes.byteOffset, sampleCount);
     const peaks = computePeaks(floatSamples, points);
@@ -396,6 +439,14 @@ async function buildWaveform(fileId: string, points: number, jobId: string): Pro
     return { fileId, samples: peaks };
   } finally {
     await cleanupOutput(outputFile);
+  }
+}
+
+function ensureFileExists(path: string): void {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const analyzed = ffmpeg.FS.analyzePath(path);
+  if (!analyzed?.exists) {
+    throw new Error(`FFmpeg FS missing input: ${path}`);
   }
 }
 

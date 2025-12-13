@@ -41,6 +41,7 @@ class WasmAudioEngine implements AudioEngine {
 
   bool _isInitialized = false;
   bool _progressHandlerInstalled = false;
+  bool _logHandlerInstalled = false;
 
   @override
   bool get isReady => _isInitialized;
@@ -49,6 +50,7 @@ class WasmAudioEngine implements AudioEngine {
   Future<void> initialize() async {
     _isInitialized = true;
     _installProgressHandler();
+    _installLogHandler();
   }
 
   @override
@@ -63,7 +65,7 @@ class WasmAudioEngine implements AudioEngine {
       'source': {
         'fileId': fileId,
         'filename': filename,
-        'data': bytes,
+        'data': bytes.toJS,
       },
     });
 
@@ -93,7 +95,7 @@ class WasmAudioEngine implements AudioEngine {
     final payload = BridgeInterop.toJsObject({
       'source': {
         'fileId': fileId,
-        'data': _requireFileBytes(fileId),
+        'data': _requireFileBytes(fileId).toJS,
       },
       'points': targetSamples,
     });
@@ -124,7 +126,7 @@ class WasmAudioEngine implements AudioEngine {
     final payload = BridgeInterop.toJsObject({
       'source': {
         'fileId': fileId,
-        'data': _requireFileBytes(fileId),
+        'data': _requireFileBytes(fileId).toJS,
       },
       'dspSpec': _toDspSpec(config),
       'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
@@ -167,7 +169,7 @@ class WasmAudioEngine implements AudioEngine {
         final payload = BridgeInterop.toJsObject({
           'source': {
             'fileId': fileId,
-            'data': _requireFileBytes(fileId),
+            'data': _requireFileBytes(fileId).toJS,
           },
           'dspSpec': _toDspSpec(config),
           'format': options.format,
@@ -584,6 +586,21 @@ class WasmAudioEngine implements AudioEngine {
             stage: stage,
           ),
         );
+      }).toJS,
+    );
+  }
+
+  void _installLogHandler() {
+    if (_logHandlerInstalled) return;
+    _logHandlerInstalled = true;
+
+    BridgeInterop.setLogHandler(
+      ((JSObject event) {
+        final level = _getProperty<String>(event, 'level');
+        final message = _getProperty<String>(event, 'message');
+        // Surface worker logs to the browser console for easier debugging.
+        // ignore: avoid_print
+        print('[WasmAudioEngine][$level] $message');
       }).toJS,
     );
   }

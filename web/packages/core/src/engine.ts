@@ -168,6 +168,7 @@ class WorkerRunner {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly callbacks?: RenderCallbacks;
   private requestCounter = 0;
+  private readonly requestTimeoutMs = 120_000;
 
   constructor(factory: WorkerFactory, callbacks?: RenderCallbacks) {
     this.worker = factory();
@@ -180,7 +181,10 @@ class WorkerRunner {
   }
 
   async init(payload: InitPayload): Promise<void> {
-    await this.send<void>({ type: "INIT", requestId: this.nextRequestId(), payload }, { resolveOnReady: true });
+    await this.sendWithLog<void>(
+      { type: "INIT", requestId: this.nextRequestId(), payload },
+      { resolveOnReady: true }
+    );
   }
 
   async loadSource(source: SourceData): Promise<void> {
@@ -189,12 +193,15 @@ class WorkerRunner {
       filename: source.filename,
       data: source.data,
     };
-    await this.send({ type: "LOAD_SOURCE", requestId: this.nextRequestId(), payload }, { transfer: [source.data] });
+    await this.sendWithLog(
+      { type: "LOAD_SOURCE", requestId: this.nextRequestId(), payload },
+      { transfer: [source.data] }
+    );
   }
 
   async probe(payload: { fileId: string }): Promise<ProbeResultPayload> {
     const requestId = this.nextRequestId();
-    return this.send<ProbeResultPayload>({ type: "PROBE", requestId, payload });
+    return this.sendWithLog<ProbeResultPayload>({ type: "PROBE", requestId, payload });
   }
 
   async render(
@@ -203,18 +210,18 @@ class WorkerRunner {
     jobId: string
   ): Promise<RenderResultPayload> {
     const requestId = this.nextRequestId();
-    return this.send<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer: [] });
+    return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer: [] });
   }
 
   async waveform(payload: WaveformPayload, jobId: string): Promise<WorkerResultPayload> {
     const requestId = this.nextRequestId();
-    return this.send<WorkerResultPayload>({ type: "WAVEFORM", requestId, jobId, payload });
+    return this.sendWithLog<WorkerResultPayload>({ type: "WAVEFORM", requestId, jobId, payload });
   }
 
   async cancel(jobId: string): Promise<void> {
     const payload: CancelPayload = { jobId };
     const requestId = this.nextRequestId();
-    await this.send<void>({ type: "CANCEL", requestId, jobId, payload }).catch(() => {});
+    await this.sendWithLog<void>({ type: "CANCEL", requestId, jobId, payload }).catch(() => {});
   }
 
   terminate(): void {
@@ -236,6 +243,24 @@ class WorkerRunner {
     });
   }
 
+  private async sendWithLog<T extends WorkerResultPayload | void>(
+    request: WorkerRequest,
+    options?: { transfer?: Transferable[]; resolveOnReady?: boolean }
+  ): Promise<T> {
+    this.callbacks?.onLog?.("debug", `worker:send ${request.type} (${request.requestId})`);
+
+    const timeout = setTimeout(() => {
+      this.callbacks?.onLog?.("error", `worker:timeout ${request.type} (${request.requestId})`);
+      this.rejectIfPending(request.requestId, new Error(`Worker timeout: ${request.type}`));
+    }, this.requestTimeoutMs);
+
+    try {
+      return await this.send<T>(request, options);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private handleMessage(event: WorkerEvent): void {
     this.forwardEvent(event);
 
@@ -250,7 +275,9 @@ class WorkerRunner {
     }
 
     if (event.type === "ERROR") {
-      const error = new Error(event.message);
+      const detail = event.cause ? `${event.message}: ${event.cause}` : event.message;
+      this.callbacks?.onLog?.("error", detail);
+      const error = new Error(detail);
       this.rejectIfPending(event.requestId, error);
       return;
     }

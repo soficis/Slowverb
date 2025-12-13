@@ -3,7 +3,6 @@
   "include": ["src/**/*.ts"],
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "types": ["@ffmpeg/ffmpeg"]
+    "outDir": "dist"
   }
 }

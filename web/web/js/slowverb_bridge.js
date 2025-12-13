@@ -1,5 +1,7 @@
 import { SlowverbEngine } from "./ts/core.js";
 
+console.info("[SlowverbBridge] loaded");
+
 const CORE_URL = "/js/ffmpeg-core.js";
 const WASM_URL = "/js/ffmpeg-core.wasm";
 const WORKER_URL = undefined;
@@ -24,22 +26,35 @@ function setLogHandler(fn) {
 }
 
 async function loadAndProbe(source) {
-  const normalized = normalizeSource(source);
-  const result = await engine.probe(normalized, buildCallbacks());
+  const sourcePayload = source?.source ?? source;
+  console.info("[SlowverbBridge] loadAndProbe:start", {
+    fileId: sourcePayload?.fileId,
+  });
+  const normalized = normalizeSource(sourcePayload);
+  const result = await engine.probe(normalized, buildCallbacks(normalized.fileId));
+  console.info("[SlowverbBridge] loadAndProbe:ok", { fileId: result.fileId });
   return { type: "probe-ok", payload: result };
 }
 
 async function renderPreview(params) {
+  console.info("[SlowverbBridge] renderPreview:start", {
+    fileId: params?.source?.fileId,
+  });
   const normalized = normalizeRender(params);
   const jobId = normalized.jobId ?? createJobId();
   const result = await engine.renderPreview({ ...normalized, jobId }, buildCallbacks(jobId));
+  console.info("[SlowverbBridge] renderPreview:ok", { jobId, fileId: result.fileId });
   return { type: "render-preview-ok", payload: { buffer: result.buffer, jobId } };
 }
 
 async function renderFull(params) {
+  console.info("[SlowverbBridge] renderFull:start", {
+    fileId: params?.source?.fileId,
+  });
   const normalized = normalizeRender(params);
   const jobId = normalized.jobId ?? createJobId();
   const result = await engine.renderFull({ ...normalized, jobId }, buildCallbacks(jobId));
+  console.info("[SlowverbBridge] renderFull:ok", { jobId, fileId: result.fileId });
   return {
     type: "render-full-ok",
     payload: { outputBuffer: result.buffer, format: result.format, jobId },
@@ -96,7 +111,11 @@ function normalizeWaveform(params) {
 
 function toArrayBuffer(value) {
   if (value instanceof ArrayBuffer) return value;
-  if (ArrayBuffer.isView(value)) return value.buffer;
+  if (ArrayBuffer.isView(value)) {
+    const offset = value.byteOffset ?? 0;
+    const length = value.byteLength ?? value.buffer.byteLength;
+    return value.buffer.slice(offset, offset + length);
+  }
   if (typeof value === "string") throw new Error("Expected binary audio data");
   return new Uint8Array(value).buffer;
 }
@@ -108,6 +127,11 @@ function emitProgress(jobId, value, stage) {
 }
 
 function emitLog(jobId, level, message) {
+  const logLine = `[SlowverbBridge][${jobId ?? "job"}][${level}] ${message}`;
+  if (level === "error") console.error(logLine);
+  else if (level === "warn") console.warn(logLine);
+  else if (level === "debug") console.debug(logLine);
+  else console.info(logLine);
   if (logHandler) {
     logHandler({ jobId, level, message });
   }
