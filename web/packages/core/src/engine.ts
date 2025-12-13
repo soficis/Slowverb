@@ -1,3 +1,4 @@
+import { compileFilterChain } from "@slowverb/shared";
 import type {
   CancelPayload,
   EngineInitOptions,
@@ -13,6 +14,7 @@ import type {
   WorkerRequest,
   WorkerResultPayload,
 } from "@slowverb/shared";
+import type { DspSpec } from "@slowverb/shared";
 
 type WorkerFactory = () => Worker;
 
@@ -25,6 +27,7 @@ export interface SourceData {
 export interface RenderRequest {
   readonly source: SourceData;
   readonly filterGraph?: string;
+  readonly dspSpec?: DspSpec;
   readonly format?: ExportFormat;
   readonly bitrateKbps?: number;
   readonly startSec?: number;
@@ -124,14 +127,21 @@ export class SlowverbEngine {
   }
 
   private buildRenderPayload(request: RenderRequest): RenderPayload {
+    const filterGraph = this.resolveFilterGraph(request);
     return {
       fileId: request.source.fileId,
-      filterGraph: request.filterGraph,
+      filterGraph,
       format: request.format ?? "mp3",
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec,
     };
+  }
+
+  private resolveFilterGraph(request: RenderRequest): string | undefined {
+    if (request.filterGraph) return request.filterGraph;
+    if (request.dspSpec) return compileFilterChain(request.dspSpec);
+    return undefined;
   }
 
   async cancel(jobId: string): Promise<boolean> {

@@ -26,7 +26,6 @@ import 'package:slowverb_web/domain/entities/streaming_source.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/engine/engine_js_interop.dart';
-import 'package:slowverb_web/engine/filter_chain_builder.dart';
 import 'package:slowverb_web/engine/streaming_audio_engine.dart';
 import 'package:web/web.dart' as web;
 
@@ -35,7 +34,6 @@ import 'package:web/web.dart' as web;
 /// Communicates with audio_worker.js Web Worker for all audio processing.
 /// Keeps UI thread responsive during heavy rendering operations.
 class WasmAudioEngine implements AudioEngine {
-  final FilterChainBuilder _filterBuilder = FilterChainBuilder();
   final Map<String, StreamController<RenderProgress>> _progressControllers = {};
   final Map<String, RenderResult> _renderResults = {};
   final Map<String, Uint8List> _loadedFiles = {};
@@ -123,13 +121,12 @@ class WasmAudioEngine implements AudioEngine {
     Duration? duration,
   }) async {
     _ensureInitialized();
-    final filterChain = _filterBuilder.buildFilterChain(config);
     final payload = BridgeInterop.toJsObject({
       'source': {
         'fileId': fileId,
         'data': _requireFileBytes(fileId),
       },
-      'filterGraph': filterChain,
+      'dspSpec': _toDspSpec(config),
       'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
       'durationSec': duration != null ? duration.inMilliseconds / 1000.0 : null,
     });
@@ -157,7 +154,6 @@ class WasmAudioEngine implements AudioEngine {
     _ensureInitialized();
 
     final jobId = RenderJobId('job-${DateTime.now().millisecondsSinceEpoch}');
-    final filterChain = _filterBuilder.buildFilterChain(config);
 
     // Create progress stream controller
     final controller = StreamController<RenderProgress>.broadcast();
@@ -173,7 +169,7 @@ class WasmAudioEngine implements AudioEngine {
             'fileId': fileId,
             'data': _requireFileBytes(fileId),
           },
-          'filterGraph': filterChain,
+          'dspSpec': _toDspSpec(config),
           'format': options.format,
           'bitrateKbps': options.bitrateKbps ?? 192,
           'jobId': jobId.value,
@@ -526,6 +522,44 @@ class WasmAudioEngine implements AudioEngine {
   Duration? _durationFromMs(int? value) {
     if (value == null) return null;
     return Duration(milliseconds: value);
+  }
+
+  Map<String, Object?> _toDspSpec(EffectConfig config) {
+    final spec = <String, Object?>{
+      'specVersion': '1.0.0',
+      'tempo': config.tempo,
+      'pitch': config.pitchSemitones,
+      'eqWarmth': config.eqWarmth,
+      'normalize': false,
+    };
+
+    if (config.reverbAmount > 0.0) {
+      spec['reverb'] = <String, Object?>{
+        'decay': config.reverbAmount,
+        'preDelayMs': (config.preDelayMs ?? 30).round(),
+        'roomScale': config.roomScale ?? 0.7,
+        'mix': 1.0,
+      };
+    }
+
+    if (config.echoAmount > 0.0) {
+      spec['echo'] = <String, Object?>{
+        'delayMs': (500 * config.echoAmount).round(),
+        'feedback': (config.echoAmount * 0.6).clamp(0.0, 0.9),
+      };
+    }
+
+    final hfDamping = config.hfDamping;
+    if (hfDamping != null) {
+      spec['hfDamping'] = hfDamping;
+    }
+
+    final stereoWidth = config.stereoWidth;
+    if (stereoWidth != null) {
+      spec['stereoWidth'] = stereoWidth;
+    }
+
+    return spec;
   }
 
   void _installProgressHandler() {

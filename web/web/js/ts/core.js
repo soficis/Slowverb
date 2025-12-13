@@ -1,4 +1,5 @@
 // src/engine.ts
+import { compileFilterChain } from "@slowverb/shared";
 var SlowverbEngine = class {
   workerFactory;
   initPayload;
@@ -60,14 +61,20 @@ var SlowverbEngine = class {
     await runner.probe({ fileId: source.fileId });
   }
   buildRenderPayload(request) {
+    const filterGraph = this.resolveFilterGraph(request);
     return {
       fileId: request.source.fileId,
-      filterGraph: request.filterGraph,
+      filterGraph,
       format: request.format ?? "mp3",
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec
     };
+  }
+  resolveFilterGraph(request) {
+    if (request.filterGraph) return request.filterGraph;
+    if (request.dspSpec) return compileFilterChain(request.dspSpec);
+    return void 0;
   }
   async cancel(jobId) {
     const runner = this.active.get(jobId);
