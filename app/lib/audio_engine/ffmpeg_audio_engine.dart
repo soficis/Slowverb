@@ -17,6 +17,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit_config.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/log_level.dart';
 
 import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
@@ -75,6 +79,10 @@ class FFmpegAudioEngine implements AudioEngine {
   }) {
     _ensureInitialized();
 
+    print(
+      '[FFmpeg] render source=$sourcePath -> $outputPath format=$format bitrate=$bitrateKbps params=$params',
+    );
+
     _renderProgressController = StreamController<double>();
 
     // Start render in background
@@ -100,8 +108,17 @@ class FFmpegAudioEngine implements AudioEngine {
     if (controller == null) return;
 
     try {
+      // Ensure output directory exists
+      final outDir = File(outputPath).parent;
+      if (!await outDir.exists()) {
+        await outDir.create(recursive: true);
+      }
+
       final filterChain = _buildFilterChain(params);
       final bitrateArg = bitrateKbps != null ? '-b:a ${bitrateKbps}k' : '';
+      // Avoid hard-coding encoders on Android; let ffmpeg pick built-in ones
+      final codecArg = '';
+      const rateChannels = '-ar 44100 -ac 2';
 
       // Build FFmpeg command arguments (inner part)
       // Note: For native process execution we need individual args, not one string.
@@ -110,9 +127,15 @@ class FFmpegAudioEngine implements AudioEngine {
       final commandStr =
           '-y -i "$sourcePath" '
           '-af "$filterChain" '
+          '$codecArg '
           '$bitrateArg '
+          '$rateChannels '
           '-threads 0 '
           '"$outputPath"';
+
+      // Log the command for debugging
+      // (Paths are already quoted)
+      print('[FFmpeg] command: $commandStr');
 
       // Execute based on platform
       if (Platform.isWindows) {
@@ -168,20 +191,40 @@ class FFmpegAudioEngine implements AudioEngine {
     String command,
     StreamController<double> controller,
   ) async {
+    // Make logs verbose so we can diagnose failures on device
+    await FFmpegKitConfig.setLogLevel(LogLevel.AV_LOG_INFO);
+
     await FFmpegKit.executeAsync(
       command,
       (session) async {
         final returnCode = await session.getReturnCode();
+        final logs = await session.getLogsAsString();
+        final failStack = await session.getFailStackTrace();
+        final state = await session.getState();
+        final duration = await session.getDuration();
+
         if (ReturnCode.isSuccess(returnCode)) {
+          print('[FFmpeg] success');
           controller.add(1.0);
           controller.close();
         } else {
-          final logs = await session.getLogsAsString();
+          print(
+            '[FFmpeg] failed rc=$returnCode state=$state duration=$duration',
+          );
+          print('[FFmpeg] logs: $logs');
+          if (failStack != null) {
+            print('[FFmpeg] fail stack: $failStack');
+          }
           controller.addError('FFmpeg failed: $logs');
           controller.close();
         }
       },
-      (log) {},
+      (log) {
+        final msg = log.getMessage();
+        if (msg.isNotEmpty) {
+          print('[FFmpeg][log] $msg');
+        }
+      },
       (statistics) {
         controller.add(0.5);
       },
@@ -227,6 +270,8 @@ class FFmpegAudioEngine implements AudioEngine {
     final tempo = params['tempo'] ?? 1.0;
     final pitch = params['pitch'] ?? 0.0;
     final reverbAmount = params['reverbAmount'] ?? 0.0;
+    final wetDryMix = params['wetDryMix'] ?? 0.0;
+    final eqWarmth = params['eqWarmth'] ?? 0.0;
 
     final filters = <String>[];
 
@@ -243,6 +288,16 @@ class FFmpegAudioEngine implements AudioEngine {
     // Reverb via aecho
     if (reverbAmount > 0) {
       filters.add(_buildReverbFilter(reverbAmount));
+    }
+
+    // Echo / delay mix
+    if (wetDryMix > 0) {
+      filters.add(_buildEchoFilter(wetDryMix));
+    }
+
+    // Warmth EQ (gentle low-shelf)
+    if (eqWarmth > 0) {
+      filters.add(_buildWarmthFilter(eqWarmth));
     }
 
     return filters.isEmpty ? 'anull' : filters.join(',');
@@ -268,9 +323,8 @@ class FFmpegAudioEngine implements AudioEngine {
 
   /// Build pitch shift filter using asetrate + aresample
   String _buildPitchFilter(double semitones) {
-    // Convert semitones to rate multiplier
-    // Each semitone is a factor of 2^(1/12) approx 1.0595
-    final multiplier = 1.0 + (semitones * 0.0595);
+    // Convert semitones to rate multiplier using 2^(n/12)
+    final multiplier = math.pow(2.0, semitones / 12.0);
     return 'asetrate=44100*$multiplier,aresample=44100';
   }
 
@@ -282,6 +336,21 @@ class FFmpegAudioEngine implements AudioEngine {
     final delay = 40 + (amount * 80).toInt(); // 40ms to 120ms
 
     return 'aecho=0.8:0.88:$delay:$decay';
+  }
+
+  /// Build echo/delay mix using aecho scaled from wetDryMix
+  String _buildEchoFilter(double mix) {
+    // mix 0-1 -> decay 0.1-0.9 and delay 120-240ms
+    final decay = 0.1 + (mix * 0.8);
+    final delay = 120 + (mix * 120).toInt();
+    return 'aecho=0.9:0.9:$delay:$decay';
+  }
+
+  /// Gentle low-shelf warmth boost
+  String _buildWarmthFilter(double warmth) {
+    // Gain from 0 to +9dB, shelf at 200Hz
+    final gain = (warmth * 9).toStringAsFixed(1);
+    return 'bass=g=$gain:f=200';
   }
 
   void _ensureInitialized() {
