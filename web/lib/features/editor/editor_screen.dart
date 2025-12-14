@@ -1,24 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/router.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
-import 'package:slowverb_web/domain/repositories/audio_engine.dart';
-import 'package:slowverb_web/features/editor/widgets/effect_controls.dart';
-import 'package:slowverb_web/features/editor/widgets/transport_bar.dart';
-import 'package:slowverb_web/features/editor/widgets/waveform_panel.dart';
-import 'package:slowverb_web/features/presets/preset_selector_dialog.dart';
-import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
-import 'package:slowverb_web/providers/audio_playback_provider.dart';
+import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
+import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
+import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
+import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
 
-/// Main audio editor screen
+// Parameter metadata definition
+class _ParamDef {
+  final String id;
+  final String label;
+  final double min;
+  final double max;
+  final double defaultValue;
+  const _ParamDef(this.id, this.label, this.min, this.max, this.defaultValue);
+}
+
+const _kParameterDefinitions = [
+  _ParamDef('tempo', 'Tempo', 0.5, 1.5, 1.0),
+  _ParamDef('pitch', 'Pitch', -12.0, 12.0, 0.0),
+  _ParamDef('reverbAmount', 'Reverb', 0.0, 1.0, 0.0),
+  _ParamDef('echoAmount', 'Echo', 0.0, 1.0, 0.0),
+  _ParamDef('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
+];
+
+/// Main editor screen with VaporXP layout shared with the web experience.
 class EditorScreen extends ConsumerStatefulWidget {
   final AudioFileData? fileData;
   final Project? project;
@@ -30,369 +45,962 @@ class EditorScreen extends ConsumerStatefulWidget {
 }
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
-  // Visualizer state - randomly selected on track import (excluding WMP Retro)
-  late VisualizerPreset _visualizerPreset;
+  bool _showControls = true;
   bool _isFullscreenVisualizer = false;
 
   @override
   void initState() {
     super.initState();
-
-    // Randomly select a visualizer when importing a track (excludes WMP Retro)
-    _visualizerPreset = VisualizerPresets.random();
-
-    if (widget.fileData != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.fileData != null) {
         ref
             .read(audioEditorProvider.notifier)
             .loadAudioFile(widget.fileData!, project: widget.project);
-      });
-    }
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final editorState = ref.watch(audioEditorProvider);
-    final editorNotifier = ref.read(audioEditorProvider.notifier);
-    final playbackNotifier = ref.read(audioPlaybackProvider.notifier);
-    final isPlaying = ref.watch(audioPlaybackProvider);
-    final audioPlayer = ref.watch(audioPlayerProvider);
-    final currentPosition = ref
-        .watch(playbackPositionProvider)
-        .maybeWhen(data: (pos) => pos, orElse: () => Duration.zero);
-    final totalDuration =
-        ref
-            .watch(playbackDurationProvider)
-            .maybeWhen(data: (dur) => dur, orElse: () => null) ??
-        editorState.audioDuration ??
-        const Duration(minutes: 3, seconds: 45);
-    final waveformTotalMs = totalDuration.inMilliseconds <= 0
-        ? 1
-        : totalDuration.inMilliseconds;
-    final waveformPosition = totalDuration.inMilliseconds <= 0
-        ? 0.0
-        : (currentPosition.inMilliseconds / waveformTotalMs).clamp(0.0, 1.0);
-    final effectValues = _EffectValues(
-      tempo: editorState.currentParameters['tempo'] ?? 1.0,
-      pitch: editorState.currentParameters['pitch'] ?? 0.0,
-      reverbAmount: editorState.currentParameters['reverbAmount'] ?? 0.0,
-      echoAmount: editorState.currentParameters['echoAmount'] ?? 0.0,
-      eqWarmth: editorState.currentParameters['eqWarmth'] ?? 0.5,
+    // Ported: editorProvider -> audioEditorProvider
+    final state = ref.watch(audioEditorProvider);
+    final notifier = ref.read(audioEditorProvider.notifier);
+
+    // Adapted logic: construct project-like properties from state
+    final hasProject = state.fileId != null || state.audioFileName != null;
+    final projectName = state.projectName ?? state.audioFileName ?? 'Untitled';
+    final duration = state.audioDuration ?? Duration.zero;
+    // Calculate position from normalized playbackPosition
+    final position = Duration(
+      milliseconds: (state.playbackPosition * duration.inMilliseconds).toInt(),
     );
 
-    _showErrorIfNeeded(context, editorState, editorNotifier);
+    final isPlaying = state.isPlaying;
+    final isGeneratingPreview = state.isLoading; // Approximate
+    final selectedPresetId = state.selectedPreset.id;
+    final parameters = state.currentParameters;
 
-    return ResponsiveScaffold(
-      background: VisualizerPanel(
-        preset: _visualizerPreset,
-        isPlaying: isPlaying,
-        onDoubleTap: () =>
-            setState(() => _isFullscreenVisualizer = !_isFullscreenVisualizer),
-      ),
-      child: _isFullscreenVisualizer
-          ? _buildFullscreenVisualizerOverlay(context)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _EditorTitleBar(
-                  presetName: editorState.selectedPreset.name,
-                  onBack: () => context.go('/'),
-                  onOpenPresets: () =>
-                      _openPresetDialog(context, editorState, editorNotifier),
-                  onExport: () => context.push('/export'),
-                  visualizerPreset: _visualizerPreset,
-                  onVisualizerPresetChanged: (preset) =>
-                      setState(() => _visualizerPreset = preset),
-                  onToggleFullscreen: () =>
-                      setState(() => _isFullscreenVisualizer = true),
+    if (state.error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(state.error!)));
+        notifier.clearError();
+      });
+    }
+
+    // Sync playback state with visualizer
+    ref.listen(audioEditorProvider.select((s) => s.isPlaying), (_, isPlaying) {
+      ref.read(visualizerProvider.notifier).setPlaying(isPlaying);
+    });
+
+    if (!hasProject && !state.isLoading) {
+      return ResponsiveScaffold(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (state.isLoading)
+                const CircularProgressIndicator()
+              else ...[
+                const Icon(Icons.error_outline, size: 64, color: Colors.white),
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                Text(
+                  'No project loaded',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: SlowverbTokens.spacingLg),
-                if (editorState.audioFileName != null) ...[
-                  _FileInfoBanner(
-                    fileName: editorState.audioFileName!,
-                    metadata: editorState.metadata,
-                    onChangeFile: () => context.go('/'),
-                  ),
-                  const SizedBox(height: SlowverbTokens.spacingLg),
-                ],
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 1100;
-                      return SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight,
-                          ),
-                          child: _buildContent(
-                            isWide: isWide,
-                            state: editorState,
-                            effectValues: effectValues,
-                            isPlaying: isPlaying,
-                            waveformPosition: waveformPosition,
-                            currentPosition: currentPosition,
-                            totalDuration: totalDuration,
-                            audioPlayer: audioPlayer,
-                            editorNotifier: editorNotifier,
-                            playbackNotifier: playbackNotifier,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                ElevatedButton(
+                  onPressed: () => context.go(AppRoutes.import_),
+                  child: const Text('Go Home'),
                 ),
               ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    final presetName = _presetNameFor(selectedPresetId);
+    final projectId = state.projectId ?? 'temp';
+
+    return ResponsiveScaffold(
+      // Use Stack to layer visualizer behind controls
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background Visualizer
+          Positioned.fill(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final visualizerState = ref.watch(visualizerProvider);
+                return VisualizerPanel(
+                  preset: visualizerState.activePreset,
+                  isPlaying: visualizerState.isPlaying,
+                  // analysisStream should ideally come from waveformProvider or engine
+                  // For now, web VisualizerPanel might need adaptation to get stream or it uses AudioAnalysisFrame
+                  // In existing VisualizerPanel it takes 'analysisStream'.
+                  // We need to supply it if we want actual visualization.
+                  // For now pass null or empty if we don't have it easily accessible?
+                  // Or assume VisualizerPanel works with audio engine implicitly?
+                  // Checking VisualizerPanel content: it takes analysisStream.
+                  // If null, it won't animate.
+                  analysisStream: null, // Placeholder for now
+                );
+              },
             ),
+          ),
+
+          // Content Overlay
+          if (!_isFullscreenVisualizer)
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 600;
+
+                  // Mobile-optimized minimal overlay layout
+                  if (isMobile) {
+                    return _MobileOverlayLayout(
+                      projectName: projectName,
+                      presetName: presetName,
+                      position: position,
+                      duration: duration,
+                      isPlaying: isPlaying,
+                      isGeneratingPreview: isGeneratingPreview,
+                      selectedPresetId: selectedPresetId,
+                      parameters: parameters,
+
+                      notifier: notifier,
+                      projectId: projectId,
+                      onBack: () {
+                        notifier.stop();
+                        context.go(AppRoutes.import_);
+                      },
+                    );
+                  }
+
+                  // Desktop/tablet layout
+                  return Padding(
+                    padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Top Bar with Fullscreen Toggle
+                        _EditorTitleBar(
+                          presetName: presetName,
+                          onBack: () {
+                            notifier.stop();
+                            context.go(AppRoutes.import_);
+                          },
+                          onExport: () =>
+                              context.push(AppRoutes.export, extra: projectId),
+                          onFullscreen: () {
+                            setState(() => _isFullscreenVisualizer = true);
+                          },
+                        ),
+
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        // Controls with minimize option
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isUltraWide = constraints.maxWidth >= 1400;
+                              final isWide = constraints.maxWidth >= 900;
+                              final isLandscape =
+                                  constraints.maxWidth > constraints.maxHeight;
+
+                              if (!_showControls) {
+                                return Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: SlowverbTokens.spacingMd,
+                                      right: SlowverbTokens.spacingMd,
+                                    ),
+                                    child: FloatingActionButton.small(
+                                      onPressed: () =>
+                                          setState(() => _showControls = true),
+                                      tooltip: 'Show Controls',
+                                      child: const Icon(Icons.unfold_more),
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              // Ultra-wide layout (3 columns): Waveform | Metadata | Effects
+                              if (isUltraWide) {
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Left: Expanded Waveform Transport
+                                    Expanded(
+                                      flex: 3,
+                                      child: SingleChildScrollView(
+                                        child: _WaveformTransportCard(
+                                          projectName: projectName,
+                                          position: position,
+                                          duration: duration,
+                                          isPlaying: isPlaying,
+                                          isGeneratingPreview:
+                                              isGeneratingPreview,
+                                          onPlayPause: notifier.togglePlayback,
+                                          onSeek: (pos) => notifier.seek(
+                                            duration.inMilliseconds > 0
+                                                ? pos /
+                                                      duration
+                                                          .inMilliseconds // Convert ms to 0-1
+                                                : 0.0,
+                                          ),
+                                          onSeekBackward: () => notifier.seek(
+                                            (position.inMilliseconds - 10000)
+                                                    .clamp(
+                                                      0,
+                                                      duration.inMilliseconds,
+                                                    ) /
+                                                (duration.inMilliseconds > 0
+                                                    ? duration.inMilliseconds
+                                                    : 1),
+                                          ),
+                                          onSeekForward: () => notifier.seek(
+                                            (position.inMilliseconds + 10000)
+                                                    .clamp(
+                                                      0,
+                                                      duration.inMilliseconds,
+                                                    ) /
+                                                (duration.inMilliseconds > 0
+                                                    ? duration.inMilliseconds
+                                                    : 1),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: SlowverbTokens.spacingMd,
+                                    ),
+                                    // Center: Track Info & Metadata Panel
+                                    Expanded(
+                                      flex: 2,
+                                      child: SingleChildScrollView(
+                                        child: _TrackMetadataPanel(
+                                          projectName: projectName,
+                                          duration: duration,
+                                          presetId: selectedPresetId,
+                                          parameters: parameters,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: SlowverbTokens.spacingMd,
+                                    ),
+                                    // Right: Effects Column
+                                    Expanded(
+                                      flex: 2,
+                                      child: SingleChildScrollView(
+                                        child: _EffectColumn(
+                                          selectedPresetId: selectedPresetId,
+                                          parameters: parameters,
+                                          onPresetSelected: (id) {
+                                            final preset =
+                                                Presets.getById(id) ??
+                                                Presets.slowedReverb;
+                                            notifier.applyPreset(preset);
+                                          },
+                                          onUpdateParam:
+                                              notifier.updateParameter,
+                                          onMinimize: () => setState(
+                                            () => _showControls = false,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              final controls = (isWide || isLandscape)
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: isLandscape ? 2 : 3,
+                                          child: SingleChildScrollView(
+                                            child: _WaveformTransportCard(
+                                              projectName: projectName,
+                                              position: position,
+                                              duration: duration,
+                                              isPlaying: isPlaying,
+                                              isGeneratingPreview:
+                                                  isGeneratingPreview,
+                                              onPlayPause:
+                                                  notifier.togglePlayback,
+                                              onSeek: (pos) => notifier.seek(
+                                                duration.inMilliseconds > 0
+                                                    ? pos /
+                                                          duration
+                                                              .inMilliseconds
+                                                    : 0.0,
+                                              ),
+                                              onSeekBackward: () => notifier.seek(
+                                                (position.inMilliseconds -
+                                                            10000)
+                                                        .clamp(
+                                                          0,
+                                                          duration
+                                                              .inMilliseconds,
+                                                        ) /
+                                                    (duration.inMilliseconds > 0
+                                                        ? duration
+                                                              .inMilliseconds
+                                                        : 1),
+                                              ),
+                                              onSeekForward: () => notifier.seek(
+                                                (position.inMilliseconds +
+                                                            10000)
+                                                        .clamp(
+                                                          0,
+                                                          duration
+                                                              .inMilliseconds,
+                                                        ) /
+                                                    (duration.inMilliseconds > 0
+                                                        ? duration
+                                                              .inMilliseconds
+                                                        : 1),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                          width: SlowverbTokens.spacingMd,
+                                        ),
+                                        Expanded(
+                                          flex: isLandscape ? 1 : 2,
+                                          child: SingleChildScrollView(
+                                            child: _EffectColumn(
+                                              selectedPresetId:
+                                                  selectedPresetId,
+                                              parameters: parameters,
+                                              onPresetSelected: (id) {
+                                                final preset =
+                                                    Presets.getById(id) ??
+                                                    Presets.slowedReverb;
+                                                notifier.applyPreset(preset);
+                                              },
+                                              onUpdateParam:
+                                                  notifier.updateParameter,
+                                              onMinimize: () => setState(
+                                                () => _showControls = false,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Expanded(
+                                          child: SingleChildScrollView(
+                                            child: _WaveformTransportCard(
+                                              projectName: projectName,
+                                              position: position,
+                                              duration: duration,
+                                              isPlaying: isPlaying,
+                                              isGeneratingPreview:
+                                                  isGeneratingPreview,
+                                              onPlayPause:
+                                                  notifier.togglePlayback,
+                                              onSeek: (pos) => notifier.seek(
+                                                duration.inMilliseconds > 0
+                                                    ? pos /
+                                                          duration
+                                                              .inMilliseconds
+                                                    : 0.0,
+                                              ),
+                                              onSeekBackward: () => notifier.seek(
+                                                (position.inMilliseconds -
+                                                            10000)
+                                                        .clamp(
+                                                          0,
+                                                          duration
+                                                              .inMilliseconds,
+                                                        ) /
+                                                    (duration.inMilliseconds > 0
+                                                        ? duration
+                                                              .inMilliseconds
+                                                        : 1),
+                                              ),
+                                              onSeekForward: () => notifier.seek(
+                                                (position.inMilliseconds +
+                                                            10000)
+                                                        .clamp(
+                                                          0,
+                                                          duration
+                                                              .inMilliseconds,
+                                                        ) /
+                                                    (duration.inMilliseconds > 0
+                                                        ? duration
+                                                              .inMilliseconds
+                                                        : 1),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                          height: SlowverbTokens.spacingMd,
+                                        ),
+                                        Expanded(
+                                          child: SingleChildScrollView(
+                                            child: _EffectColumn(
+                                              selectedPresetId:
+                                                  selectedPresetId,
+                                              parameters: parameters,
+                                              onPresetSelected: (id) {
+                                                final preset =
+                                                    Presets.getById(id) ??
+                                                    Presets.slowedReverb;
+                                                notifier.applyPreset(preset);
+                                              },
+                                              onUpdateParam:
+                                                  notifier.updateParameter,
+                                              onMinimize: () => setState(
+                                                () => _showControls = false,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+
+                              return controls;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          // Fullscreen Exit Buttons
+          if (_isFullscreenVisualizer)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    FloatingActionButton.small(
+                      onPressed: () {
+                        notifier.stop();
+                        context.go(AppRoutes.import_);
+                      },
+                      tooltip: 'Back',
+                      child: const Icon(Icons.arrow_back),
+                    ),
+                    FloatingActionButton.small(
+                      onPressed: () {
+                        setState(() => _isFullscreenVisualizer = false);
+                      },
+                      tooltip: 'Exit Fullscreen',
+                      child: const Icon(Icons.fullscreen_exit),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildFullscreenVisualizerOverlay(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  onPressed: () => context.go('/'),
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  tooltip: 'Back to Home',
-                ),
-                IconButton(
-                  onPressed: () =>
-                      setState(() => _isFullscreenVisualizer = false),
-                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
-                  tooltip: 'Exit Fullscreen',
-                ),
-              ],
+  String _presetNameFor(String presetId) {
+    final preset = Presets.all.firstWhere(
+      (p) => p.id == presetId,
+      orElse: () => Presets.slowedReverb,
+    );
+    return preset.name;
+  }
+}
+
+/// Mobile-optimized layout with floating controls and bottom sheet effects
+class _MobileOverlayLayout extends StatefulWidget {
+  final String projectName;
+  final String presetName;
+  final AudioEditorNotifier notifier; // Changed type
+  final String projectId;
+  final VoidCallback onBack;
+
+  // Flattened state props
+  final Duration position;
+  final Duration duration;
+  final bool isPlaying;
+  final bool isGeneratingPreview;
+  final String selectedPresetId;
+  final Map<String, double> parameters;
+
+  const _MobileOverlayLayout({
+    required this.projectName,
+    required this.presetName,
+    required this.notifier,
+    required this.projectId,
+    required this.onBack,
+    required this.position,
+    required this.duration,
+    required this.isPlaying,
+    required this.isGeneratingPreview,
+    required this.selectedPresetId,
+    required this.parameters,
+  });
+
+  @override
+  State<_MobileOverlayLayout> createState() => _MobileOverlayLayoutState();
+}
+
+class _MobileOverlayLayoutState extends State<_MobileOverlayLayout> {
+  bool _showEffectsSheet = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Slim top bar: back + export only
+        Positioned(
+          top: SlowverbTokens.spacingSm,
+          left: SlowverbTokens.spacingSm,
+          right: SlowverbTokens.spacingSm,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Back button
+              _MiniChromeButton(icon: Icons.arrow_back, onTap: widget.onBack),
+              // Export button
+              _MiniChromeButton(
+                icon: Icons.download,
+                onTap: () =>
+                    context.push(AppRoutes.export, extra: widget.projectId),
+              ),
+            ],
+          ),
+        ),
+
+        // Floating mini transport bar at bottom
+        Positioned(
+          bottom: _showEffectsSheet ? 300 : SlowverbTokens.spacingMd,
+          left: SlowverbTokens.spacingSm,
+          right: SlowverbTokens.spacingSm,
+          child: _MiniTransportBar(
+            projectName: widget.projectName,
+            position: widget.position,
+            duration: widget.duration,
+            isPlaying: widget.isPlaying,
+            onPlayPause: widget.notifier.togglePlayback,
+            onSeek: (pos) => widget.notifier.seek(
+              widget.duration.inMilliseconds > 0
+                  ? pos / widget.duration.inMilliseconds
+                  : 0.0,
             ),
-            const Spacer(),
-            // Visualizer preset selector at bottom
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: SlowverbTokens.spacingMd,
-                vertical: SlowverbTokens.spacingSm,
+            onExpandEffects: () =>
+                setState(() => _showEffectsSheet = !_showEffectsSheet),
+            isEffectsExpanded: _showEffectsSheet,
+            presetName: widget.presetName,
+          ),
+        ),
+
+        // Bottom sheet for effects (collapsed by default)
+        if (_showEffectsSheet)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _MobileEffectsSheet(
+              selectedPresetId: widget.selectedPresetId,
+              parameters: widget.parameters,
+              notifier: widget.notifier,
+              onClose: () => setState(() => _showEffectsSheet = false),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Compact chrome button for mobile
+class _MiniChromeButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _MiniChromeButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, color: Colors.white, size: 20),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating mini transport bar with slim progress and play/pause
+class _MiniTransportBar extends StatelessWidget {
+  final String projectName;
+  final Duration position;
+  final Duration duration;
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+  final void Function(int) onSeek;
+  final VoidCallback onExpandEffects;
+  final bool isEffectsExpanded;
+  final String presetName;
+
+  const _MiniTransportBar({
+    required this.projectName,
+    required this.position,
+    required this.duration,
+    required this.isPlaying,
+    required this.onPlayPause,
+    required this.onSeek,
+    required this.onExpandEffects,
+    required this.isEffectsExpanded,
+    required this.presetName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = duration.inMilliseconds > 0
+        ? position.inMilliseconds / duration.inMilliseconds
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(SlowverbTokens.spacingSm),
+      decoration: BoxDecoration(
+        color: SlowverbColors.surface.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
+        boxShadow: [SlowverbTokens.shadowCard],
+        border: Border.all(color: SlowverbColors.surfaceVariant),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Title and time
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  projectName,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: SlowverbColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              Text(
+                '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: SlowverbColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Slim progress bar
+          GestureDetector(
+            onTapDown: (details) {
+              final width = context.size?.width ?? 1;
+              final percent = details.localPosition.dx / width;
+              onSeek((duration.inMilliseconds * percent).toInt());
+            },
+            child: Container(
+              height: 4,
               decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
+                color: SlowverbColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(2),
               ),
-              child: Wrap(
-                spacing: SlowverbTokens.spacingSm,
-                children: VisualizerPresets.all.map((preset) {
-                  final isSelected = preset.id == _visualizerPreset.id;
-                  return ChoiceChip(
-                    label: Text(preset.name),
-                    selected: isSelected,
-                    onSelected: (_) =>
-                        setState(() => _visualizerPreset = preset),
-                    selectedColor: SlowverbColors.hotPink.withValues(
-                      alpha: 0.3,
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress.clamp(0.0, 1.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [SlowverbColors.hotPink, SlowverbColors.neonCyan],
                     ),
-                    labelStyle: TextStyle(
-                      color: isSelected
-                          ? SlowverbColors.hotPink
-                          : Colors.white70,
-                      fontSize: 12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Controls row: effects toggle, play/pause, preset badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Effects toggle
+              IconButton(
+                onPressed: onExpandEffects,
+                icon: Icon(
+                  isEffectsExpanded ? Icons.expand_more : Icons.tune,
+                  color: isEffectsExpanded
+                      ? SlowverbColors.neonCyan
+                      : SlowverbColors.textSecondary,
+                ),
+                iconSize: 22,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Effects',
+              ),
+
+              // Play/pause button
+              Material(
+                color: SlowverbColors.accentGradient.colors.first,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onPlayPause,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(
+                      isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Preset badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: SlowverbColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(
+                    SlowverbTokens.radiusPill,
+                  ),
+                ),
+                child: Text(
+                  presetName,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: SlowverbColors.hotPink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for effect controls on mobile
+class _MobileEffectsSheet extends StatelessWidget {
+  final String selectedPresetId;
+  final Map<String, double> parameters;
+  final AudioEditorNotifier notifier;
+  final VoidCallback onClose;
+
+  const _MobileEffectsSheet({
+    required this.selectedPresetId,
+    required this.parameters,
+    required this.notifier,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final presetId = selectedPresetId;
+    // final preset = Presets.getById(presetId) ?? Presets.slowedReverb;
+
+    return Container(
+      height: 320,
+      decoration: BoxDecoration(
+        color: SlowverbColors.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(SlowverbTokens.radiusLg),
+        ),
+        boxShadow: [SlowverbTokens.shadowCard],
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: SlowverbColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Preset selector
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SlowverbTokens.spacingMd,
+              vertical: SlowverbTokens.spacingSm,
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: Presets.all.map((p) {
+                  final isSelected = p.id == presetId;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(p.name),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        if (selected) notifier.applyPreset(p);
+                      },
+                      selectedColor: SlowverbColors.hotPink.withValues(
+                        alpha: 0.3,
+                      ),
+                      labelStyle: TextStyle(
+                        color: isSelected ? SlowverbColors.hotPink : null,
+                        fontSize: 12,
+                      ),
+                      visualDensity: VisualDensity.compact,
                     ),
                   );
                 }).toList(),
               ),
             ),
-          ],
-        ),
+          ),
+
+          const Divider(height: 1),
+
+          // Parameter sliders (scrollable)
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: SlowverbTokens.spacingMd,
+                vertical: SlowverbTokens.spacingSm,
+              ),
+              children: _kParameterDefinitions.map((param) {
+                final value = parameters[param.id] ?? param.defaultValue;
+                return _CompactSlider(
+                  label: param.label,
+                  value: value,
+                  min: param.min,
+                  max: param.max,
+                  formatValue: (v) {
+                    if (param.id == 'tempo') return '${(v * 100).toInt()}%';
+                    if (param.id == 'pitch') {
+                      return '${v.toStringAsFixed(1)} st';
+                    }
+                    return '${(v * 100).toInt()}%';
+                  },
+                  onChanged: (v) => notifier.updateParameter(param.id, v),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildContent({
-    required bool isWide,
-    required AudioEditorState state,
-    required _EffectValues effectValues,
-    required bool isPlaying,
-    required double waveformPosition,
-    required Duration currentPosition,
-    required Duration totalDuration,
-    required AudioPlayer audioPlayer,
-    required AudioEditorNotifier editorNotifier,
-    required AudioPlaybackNotifier playbackNotifier,
-  }) {
-    final content = isWide
-        ? _WideEditorLayout(
-            waveformPosition: waveformPosition,
-            currentPosition: currentPosition,
-            totalDuration: totalDuration,
-            isPlaying: isPlaying,
-            isLoading: state.isLoading,
-            effectValues: effectValues,
-            selectedPreset: state.selectedPreset,
-            onPlayPause: () =>
-                _handlePlayPause(editorNotifier, playbackNotifier, audioPlayer),
-            onPreview: () => _handlePreview(editorNotifier, playbackNotifier),
-            onStop: () => _handleStop(editorNotifier, playbackNotifier),
-            onSeek: (position) => _handleSeek(
-              position,
-              totalDuration,
-              editorNotifier,
-              playbackNotifier,
+/// Compact slider for mobile effects sheet
+class _CompactSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String Function(double) formatValue;
+  final ValueChanged<double> onChanged;
+
+  const _CompactSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.formatValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 60,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
             ),
-            onPresetSelected: editorNotifier.applyPreset,
-            onTempoChanged: (value) =>
-                editorNotifier.updateParameter('tempo', value),
-            onPitchChanged: (value) =>
-                editorNotifier.updateParameter('pitch', value),
-            onReverbChanged: (value) =>
-                editorNotifier.updateParameter('reverbAmount', value),
-            onEchoChanged: (value) =>
-                editorNotifier.updateParameter('echoAmount', value),
-            onEqWarmthChanged: (value) =>
-                editorNotifier.updateParameter('eqWarmth', value),
-          )
-        : _StackedEditorLayout(
-            waveformPosition: waveformPosition,
-            currentPosition: currentPosition,
-            totalDuration: totalDuration,
-            isPlaying: isPlaying,
-            isLoading: state.isLoading,
-            effectValues: effectValues,
-            selectedPreset: state.selectedPreset,
-            onPlayPause: () =>
-                _handlePlayPause(editorNotifier, playbackNotifier, audioPlayer),
-            onPreview: () => _handlePreview(editorNotifier, playbackNotifier),
-            onStop: () => _handleStop(editorNotifier, playbackNotifier),
-            onSeek: (position) => _handleSeek(
-              position,
-              totalDuration,
-              editorNotifier,
-              playbackNotifier,
-            ),
-            onPresetSelected: editorNotifier.applyPreset,
-            onTempoChanged: (value) =>
-                editorNotifier.updateParameter('tempo', value),
-            onPitchChanged: (value) =>
-                editorNotifier.updateParameter('pitch', value),
-            onReverbChanged: (value) =>
-                editorNotifier.updateParameter('reverbAmount', value),
-            onEchoChanged: (value) =>
-                editorNotifier.updateParameter('echoAmount', value),
-            onEqWarmthChanged: (value) =>
-                editorNotifier.updateParameter('eqWarmth', value),
-          );
-
-    return Stack(
-      children: [content, if (state.isLoading) const _LoadingOverlay()],
-    );
-  }
-
-  void _showErrorIfNeeded(
-    BuildContext context,
-    AudioEditorState state,
-    AudioEditorNotifier editorNotifier,
-  ) {
-    if (state.error == null) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.error!),
-          backgroundColor: SlowverbColors.error,
-          action: SnackBarAction(
-            label: 'Dismiss',
-            onPressed: () => editorNotifier.clearError(),
           ),
-        ),
-      );
-      editorNotifier.clearError();
-    });
-  }
-
-  Future<void> _openPresetDialog(
-    BuildContext context,
-    AudioEditorState state,
-    AudioEditorNotifier editorNotifier,
-  ) async {
-    final selectedPreset = await showDialog<EffectPreset>(
-      context: context,
-      builder: (context) =>
-          PresetSelectorDialog(currentPreset: state.selectedPreset),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                onChanged: onChanged,
+                activeColor: SlowverbColors.neonCyan,
+                inactiveColor: SlowverbColors.surfaceVariant,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 50,
+            child: Text(
+              formatValue(value),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: SlowverbColors.neonCyan),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
     );
-
-    if (selectedPreset != null) {
-      editorNotifier.applyPreset(selectedPreset);
-    }
-  }
-
-  Future<void> _handlePlayPause(
-    AudioEditorNotifier editorNotifier,
-    AudioPlaybackNotifier playbackNotifier,
-    AudioPlayer audioPlayer,
-  ) async {
-    if (audioPlayer.audioSource == null) {
-      await _handlePreview(editorNotifier, playbackNotifier);
-      return;
-    }
-    await playbackNotifier.togglePlayPause();
-  }
-
-  Future<void> _handlePreview(
-    AudioEditorNotifier editorNotifier,
-    AudioPlaybackNotifier playbackNotifier,
-  ) async {
-    final previewUri = await editorNotifier.generatePreview();
-    if (previewUri != null && mounted) {
-      await playbackNotifier.loadAndPlay(previewUri);
-    }
-  }
-
-  Future<void> _handleStop(
-    AudioEditorNotifier editorNotifier,
-    AudioPlaybackNotifier playbackNotifier,
-  ) async {
-    await playbackNotifier.stop();
-    editorNotifier.stop();
-  }
-
-  void _handleSeek(
-    double position,
-    Duration totalDuration,
-    AudioEditorNotifier editorNotifier,
-    AudioPlaybackNotifier playbackNotifier,
-  ) {
-    final clamped = position.clamp(0.0, 1.0);
-    final target = Duration(
-      milliseconds: (clamped * totalDuration.inMilliseconds).toInt(),
-    );
-    playbackNotifier.seek(target);
-    editorNotifier.seek(clamped);
   }
 }
 
 class _EditorTitleBar extends StatelessWidget {
   final String presetName;
   final VoidCallback onBack;
-  final VoidCallback onOpenPresets;
   final VoidCallback onExport;
-  final VisualizerPreset? visualizerPreset;
-  final ValueChanged<VisualizerPreset>? onVisualizerPresetChanged;
-  final VoidCallback? onToggleFullscreen;
+  final VoidCallback onFullscreen;
 
   const _EditorTitleBar({
     required this.presetName,
     required this.onBack,
-    required this.onOpenPresets,
     required this.onExport,
-    this.visualizerPreset,
-    this.onVisualizerPresetChanged,
-    this.onToggleFullscreen,
+    required this.onFullscreen,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: SlowverbTokens.spacingLg,
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow
+            ? SlowverbTokens.spacingSm
+            : SlowverbTokens.spacingLg,
         vertical: SlowverbTokens.spacingSm,
       ),
       decoration: BoxDecoration(
@@ -400,331 +1008,42 @@ class _EditorTitleBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
         boxShadow: [SlowverbTokens.shadowCard],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: SlowverbTokens.spacingSm),
-          _buildActions(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Row(
-      children: [
-        _ChromeButton(icon: Icons.arrow_back, onTap: onBack),
-        const SizedBox(width: SlowverbTokens.spacingSm),
-        Text(
-          'Slowverb Editor',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            color: Colors.white,
-            letterSpacing: 1.2,
-            shadows: const [
-              Shadow(color: Colors.black54, offset: Offset(0, 1)),
-            ],
-          ),
-        ),
-        const Spacer(),
-        _PresetBadge(presetName: presetName),
-      ],
-    );
-  }
-
-  Widget _buildActions(BuildContext context) {
-    return Wrap(
-      spacing: SlowverbTokens.spacingSm,
-      runSpacing: SlowverbTokens.spacingSm,
-      alignment: WrapAlignment.end,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        // Visualizer preset selector
-        if (onVisualizerPresetChanged != null) ...[
-          _VisualizerPresetDropdown(
-            selectedPreset: visualizerPreset ?? VisualizerPresets.wmpRetro,
-            onChanged: onVisualizerPresetChanged!,
-          ),
-          if (onToggleFullscreen != null)
-            IconButton(
-              onPressed: onToggleFullscreen,
-              icon: const Icon(Icons.fullscreen, color: Colors.white70),
-              tooltip: 'Fullscreen Visualizer',
-              iconSize: 20,
-            ),
-          const SizedBox(width: SlowverbTokens.spacingSm),
-        ],
-        OutlinedButton.icon(
-          onPressed: onOpenPresets,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: const BorderSide(color: Colors.white70),
-            padding: const EdgeInsets.symmetric(
-              horizontal: SlowverbTokens.spacingMd,
-              vertical: SlowverbTokens.spacingSm,
-            ),
-          ),
-          icon: const Icon(Icons.tune),
-          label: const Text('Preset Browser'),
-        ),
-        ElevatedButton.icon(
-          onPressed: onExport,
-          icon: const Icon(Icons.download),
-          label: const Text('Export'),
-        ),
-      ],
-    );
-  }
-}
-
-class _VisualizerPresetDropdown extends StatelessWidget {
-  final VisualizerPreset selectedPreset;
-  final ValueChanged<VisualizerPreset> onChanged;
-
-  const _VisualizerPresetDropdown({
-    required this.selectedPreset,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.memory, size: 16, color: SlowverbColors.neonCyan),
-          const SizedBox(width: 4),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<VisualizerPreset>(
-              value: selectedPreset,
-              icon: const Icon(
-                Icons.arrow_drop_down,
-                color: Colors.white70,
-                size: 18,
-              ),
-              isDense: true,
-              dropdownColor: SlowverbColors.surface,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-              items: VisualizerPresets.all.map((preset) {
-                return DropdownMenuItem<VisualizerPreset>(
-                  value: preset,
-                  child: Text(preset.name),
-                );
-              }).toList(),
-              onChanged: (preset) {
-                if (preset != null) onChanged(preset);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FileInfoBanner extends StatelessWidget {
-  final String fileName;
-  final AudioMetadata? metadata;
-  final VoidCallback onChangeFile;
-
-  const _FileInfoBanner({
-    required this.fileName,
-    required this.metadata,
-    required this.onChangeFile,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
-        boxShadow: [SlowverbTokens.shadowCard],
-        border: Border.all(color: SlowverbColors.accentPink.withValues(alpha: 0.25)),
-      ),
       child: Row(
         children: [
-          const Icon(Icons.audio_file, color: SlowverbColors.accentPink),
+          _ChromeButton(icon: Icons.arrow_back, onTap: onBack),
           const SizedBox(width: SlowverbTokens.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileName,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          const Flexible(child: _VisualizerSelector()),
+          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
+          if (!isNarrow)
+            Flexible(
+              child: Text(
+                'Slowverb Editor',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  letterSpacing: 1.2,
+                  shadows: const [
+                    Shadow(color: Colors.black54, offset: Offset(0, 1)),
+                  ],
                 ),
-                if (metadata != null)
-                  Text(
-                    'Duration: ${metadata!.duration != null ? _formatDuration(metadata!.duration!) : 'Unknown'} · ${metadata!.sampleRate}Hz · ${metadata!.channels}ch',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-              ],
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: onChangeFile,
-            icon: const Icon(Icons.close),
-            tooltip: 'Change file',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WideEditorLayout extends StatelessWidget {
-  final double waveformPosition;
-  final Duration currentPosition;
-  final Duration totalDuration;
-  final bool isPlaying;
-  final bool isLoading;
-  final _EffectValues effectValues;
-  final EffectPreset selectedPreset;
-  final Future<void> Function() onPlayPause;
-  final Future<void> Function() onPreview;
-  final Future<void> Function() onStop;
-  final ValueChanged<double> onSeek;
-  final ValueChanged<EffectPreset> onPresetSelected;
-  final ValueChanged<double> onTempoChanged;
-  final ValueChanged<double> onPitchChanged;
-  final ValueChanged<double> onReverbChanged;
-  final ValueChanged<double> onEchoChanged;
-  final ValueChanged<double> onEqWarmthChanged;
-
-  const _WideEditorLayout({
-    required this.waveformPosition,
-    required this.currentPosition,
-    required this.totalDuration,
-    required this.isPlaying,
-    this.isLoading = false,
-    required this.effectValues,
-    required this.selectedPreset,
-    required this.onPlayPause,
-    required this.onPreview,
-    required this.onStop,
-    required this.onSeek,
-    required this.onPresetSelected,
-    required this.onTempoChanged,
-    required this.onPitchChanged,
-    required this.onReverbChanged,
-    required this.onEchoChanged,
-    required this.onEqWarmthChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 3,
-          child: _WaveformTransportCard(
-            waveformPosition: waveformPosition,
-            currentPosition: currentPosition,
-            totalDuration: totalDuration,
-            isPlaying: isPlaying,
-            isLoading: isLoading,
-            onPlayPause: onPlayPause,
-            onPreview: onPreview,
-            onStop: onStop,
-            onSeek: onSeek,
-          ),
-        ),
-        const SizedBox(width: SlowverbTokens.spacingLg),
-        Expanded(
-          flex: 2,
-          child: _EffectColumn(
-            effectValues: effectValues,
-            selectedPreset: selectedPreset,
-            onPresetSelected: onPresetSelected,
-            onTempoChanged: onTempoChanged,
-            onPitchChanged: onPitchChanged,
-            onReverbChanged: onReverbChanged,
-            onEchoChanged: onEchoChanged,
-            onEqWarmthChanged: onEqWarmthChanged,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StackedEditorLayout extends StatelessWidget {
-  final double waveformPosition;
-  final Duration currentPosition;
-  final Duration totalDuration;
-  final bool isPlaying;
-  final bool isLoading;
-  final _EffectValues effectValues;
-  final EffectPreset selectedPreset;
-  final Future<void> Function() onPlayPause;
-  final Future<void> Function() onPreview;
-  final Future<void> Function() onStop;
-  final ValueChanged<double> onSeek;
-  final ValueChanged<EffectPreset> onPresetSelected;
-  final ValueChanged<double> onTempoChanged;
-  final ValueChanged<double> onPitchChanged;
-  final ValueChanged<double> onReverbChanged;
-  final ValueChanged<double> onEchoChanged;
-  final ValueChanged<double> onEqWarmthChanged;
-
-  const _StackedEditorLayout({
-    required this.waveformPosition,
-    required this.currentPosition,
-    required this.totalDuration,
-    required this.isPlaying,
-    this.isLoading = false,
-    required this.effectValues,
-    required this.selectedPreset,
-    required this.onPlayPause,
-    required this.onPreview,
-    required this.onStop,
-    required this.onSeek,
-    required this.onPresetSelected,
-    required this.onTempoChanged,
-    required this.onPitchChanged,
-    required this.onReverbChanged,
-    required this.onEchoChanged,
-    required this.onEqWarmthChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _WaveformTransportCard(
-            waveformPosition: waveformPosition,
-            currentPosition: currentPosition,
-            totalDuration: totalDuration,
-            isPlaying: isPlaying,
-            isLoading: isLoading,
-            onPlayPause: onPlayPause,
-            onPreview: onPreview,
-            onStop: onStop,
-            onSeek: onSeek,
-          ),
-          const SizedBox(height: SlowverbTokens.spacingLg),
-          _EffectColumn(
-            effectValues: effectValues,
-            selectedPreset: selectedPreset,
-            onPresetSelected: onPresetSelected,
-            onTempoChanged: onTempoChanged,
-            onPitchChanged: onPitchChanged,
-            onReverbChanged: onReverbChanged,
-            onEchoChanged: onEchoChanged,
-            onEqWarmthChanged: onEqWarmthChanged,
-          ),
+          const Spacer(),
+          _ChromeButton(icon: Icons.fullscreen, onTap: onFullscreen),
+          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
+          if (!isNarrow) Flexible(child: _PresetBadge(presetName: presetName)),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          isNarrow
+              ? IconButton(
+                  onPressed: onExport,
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Export',
+                )
+              : ElevatedButton.icon(
+                  onPressed: onExport,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Export'),
+                ),
         ],
       ),
     );
@@ -732,30 +1051,33 @@ class _StackedEditorLayout extends StatelessWidget {
 }
 
 class _WaveformTransportCard extends StatelessWidget {
-  final double waveformPosition;
-  final Duration currentPosition;
-  final Duration totalDuration;
+  final String projectName;
+  final Duration position;
+  final Duration duration;
   final bool isPlaying;
-  final bool isLoading;
-  final Future<void> Function() onPlayPause;
-  final Future<void> Function() onPreview;
-  final Future<void> Function() onStop;
-  final ValueChanged<double> onSeek;
+  final bool isGeneratingPreview;
+  final VoidCallback onPlayPause;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onSeekBackward;
+  final VoidCallback onSeekForward;
 
   const _WaveformTransportCard({
-    required this.waveformPosition,
-    required this.currentPosition,
-    required this.totalDuration,
+    required this.projectName,
+    required this.position,
+    required this.duration,
     required this.isPlaying,
-    this.isLoading = false,
+    required this.isGeneratingPreview,
     required this.onPlayPause,
-    required this.onPreview,
-    required this.onStop,
     required this.onSeek,
+    required this.onSeekBackward,
+    required this.onSeekForward,
   });
 
   @override
   Widget build(BuildContext context) {
+    final totalMs = duration.inMilliseconds == 0 ? 1 : duration.inMilliseconds;
+    final progress = position.inMilliseconds / totalMs;
+
     return Container(
       padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
       decoration: BoxDecoration(
@@ -764,28 +1086,45 @@ class _WaveformTransportCard extends StatelessWidget {
         boxShadow: [SlowverbTokens.shadowCard],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 220,
-            child: WaveformPanel(
-              playbackPosition: waveformPosition,
-              onSeek: onSeek,
+          Text(projectName, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: SlowverbTokens.spacingMd),
+          // Visualizer is now in background
+          Slider(
+            value: progress.clamp(0.0, 1.0),
+            onChanged: (value) => onSeek((value * totalMs).toInt()),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SlowverbTokens.spacingSm,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _formatDuration(position),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                Text(
+                  _formatDuration(duration),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: SlowverbTokens.spacingMd),
-          TransportBar(
-            isPlaying: isPlaying,
-            isLoading: isLoading,
-            currentTime: currentPosition,
-            totalTime: totalDuration,
-            onPlayPause: onPlayPause,
-            onStop: onStop,
-            onPreview: onPreview,
-            onSeek: (position) => onSeek(
-              position.inMilliseconds /
-                  (totalDuration.inMilliseconds == 0
-                      ? 1
-                      : totalDuration.inMilliseconds),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Center(
+              child: PlaybackControls(
+                isPlaying: isPlaying,
+                onPlayPause: onPlayPause,
+                onSeekBackward: onSeekBackward,
+                onSeekForward: onSeekForward,
+                onLoop: () {},
+                isProcessing: isGeneratingPreview,
+              ),
             ),
           ),
         ],
@@ -795,24 +1134,18 @@ class _WaveformTransportCard extends StatelessWidget {
 }
 
 class _EffectColumn extends StatelessWidget {
-  final _EffectValues effectValues;
-  final EffectPreset selectedPreset;
-  final ValueChanged<EffectPreset> onPresetSelected;
-  final ValueChanged<double> onTempoChanged;
-  final ValueChanged<double> onPitchChanged;
-  final ValueChanged<double> onReverbChanged;
-  final ValueChanged<double> onEchoChanged;
-  final ValueChanged<double> onEqWarmthChanged;
+  final String selectedPresetId;
+  final Map<String, double> parameters;
+  final ValueChanged<String> onPresetSelected;
+  final void Function(String, double) onUpdateParam;
+  final VoidCallback onMinimize;
 
   const _EffectColumn({
-    required this.effectValues,
-    required this.selectedPreset,
+    required this.selectedPresetId,
+    required this.parameters,
     required this.onPresetSelected,
-    required this.onTempoChanged,
-    required this.onPitchChanged,
-    required this.onReverbChanged,
-    required this.onEchoChanged,
-    required this.onEqWarmthChanged,
+    required this.onUpdateParam,
+    required this.onMinimize,
   });
 
   @override
@@ -827,73 +1160,80 @@ class _EffectColumn extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PresetQuickSwitch(
-            selectedPreset: selectedPreset,
-            onPresetSelected: onPresetSelected,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Quick Presets',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              _ChromeButton(icon: Icons.unfold_less, onTap: onMinimize),
+            ],
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: Presets.all.map((preset) {
+                final isSelected = preset.id == selectedPresetId;
+                return Padding(
+                  padding: const EdgeInsets.only(
+                    right: SlowverbTokens.spacingSm,
+                  ),
+                  child: ChoiceChip(
+                    label: Text(preset.name),
+                    selected: isSelected,
+                    onSelected: (_) => onPresetSelected(preset.id),
+                    selectedColor: SlowverbColors.hotPink.withValues(
+                      alpha: 0.2,
+                    ), // Fixed deprecated withOpacity
+                    backgroundColor: SlowverbColors.surfaceVariant,
+                    labelStyle: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(
+                          color: isSelected
+                              ? SlowverbColors.hotPink
+                              : SlowverbColors.textPrimary, // Fixed color
+                        ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        SlowverbTokens.radiusSm,
+                      ),
+                      side: BorderSide(
+                        color: isSelected
+                            ? SlowverbColors.hotPink
+                            : SlowverbColors.surfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           const SizedBox(height: SlowverbTokens.spacingMd),
-          EffectControls(
-            tempo: effectValues.tempo,
-            pitch: effectValues.pitch,
-            reverbAmount: effectValues.reverbAmount,
-            echoAmount: effectValues.echoAmount,
-            eqWarmth: effectValues.eqWarmth,
-            onTempoChanged: onTempoChanged,
-            onPitchChanged: onPitchChanged,
-            onReverbChanged: onReverbChanged,
-            onEchoChanged: onEchoChanged,
-            onEqWarmthChanged: onEqWarmthChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PresetQuickSwitch extends StatelessWidget {
-  final EffectPreset selectedPreset;
-  final ValueChanged<EffectPreset> onPresetSelected;
-
-  const _PresetQuickSwitch({
-    required this.selectedPreset,
-    required this.onPresetSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Quick Presets', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: SlowverbTokens.spacingSm),
-        Wrap(
-          spacing: SlowverbTokens.spacingSm,
-          runSpacing: SlowverbTokens.spacingSm,
-          children: Presets.all.map((preset) {
-            final isSelected = preset.id == selectedPreset.id;
-            return ChoiceChip(
-              label: Text(preset.name),
-              selected: isSelected,
-              onSelected: (_) => onPresetSelected(preset),
-              selectedColor: SlowverbColors.accentPink.withValues(alpha: 0.2),
-              backgroundColor: SlowverbColors.surfaceVariant,
-              labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: isSelected
-                    ? SlowverbColors.accentPink
-                    : SlowverbColors.textPrimary,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-                side: BorderSide(
-                  color: isSelected
-                      ? SlowverbColors.accentPink
-                      : SlowverbColors.surfaceVariant,
+          // Use definitions for consistent UI
+          ..._kParameterDefinitions
+              .where((p) => p.id != 'eqWarmth')
+              .map(
+                (param) => Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: SlowverbTokens.spacingMd,
+                  ),
+                  child: EffectSlider(
+                    label: param.label,
+                    value: parameters[param.id] ?? param.defaultValue,
+                    min: param.min,
+                    max: param.max,
+                    unit: param.id == 'pitch' ? 'st' : '%',
+                    formatValue: param.id == 'pitch'
+                        ? (v) => v.toStringAsFixed(1)
+                        : (v) => '${(v * 100).toInt()}%',
+                    onChanged: (value) => onUpdateParam(param.id, value),
+                  ),
                 ),
               ),
-            );
-          }).toList(),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -907,7 +1247,9 @@ class _ChromeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.2),
+      color: Colors.white.withValues(
+        alpha: 0.2,
+      ), // Fixed deprecated withOpacity
       borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -917,6 +1259,94 @@ class _ChromeButton extends StatelessWidget {
           child: Icon(icon, color: Colors.white),
         ),
       ),
+    );
+  }
+}
+
+class _VisualizerSelector extends ConsumerWidget {
+  const _VisualizerSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visualizerState = ref.watch(visualizerProvider);
+    final currentPreset = visualizerState.activePreset;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Change Visualizer',
+      offset: const Offset(0, 40),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: SlowverbTokens.spacingMd,
+          vertical: SlowverbTokens.spacingXs + 2,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15), // Fixed withOpacity
+          borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+            const SizedBox(width: SlowverbTokens.spacingXs),
+            Flexible(
+              child: Text(
+                currentPreset.name,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Colors.white,
+                  letterSpacing: 0.8,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white70),
+          ],
+        ),
+      ),
+      onSelected: (presetId) {
+        ref.read(visualizerProvider.notifier).selectPreset(presetId);
+      },
+      itemBuilder: (context) {
+        return VisualizerController.presets.map((preset) {
+          final isSelected = preset.id == currentPreset.id;
+          return PopupMenuItem<String>(
+            value: preset.id,
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18,
+                  color: isSelected ? SlowverbColors.neonCyan : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        preset.name,
+                        style: TextStyle(
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      Text(
+                        preset.description,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList();
+      },
     );
   }
 }
@@ -934,7 +1364,7 @@ class _PresetBadge extends StatelessWidget {
         vertical: SlowverbTokens.spacingXs + 2,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: Colors.white.withValues(alpha: 0.15), // Fixed withOpacity
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
         border: Border.all(color: Colors.white24),
       ),
@@ -943,11 +1373,14 @@ class _PresetBadge extends StatelessWidget {
         children: [
           const Icon(Icons.bolt, size: 16, color: Colors.white),
           const SizedBox(width: SlowverbTokens.spacingXs),
-          Text(
-            presetName,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
-              letterSpacing: 1.2,
+          Flexible(
+            child: Text(
+              presetName,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Colors.white,
+                letterSpacing: 1.2,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -956,45 +1389,203 @@ class _PresetBadge extends StatelessWidget {
   }
 }
 
-class _LoadingOverlay extends StatelessWidget {
-  const _LoadingOverlay();
+/// Metadata panel for ultra-wide displays showing track info and effect summary.
+class _TrackMetadataPanel extends StatelessWidget {
+  final String projectName;
+  final Duration duration;
+  final String presetId;
+  final Map<String, double> parameters;
+
+  const _TrackMetadataPanel({
+    required this.projectName,
+    required this.duration,
+    required this.presetId,
+    required this.parameters,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45)),
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    final preset = Presets.all.firstWhere(
+      (p) => p.id == presetId,
+      orElse: () => Presets.slowedReverb,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+      decoration: BoxDecoration(
+        color: SlowverbColors.surface,
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
+        boxShadow: [SlowverbTokens.shadowCard],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
             children: [
-              CircularProgressIndicator(color: SlowverbColors.accentPink),
-              SizedBox(height: SlowverbTokens.spacingSm),
-              Text('Processing audio...'),
+              const Icon(
+                Icons.info_outline,
+                color: SlowverbColors.neonCyan,
+                size: 20,
+              ),
+              const SizedBox(width: SlowverbTokens.spacingSm),
+              Text(
+                'Track Info',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: SlowverbTokens.spacingMd),
+
+          // Track Details
+          _MetadataRow(label: 'Name', value: projectName),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          _MetadataRow(label: 'Duration', value: _formatDuration(duration)),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          _MetadataRow(label: 'Preset', value: preset.name),
+
+          const SizedBox(height: SlowverbTokens.spacingLg),
+
+          // Current Effect Values
+          Text(
+            'Current Effects',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(color: SlowverbColors.hotPink),
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+
+          _EffectValueBar(
+            label: 'Tempo',
+            value: parameters['tempo'] ?? 1.0,
+            min: 0.5,
+            max: 1.5,
+            formatValue: (v) => '${(v * 100).toInt()}%',
+          ),
+          const SizedBox(height: SlowverbTokens.spacingXs),
+          _EffectValueBar(
+            label: 'Pitch',
+            value: parameters['pitch'] ?? 0.0,
+            min: -12,
+            max: 12,
+            formatValue: (v) => '${v.toStringAsFixed(1)} st',
+          ),
+          const SizedBox(height: SlowverbTokens.spacingXs),
+          _EffectValueBar(
+            label: 'Reverb',
+            value: parameters['reverbAmount'] ?? 0.0,
+            min: 0,
+            max: 1,
+            formatValue: (v) => '${(v * 100).toInt()}%',
+          ),
+          const SizedBox(height: SlowverbTokens.spacingXs),
+          _EffectValueBar(
+            label: 'Echo',
+            value: parameters['echoAmount'] ?? 0.0,
+            min: 0,
+            max: 1,
+            formatValue: (v) => '${(v * 100).toInt()}%',
+          ),
+        ],
       ),
     );
   }
 }
 
-// _EditorBackdrop removed - now using VisualizerPanel as background
+class _MetadataRow extends StatelessWidget {
+  final String label;
+  final String value;
 
-class _EffectValues {
-  final double tempo;
-  final double pitch;
-  final double reverbAmount;
-  final double echoAmount;
-  final double eqWarmth;
+  const _MetadataRow({required this.label, required this.value});
 
-  const _EffectValues({
-    required this.tempo,
-    required this.pitch,
-    required this.reverbAmount,
-    required this.echoAmount,
-    required this.eqWarmth,
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: SlowverbColors.textSecondary),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: SlowverbColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EffectValueBar extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String Function(double) formatValue;
+
+  const _EffectValueBar({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.formatValue,
   });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedValue = ((value - min) / (max - min)).clamp(0.0, 1.0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+            Text(
+              formatValue(value),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: SlowverbColors.neonCyan),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 6,
+          decoration: BoxDecoration(
+            color: SlowverbColors.surfaceVariant,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: normalizedValue,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [SlowverbColors.hotPink, SlowverbColors.neonCyan],
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 String _formatDuration(Duration duration) {
