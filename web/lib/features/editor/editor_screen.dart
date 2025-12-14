@@ -126,7 +126,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     final projectId = state.projectId ?? 'temp';
 
     return ResponsiveScaffold(
-      // Use Stack to layer visualizer behind controls
+      fullWidth: true,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -138,15 +138,8 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 return VisualizerPanel(
                   preset: visualizerState.activePreset,
                   isPlaying: visualizerState.isPlaying,
-                  // analysisStream should ideally come from waveformProvider or engine
-                  // For now, web VisualizerPanel might need adaptation to get stream or it uses AudioAnalysisFrame
-                  // In existing VisualizerPanel it takes 'analysisStream'.
-                  // We need to supply it if we want actual visualization.
-                  // For now pass null or empty if we don't have it easily accessible?
-                  // Or assume VisualizerPanel works with audio engine implicitly?
-                  // Checking VisualizerPanel content: it takes analysisStream.
-                  // If null, it won't animate.
-                  analysisStream: null, // Placeholder for now
+                  analysisStream: null,
+                  isFullscreen: true,
                 );
               },
             ),
@@ -236,7 +229,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                   children: [
                                     // Left: Expanded Waveform Transport
                                     Expanded(
-                                      flex: 3,
+                                      flex: 2,
                                       child: SingleChildScrollView(
                                         child: _WaveformTransportCard(
                                           projectName: projectName,
@@ -248,9 +241,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                           onPlayPause: notifier.togglePlayback,
                                           onSeek: (pos) => notifier.seek(
                                             duration.inMilliseconds > 0
-                                                ? pos /
-                                                      duration
-                                                          .inMilliseconds // Convert ms to 0-1
+                                                ? pos / duration.inMilliseconds
                                                 : 0.0,
                                           ),
                                           onSeekBackward: () => notifier.seek(
@@ -279,24 +270,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                     const SizedBox(
                                       width: SlowverbTokens.spacingMd,
                                     ),
-                                    // Center: Track Info & Metadata Panel
-                                    Expanded(
-                                      flex: 2,
-                                      child: SingleChildScrollView(
-                                        child: _TrackMetadataPanel(
-                                          projectName: projectName,
-                                          duration: duration,
-                                          presetId: selectedPresetId,
-                                          parameters: parameters,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      width: SlowverbTokens.spacingMd,
-                                    ),
                                     // Right: Effects Column
                                     Expanded(
-                                      flex: 2,
+                                      flex: 3,
                                       child: SingleChildScrollView(
                                         child: _EffectColumn(
                                           selectedPresetId: selectedPresetId,
@@ -1171,67 +1147,51 @@ class _EffectColumn extends StatelessWidget {
             ],
           ),
           const SizedBox(height: SlowverbTokens.spacingSm),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: Presets.all.map((preset) {
-                final isSelected = preset.id == selectedPresetId;
-                return Padding(
-                  padding: const EdgeInsets.only(
-                    right: SlowverbTokens.spacingSm,
-                  ),
-                  child: ChoiceChip(
-                    label: Text(preset.name),
-                    selected: isSelected,
-                    onSelected: (_) => onPresetSelected(preset.id),
-                    selectedColor: SlowverbColors.hotPink.withValues(
-                      alpha: 0.2,
-                    ), // Fixed deprecated withOpacity
-                    backgroundColor: SlowverbColors.surfaceVariant,
-                    labelStyle: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(
-                          color: isSelected
-                              ? SlowverbColors.hotPink
-                              : SlowverbColors.textPrimary, // Fixed color
-                        ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        SlowverbTokens.radiusSm,
-                      ),
-                      side: BorderSide(
-                        color: isSelected
-                            ? SlowverbColors.hotPink
-                            : SlowverbColors.surfaceVariant,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingMd),
-          // Use definitions for consistent UI
-          ..._kParameterDefinitions
-              .where((p) => p.id != 'eqWarmth')
-              .map(
-                (param) => Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: SlowverbTokens.spacingMd,
-                  ),
-                  child: EffectSlider(
-                    label: param.label,
-                    value: parameters[param.id] ?? param.defaultValue,
-                    min: param.min,
-                    max: param.max,
-                    unit: param.id == 'pitch' ? 'st' : '%',
-                    formatValue: param.id == 'pitch'
-                        ? (v) => v.toStringAsFixed(1)
-                        : (v) => '${(v * 100).toInt()}%',
-                    onChanged: (value) => onUpdateParam(param.id, value),
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            children: Presets.all.map((preset) {
+              final isSelected = preset.id == selectedPresetId;
+              return ChoiceChip(
+                label: Text(preset.name),
+                selected: isSelected,
+                onSelected: (_) => onPresetSelected(preset.id),
+                selectedColor: SlowverbColors.hotPink.withValues(alpha: 0.2),
+                backgroundColor: SlowverbColors.surfaceVariant,
+                labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isSelected
+                      ? SlowverbColors.hotPink
+                      : SlowverbColors.textPrimary,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+                  side: BorderSide(
+                    color: isSelected
+                        ? SlowverbColors.hotPink
+                        : SlowverbColors.surfaceVariant,
                   ),
                 ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: SlowverbTokens.spacingMd),
+          // All effect parameters
+          ..._kParameterDefinitions.map(
+            (param) => Padding(
+              padding: const EdgeInsets.only(bottom: SlowverbTokens.spacingMd),
+              child: EffectSlider(
+                label: param.label,
+                value: parameters[param.id] ?? param.defaultValue,
+                min: param.min,
+                max: param.max,
+                unit: param.id == 'pitch' ? 'st' : '%',
+                formatValue: param.id == 'pitch'
+                    ? (v) => v.toStringAsFixed(1)
+                    : (v) => '${(v * 100).toInt()}%',
+                onChanged: (value) => onUpdateParam(param.id, value),
               ),
+            ),
+          ),
         ],
       ),
     );
@@ -1385,205 +1345,6 @@ class _PresetBadge extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Metadata panel for ultra-wide displays showing track info and effect summary.
-class _TrackMetadataPanel extends StatelessWidget {
-  final String projectName;
-  final Duration duration;
-  final String presetId;
-  final Map<String, double> parameters;
-
-  const _TrackMetadataPanel({
-    required this.projectName,
-    required this.duration,
-    required this.presetId,
-    required this.parameters,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final preset = Presets.all.firstWhere(
-      (p) => p.id == presetId,
-      orElse: () => Presets.slowedReverb,
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
-        boxShadow: [SlowverbTokens.shadowCard],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              const Icon(
-                Icons.info_outline,
-                color: SlowverbColors.neonCyan,
-                size: 20,
-              ),
-              const SizedBox(width: SlowverbTokens.spacingSm),
-              Text(
-                'Track Info',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: SlowverbTokens.spacingMd),
-
-          // Track Details
-          _MetadataRow(label: 'Name', value: projectName),
-          const SizedBox(height: SlowverbTokens.spacingSm),
-          _MetadataRow(label: 'Duration', value: _formatDuration(duration)),
-          const SizedBox(height: SlowverbTokens.spacingSm),
-          _MetadataRow(label: 'Preset', value: preset.name),
-
-          const SizedBox(height: SlowverbTokens.spacingLg),
-
-          // Current Effect Values
-          Text(
-            'Current Effects',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(color: SlowverbColors.hotPink),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingSm),
-
-          _EffectValueBar(
-            label: 'Tempo',
-            value: parameters['tempo'] ?? 1.0,
-            min: 0.5,
-            max: 1.5,
-            formatValue: (v) => '${(v * 100).toInt()}%',
-          ),
-          const SizedBox(height: SlowverbTokens.spacingXs),
-          _EffectValueBar(
-            label: 'Pitch',
-            value: parameters['pitch'] ?? 0.0,
-            min: -12,
-            max: 12,
-            formatValue: (v) => '${v.toStringAsFixed(1)} st',
-          ),
-          const SizedBox(height: SlowverbTokens.spacingXs),
-          _EffectValueBar(
-            label: 'Reverb',
-            value: parameters['reverbAmount'] ?? 0.0,
-            min: 0,
-            max: 1,
-            formatValue: (v) => '${(v * 100).toInt()}%',
-          ),
-          const SizedBox(height: SlowverbTokens.spacingXs),
-          _EffectValueBar(
-            label: 'Echo',
-            value: parameters['echoAmount'] ?? 0.0,
-            min: 0,
-            max: 1,
-            formatValue: (v) => '${(v * 100).toInt()}%',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetadataRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _MetadataRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: SlowverbColors.textSecondary),
-        ),
-        Flexible(
-          child: Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: SlowverbColors.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EffectValueBar extends StatelessWidget {
-  final String label;
-  final double value;
-  final double min;
-  final double max;
-  final String Function(double) formatValue;
-
-  const _EffectValueBar({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.formatValue,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final normalizedValue = ((value - min) / (max - min)).clamp(0.0, 1.0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: SlowverbColors.textSecondary,
-              ),
-            ),
-            Text(
-              formatValue(value),
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: SlowverbColors.neonCyan),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 6,
-          decoration: BoxDecoration(
-            color: SlowverbColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: normalizedValue,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [SlowverbColors.hotPink, SlowverbColors.neonCyan],
-                ),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

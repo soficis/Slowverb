@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/project_repository_provider.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -25,6 +27,8 @@ class AudioEditorState {
   final String? projectName;
   final DateTime? projectCreatedAt;
   final Object? fileHandle;
+  final Uri? currentPreviewUri;
+  final bool isPreviewDirty;
 
   const AudioEditorState({
     this.audioFileName,
@@ -40,6 +44,8 @@ class AudioEditorState {
     this.projectName,
     this.projectCreatedAt,
     this.fileHandle,
+    this.currentPreviewUri,
+    this.isPreviewDirty = true,
   });
 
   Duration? get audioDuration => metadata?.duration;
@@ -58,6 +64,8 @@ class AudioEditorState {
     String? projectName,
     DateTime? projectCreatedAt,
     Object? fileHandle,
+    Uri? currentPreviewUri,
+    bool? isPreviewDirty,
   }) {
     return AudioEditorState(
       audioFileName: audioFileName ?? this.audioFileName,
@@ -73,6 +81,8 @@ class AudioEditorState {
       projectName: projectName ?? this.projectName,
       projectCreatedAt: projectCreatedAt ?? this.projectCreatedAt,
       fileHandle: fileHandle ?? this.fileHandle,
+      currentPreviewUri: currentPreviewUri ?? this.currentPreviewUri,
+      isPreviewDirty: isPreviewDirty ?? this.isPreviewDirty,
     );
   }
 }
@@ -87,7 +97,32 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
           selectedPreset: Presets.slowedReverb,
           currentParameters: Map.from(Presets.slowedReverb.parameters),
         ),
-      );
+      ) {
+    _initPlaybackListener();
+  }
+
+  void _initPlaybackListener() {
+    final player = _ref.read(audioPlayerProvider);
+    player.positionStream.listen((pos) {
+      final audioDuration = state.metadata?.duration;
+      if (audioDuration != null && audioDuration.inMilliseconds > 0) {
+        final totalMs = audioDuration.inMilliseconds;
+        final normalized = (pos.inMilliseconds / totalMs).clamp(0.0, 1.0);
+
+        // Only update if changed significantly to avoid spamming state updates
+        if ((normalized - state.playbackPosition).abs() > 0.001) {
+          state = state.copyWith(playbackPosition: normalized);
+        }
+      }
+    });
+
+    // Also listen for player completion to reset position or handle looping
+    player.playerStateStream.listen((playerState) {
+      if (playerState.processingState == ProcessingState.completed) {
+        state = state.copyWith(isPlaying: false, playbackPosition: 0.0);
+      }
+    });
+  }
 
   /// Load audio file
   Future<void> loadAudioFile(AudioFileData fileData, {Project? project}) async {
@@ -112,6 +147,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       projectName: project?.name ?? fileData.filename,
       projectCreatedAt: createdAt,
       fileHandle: fileData.fileHandle,
+      // Reset preview dirty state on new load
+      isPreviewDirty: true,
+      currentPreviewUri: null,
     );
 
     try {
@@ -155,6 +193,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     state = state.copyWith(
       selectedPreset: preset,
       currentParameters: Map.from(preset.parameters),
+      isPreviewDirty: true,
     );
     unawaited(_persistProjectSnapshot());
   }
@@ -163,23 +202,105 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   void updateParameter(String key, double value) {
     final newParams = Map<String, double>.from(state.currentParameters);
     newParams[key] = value;
-    state = state.copyWith(currentParameters: newParams);
+    newParams[key] = value;
+    state = state.copyWith(currentParameters: newParams, isPreviewDirty: true);
     unawaited(_persistProjectSnapshot());
   }
 
-  /// Toggle playback
-  void togglePlayback() {
-    state = state.copyWith(isPlaying: !state.isPlaying);
+  /// Toggle playback - renders effects and plays via just_audio
+  Future<void> togglePlayback() async {
+    print(
+      '[AudioEditor] togglePlayback called. current fileId: ${state.fileId}, isPlaying: ${state.isPlaying}',
+    );
+    if (state.fileId == null) {
+      print('[AudioEditor] No file loaded.');
+      return;
+    }
+
+    final playback = _ref.read(audioPlaybackProvider.notifier);
+
+    if (state.isPlaying) {
+      // Stop playback
+      print('[AudioEditor] Stopping playback.');
+      await playback.stop();
+      state = state.copyWith(isPlaying: false);
+      return;
+    }
+
+    // Start playback - generate preview if needed
+    try {
+      state = state.copyWith(isLoading: true, error: null);
+
+      // Check if we have a cached preview URI
+      Uri? previewUri = state.currentPreviewUri;
+
+      // Use existing preview if available and parameters haven't changed
+      if (!state.isPreviewDirty && state.currentPreviewUri != null) {
+        print(
+          '[AudioEditor] reusing existing preview: ${state.currentPreviewUri}',
+        );
+        previewUri = state.currentPreviewUri;
+      } else {
+        // Regenerate preview
+        print(
+          '[AudioEditor] Generating preview (dirty=${state.isPreviewDirty})...',
+        );
+
+        // Show loading only if we are actually processing
+        state = state.copyWith(isLoading: true, error: null);
+
+        final uri = await generatePreview();
+        if (uri != null) {
+          print('[AudioEditor] Preview generated successfully: $uri');
+          previewUri = uri;
+          state = state.copyWith(
+            currentPreviewUri: previewUri,
+            isPreviewDirty: false,
+          );
+        } else {
+          print('[AudioEditor] generatePreview returned null.');
+        }
+      }
+
+      if (previewUri != null) {
+        print('[AudioEditor] Playing preview URI...');
+        await playback.playPreview(previewUri);
+        state = state.copyWith(isPlaying: true, isLoading: false);
+        print('[AudioEditor] Playback started.');
+      } else {
+        print('[AudioEditor] Failed to start playback: No preview URI.');
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Failed to generate audio preview',
+        );
+      }
+    } catch (e, stack) {
+      print('[AudioEditor] Playback failed with error: $e\n$stack');
+      state = state.copyWith(
+        isLoading: false,
+        isPlaying: false,
+        error: 'Playback failed: $e',
+      );
+    }
   }
 
   /// Stop playback
-  void stop() {
+  Future<void> stop() async {
+    final playback = _ref.read(audioPlaybackProvider.notifier);
+    await playback.stop();
     state = state.copyWith(isPlaying: false, playbackPosition: 0.0);
   }
 
   /// Seek to position
   void seek(double position) {
     state = state.copyWith(playbackPosition: position);
+
+    final duration = state.metadata?.duration;
+    if (duration != null && duration.inMilliseconds > 0) {
+      final totalMs = duration.inMilliseconds;
+      final seekPos = Duration(milliseconds: (position * totalMs).toInt());
+      _ref.read(audioPlaybackProvider.notifier).seek(seekPos);
+    }
   }
 
   /// Generate preview
@@ -190,11 +311,15 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     try {
       final engine = _ref.read(audioEngineProvider);
+      print('[AudioEditor] Reading engine provider: $engine');
 
       // Build effect config from current parameters
       final config = EffectConfig.fromParams(
         state.selectedPreset.id,
         state.currentParameters,
+      );
+      print(
+        '[AudioEditor] Calling engine.renderPreview with config: ${state.currentParameters}',
       );
 
       // Render full audio with effects applied
@@ -204,10 +329,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         duration: state.metadata?.duration, // Process entire file
       );
 
+      print('[AudioEditor] Engine returned preview URI: $previewUri');
+
       state = state.copyWith(isLoading: false);
 
       return previewUri;
-    } catch (e) {
+    } catch (e, stack) {
+      print('[AudioEditor] generatePreview failed: $e\n$stack');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to generate preview: $e',

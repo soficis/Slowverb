@@ -10,7 +10,7 @@ class VisualizerState {
 
 class VisualizerController extends StateNotifier<VisualizerState> {
   VisualizerController()
-    : super(const VisualizerState(activePreset: VisualizerPresets.wmpRetro));
+    : super(VisualizerState(activePreset: VisualizerPresets.random()));
 
   static List<VisualizerPreset> get presets => VisualizerPresets.all;
 
@@ -19,7 +19,7 @@ class VisualizerController extends StateNotifier<VisualizerState> {
 
     final preset = presets.firstWhere(
       (p) => p.id == id,
-      orElse: () => VisualizerPresets.wmpRetro,
+      orElse: () => VisualizerPresets.pipesVaporwave,
     );
     state = VisualizerState(activePreset: preset, isPlaying: state.isPlaying);
   }

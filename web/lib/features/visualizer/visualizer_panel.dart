@@ -45,6 +45,7 @@ class VisualizerPanel extends ConsumerStatefulWidget {
   final double? height;
   final bool isPlaying;
   final VoidCallback? onDoubleTap;
+  final bool isFullscreen;
 
   const VisualizerPanel({
     super.key,
@@ -53,6 +54,7 @@ class VisualizerPanel extends ConsumerStatefulWidget {
     this.height,
     this.isPlaying = false,
     this.onDoubleTap,
+    this.isFullscreen = false,
   });
 
   @override
@@ -150,6 +152,92 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
     final presetId = widget.preset?.id ?? 'wmp_retro';
     final shadersAsync = ref.watch(webShaderProvider);
 
+    // Fullscreen mode: no decorations, just the visualizer
+    if (widget.isFullscreen) {
+      return GestureDetector(
+        onDoubleTap: widget.onDoubleTap,
+        child: Container(
+          height: widget.height,
+          color: const Color(0xFF0A0A12),
+          child: Stack(
+            children: [
+              // Visualizer - GPU or CPU
+              shadersAsync.when(
+                data: (shaders) {
+                  final shader = shaders[presetId];
+                  if (shader != null) {
+                    return CustomPaint(
+                      painter: GpuVisualizerPainter(
+                        shader: shader,
+                        frame: _currentFrame,
+                        time: _time,
+                      ),
+                      size: Size.infinite,
+                      isComplex: true,
+                      willChange: true,
+                      child: Container(),
+                    );
+                  }
+                  // Fallback to CPU painter
+                  return CustomPaint(
+                    painter: _getCpuPainter(presetId),
+                    size: Size.infinite,
+                  );
+                },
+                loading: () => _buildLoadingView(),
+                error: (_, __) => CustomPaint(
+                  painter: _getCpuPainter(presetId),
+                  size: Size.infinite,
+                ),
+              ),
+
+              // Preset label with GPU/CPU indicator
+              Positioned(
+                bottom: 6,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        shadersAsync.maybeWhen(
+                          data: (shaders) => shaders[presetId] != null
+                              ? Icons.memory
+                              : Icons.computer,
+                          orElse: () => Icons.computer,
+                        ),
+                        size: 10,
+                        color: SlowverbColors.neonCyan,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${shadersAsync.maybeWhen(data: (shaders) => shaders[presetId] != null ? 'GPU' : 'CPU', loading: () => '...', orElse: () => 'CPU')} · ${widget.preset?.name.toUpperCase() ?? 'WMP RETRO'}',
+                        style: const TextStyle(
+                          color: SlowverbColors.neonCyan,
+                          fontSize: 9,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Card mode: with decorations
     return GestureDetector(
       onDoubleTap: widget.onDoubleTap,
       child: Container(

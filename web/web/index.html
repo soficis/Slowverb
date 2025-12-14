@@ -119,15 +119,18 @@
   <script type="module" src="js/slowverb_bridge.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 
-  <!-- Vercel Web Analytics -->
+  <!-- Vercel Web Analytics (optional, gracefully fails if blocked) -->
   <script>
     // Initialize Vercel Web Analytics with event tracking
+    // This is optional - app works fine if blocked by ad blockers
     window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) };
   </script>
-  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/insights/script.js"
+    onerror="console.debug('Analytics blocked by browser extension')"></script>
 
-  <!-- Vercel Speed Insights -->
-  <script defer src="https://cdn.vercel-analytics.com/v1/web.js"></script>
+  <!-- Vercel Speed Insights (optional, gracefully fails if blocked) -->
+  <script defer src="https://cdn.vercel-analytics.com/v1/web.js"
+    onerror="console.debug('Speed insights blocked by browser extension')"></script>
 
   <script>
     if ('serviceWorker' in navigator) {

@@ -584,19 +584,45 @@ class WasmAudioEngine implements AudioEngine {
 
   // JS interop helpers
   T _getProperty<T>(JSObject object, String property) {
-    if (T == String) {
-      return object.getProperty<JSString?>(property.toJS)?.toDart as T;
+    try {
+      if (T == String) {
+        final value = object.getProperty<JSString?>(property.toJS)?.toDart;
+        if (value == null) {
+          throw StateError('Expected String for "$property" but got null');
+        }
+        return value as T;
+      }
+      if (T == int) {
+        final value = object.getProperty<JSNumber?>(property.toJS)?.toDartInt;
+        if (value == null) {
+          throw StateError('Expected int for "$property" but got null');
+        }
+        return value as T;
+      }
+      if (T == double) {
+        final value = object
+            .getProperty<JSNumber?>(property.toJS)
+            ?.toDartDouble;
+        if (value == null) {
+          throw StateError('Expected double for "$property" but got null');
+        }
+        return value as T;
+      }
+      if (T == bool) {
+        final value = object.getProperty<JSBoolean?>(property.toJS)?.toDart;
+        if (value == null) {
+          throw StateError('Expected bool for "$property" but got null');
+        }
+        return value as T;
+      }
+      // ignore: invalid_runtime_check_with_js_interop_types
+      final value = object.getProperty<JSAny?>(property.toJS);
+      if (value == null) {
+        throw StateError('Expected value for "$property" but got null');
+      }
+      return value as T;
+    } catch (e) {
+      throw StateError('Failed to get property "$property" from JS object: $e');
     }
-    if (T == int) {
-      return object.getProperty<JSNumber?>(property.toJS)?.toDartInt as T;
-    }
-    if (T == double) {
-      return object.getProperty<JSNumber?>(property.toJS)?.toDartDouble as T;
-    }
-    if (T == bool) {
-      return object.getProperty<JSBoolean?>(property.toJS)?.toDart as T;
-    }
-    // ignore: invalid_runtime_check_with_js_interop_types
-    return object.getProperty<JSAny?>(property.toJS) as T;
   }
 }

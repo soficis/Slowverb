@@ -3,7 +3,20 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 @JS('SlowverbBridge')
-external SlowverbBridgeJS get slowverbBridgeJS;
+external SlowverbBridgeJS? get _slowverbBridgeJSNullable;
+
+/// Returns the SlowverbBridge JS object.
+/// Throws a clear error if the bridge isn't loaded (e.g., blocked by ad blocker).
+SlowverbBridgeJS get slowverbBridgeJS {
+  final bridge = _slowverbBridgeJSNullable;
+  if (bridge == null) {
+    throw StateError(
+      'SlowverbBridge not loaded. Check if browser extensions (ad blockers) '
+      'are blocking JavaScript files. Try disabling extensions or whitelisting this site.',
+    );
+  }
+  return bridge;
+}
 
 extension type SlowverbBridgeJS._(JSObject _) implements JSObject {
   external JSPromise<JSObject> loadAndProbe(JSObject source);

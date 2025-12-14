@@ -6,12 +6,14 @@ class ResponsiveScaffold extends StatelessWidget {
   final Widget child;
   final Widget? floatingActionButton;
   final PreferredSizeWidget? appBar;
+  final bool fullWidth;
 
   const ResponsiveScaffold({
     super.key,
     required this.child,
     this.floatingActionButton,
     this.appBar,
+    this.fullWidth = false,
   });
 
   @override
@@ -22,12 +24,14 @@ class ResponsiveScaffold extends StatelessWidget {
     return Scaffold(
       appBar: appBar,
       backgroundColor: SlowverbColors.backgroundDark,
-      body: Center(
-        child: Container(
-          constraints: BoxConstraints(maxWidth: maxContentWidth),
-          child: child,
-        ),
-      ),
+      body: fullWidth
+          ? child
+          : Center(
+              child: Container(
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
+                child: child,
+              ),
+            ),
       floatingActionButton: floatingActionButton,
     );
   }
