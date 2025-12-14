@@ -1,7 +1,7 @@
 // ../shared/dist/index.js
 var DSP_LIMITS = {
-  tempo: { min: 0.5, max: 1.5, default: 1 },
-  pitch: { min: -12, max: 12, default: 0 },
+  tempo: { min: 0.5, max: 1.5},
+  pitch: { min: -12, max: 12},
   reverb: {
     decay: { min: 0, max: 0.99},
     preDelayMs: { min: 20, max: 500},
@@ -13,142 +13,125 @@ var DSP_LIMITS = {
     feedback: { min: 0, max: 0.9}
   },
   lowPassCutoffHz: { min: 200, max: 2e4},
-  eqWarmth: { min: 0, max: 1, default: 0 },
-  hfDamping: { min: 0, max: 1, default: 0 },
-  stereoWidth: { min: 0.5, max: 2, default: 1 }
+  eqWarmth: { min: 0, max: 1},
+  hfDamping: { min: 0, max: 1},
+  stereoWidth: { min: 0.5, max: 2}
 };
 function compileFilterChain(spec) {
-  const normalized = normalizeSpec(spec);
-  const filters = [
-    buildTempoFilter(normalized.tempo),
-    buildPitchFilter(normalized.pitch),
-    buildEqWarmthFilter(normalized.eqWarmth),
-    buildReverbFilter(normalized.reverb),
-    buildEchoFilter(normalized.echo),
-    buildLowPassOrDampingFilter(normalized.lowPassCutoffHz, normalized.hfDamping),
-    buildStereoWidthFilter(normalized.stereoWidth),
-    normalized.normalize ? buildLoudnessNormalizationFilter() : void 0
-  ].filter((value) => Boolean(value));
+  const filters = [];
+  appendTempo(filters, spec.tempo);
+  appendPitch(filters, spec.pitch);
+  appendEqWarmth(filters, spec.eqWarmth);
+  appendReverb(filters, spec.reverb);
+  appendEcho(filters, spec.echo);
+  appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(filters, spec.stereoWidth);
   return filters.length > 0 ? filters.join(",") : "anull";
 }
-function normalizeSpec(spec) {
-  return {
-    tempo: clamp(spec.tempo ?? DSP_LIMITS.tempo.default, DSP_LIMITS.tempo.min, DSP_LIMITS.tempo.max),
-    pitch: clamp(spec.pitch ?? DSP_LIMITS.pitch.default, DSP_LIMITS.pitch.min, DSP_LIMITS.pitch.max),
-    eqWarmth: clamp(
-      spec.eqWarmth ?? DSP_LIMITS.eqWarmth.default,
-      DSP_LIMITS.eqWarmth.min,
-      DSP_LIMITS.eqWarmth.max
-    ),
-    lowPassCutoffHz: spec.lowPassCutoffHz !== void 0 ? clamp(spec.lowPassCutoffHz, DSP_LIMITS.lowPassCutoffHz.min, DSP_LIMITS.lowPassCutoffHz.max) : void 0,
-    hfDamping: clamp(
-      spec.hfDamping ?? DSP_LIMITS.hfDamping.default,
-      DSP_LIMITS.hfDamping.min,
-      DSP_LIMITS.hfDamping.max
-    ),
-    stereoWidth: clamp(
-      spec.stereoWidth ?? DSP_LIMITS.stereoWidth.default,
-      DSP_LIMITS.stereoWidth.min,
-      DSP_LIMITS.stereoWidth.max
-    ),
-    normalize: spec.normalize ?? false,
-    reverb: spec.reverb ? normalizeReverb(spec.reverb) : void 0,
-    echo: spec.echo ? normalizeEcho(spec.echo) : void 0
-  };
+function appendTempo(filters, tempo) {
+  if (tempo === void 0 || tempo === 1) return;
+  filters.push(buildTempoFilter(clamp(tempo, DSP_LIMITS.tempo)));
+}
+function appendPitch(filters, pitch) {
+  if (pitch === void 0 || pitch === 0) return;
+  filters.push(buildPitchFilter(clamp(pitch, DSP_LIMITS.pitch)));
+}
+function appendEqWarmth(filters, warmth) {
+  if (warmth === void 0 || warmth <= 0) return;
+  filters.push(buildEqWarmthFilter(clamp(warmth, DSP_LIMITS.eqWarmth)));
+}
+function appendReverb(filters, reverb) {
+  if (!reverb) return;
+  filters.push(buildReverbFilter(normalizeReverb(reverb)));
+}
+function appendEcho(filters, echo) {
+  if (!echo) return;
+  filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+function appendLowpass(filters, cutoffHz, hfDamping) {
+  const lowpass = buildLowpassFilter(cutoffHz, hfDamping);
+  if (!lowpass) return;
+  filters.push(lowpass);
+}
+function appendStereoWidth(filters, width) {
+  if (width === void 0 || width === 1) return;
+  filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
+}
+function buildTempoFilter(tempo) {
+  if (tempo >= 0.5 && tempo <= 2) {
+    return `atempo=${tempo.toFixed(4)}`;
+  }
+  const filters = [];
+  let remaining = tempo;
+  while (remaining < 0.5) {
+    filters.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+  while (remaining > 2) {
+    filters.push("atempo=2.0");
+    remaining /= 2;
+  }
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
+}
+function buildPitchFilter(semitones) {
+  const rate = Math.pow(2, semitones / 12);
+  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
+}
+function buildEqWarmthFilter(warmth) {
+  const gain = (warmth * 6).toFixed(1);
+  return `equalizer=f=300:t=h:width=200:g=${gain}`;
+}
+function buildReverbFilter(reverb) {
+  const d1 = reverb.preDelayMs;
+  const d2 = Math.round(d1 * (1 + reverb.roomScale * 0.5));
+  const d3 = Math.round(d2 * 1.3);
+  const decay = reverb.decay;
+  const mix = reverb.mix;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}:${(decay * 0.9).toFixed(2)}|${(decay * 0.7).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+}
+function buildEchoFilter(echo) {
+  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+}
+function buildLowpassFilter(cutoffHz, hfDamping) {
+  if (cutoffHz !== void 0) {
+    const clamped = clamp(cutoffHz, DSP_LIMITS.lowPassCutoffHz);
+    return `lowpass=f=${clamped}`;
+  }
+  if (hfDamping !== void 0 && hfDamping > 0) {
+    const clamped = clamp(hfDamping, DSP_LIMITS.hfDamping);
+    const cutoff = Math.round(2e4 - clamped * 18e3);
+    return `lowpass=f=${cutoff}`;
+  }
+  return null;
+}
+function buildStereoFilter(width) {
+  if (width < 1) {
+    return `stereotools=mlev=${width.toFixed(2)}`;
+  }
+  const m = (width - 1) * 2.5;
+  return `extrastereo=m=${m.toFixed(2)}`;
 }
 function normalizeReverb(reverb) {
   return {
-    decay: clamp(reverb.decay, DSP_LIMITS.reverb.decay.min, DSP_LIMITS.reverb.decay.max),
-    preDelayMs: clamp(
-      reverb.preDelayMs,
-      DSP_LIMITS.reverb.preDelayMs.min,
-      DSP_LIMITS.reverb.preDelayMs.max
-    ),
+    decay: clamp(reverb.decay, DSP_LIMITS.reverb.decay),
+    preDelayMs: clamp(reverb.preDelayMs, DSP_LIMITS.reverb.preDelayMs),
     roomScale: clamp(
       reverb.roomScale ?? DSP_LIMITS.reverb.roomScale.default,
-      DSP_LIMITS.reverb.roomScale.min,
-      DSP_LIMITS.reverb.roomScale.max
+      DSP_LIMITS.reverb.roomScale
     ),
-    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix.min, DSP_LIMITS.reverb.mix.max)
+    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix)
   };
 }
 function normalizeEcho(echo) {
   return {
-    delayMs: clamp(echo.delayMs, DSP_LIMITS.echo.delayMs.min, DSP_LIMITS.echo.delayMs.max),
-    feedback: clamp(echo.feedback, DSP_LIMITS.echo.feedback.min, DSP_LIMITS.echo.feedback.max)
+    delayMs: clamp(echo.delayMs, DSP_LIMITS.echo.delayMs),
+    feedback: clamp(echo.feedback, DSP_LIMITS.echo.feedback)
   };
 }
-function buildTempoFilter(tempo) {
-  if (tempo === 1) return void 0;
-  const stages = [];
-  let remaining = tempo;
-  while (remaining < 0.5 || remaining > 2) {
-    if (remaining < 0.5) {
-      stages.push("atempo=0.5");
-      remaining /= 0.5;
-    } else {
-      stages.push("atempo=2.0");
-      remaining /= 2;
-    }
-  }
-  stages.push(`atempo=${remaining.toFixed(4)}`);
-  return stages.join(",");
-}
-function buildPitchFilter(semitones) {
-  if (semitones === 0) return void 0;
-  const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
-}
-function buildEqWarmthFilter(eqWarmth) {
-  if (eqWarmth <= 0) return void 0;
-  const gain = (eqWarmth * 6).toFixed(1);
-  return `equalizer=f=300:t=h:width=200:g=${gain}`;
-}
-function buildReverbFilter(reverb) {
-  if (!reverb || reverb.mix <= 0 || reverb.decay <= 0) return void 0;
-  const delay1 = Math.round(reverb.preDelayMs);
-  const delay2 = Math.round(delay1 * (1 + reverb.roomScale * 0.5));
-  const delay3 = Math.round(delay1 * (1 + reverb.roomScale));
-  const decay1 = (reverb.decay * 0.9 * reverb.mix).toFixed(2);
-  const decay2 = (reverb.decay * 0.7 * reverb.mix).toFixed(2);
-  const decay3 = (reverb.decay * 0.4 * reverb.mix).toFixed(2);
-  return `aecho=0.8:0.88:${delay1}|${delay2}|${delay3}:${decay1}|${decay2}|${decay3}`;
-}
-function buildEchoFilter(echo) {
-  if (!echo || echo.feedback <= 0) return void 0;
-  const delay = Math.round(echo.delayMs);
-  const decay = echo.feedback.toFixed(2);
-  return `aecho=0.8:0.9:${delay}:${decay}`;
-}
-function buildLowPassOrDampingFilter(cutoffHz, hfDamping) {
-  if (cutoffHz !== void 0) {
-    return buildLowPassFilter(cutoffHz);
-  }
-  if (hfDamping <= 0) return void 0;
-  return buildLowPassFilter(buildHfDampingCutoff(hfDamping));
-}
-function buildLowPassFilter(cutoffHz) {
-  const cutoff = Math.round(cutoffHz);
-  return `lowpass=f=${cutoff}`;
-}
-function buildHfDampingCutoff(hfDamping) {
-  return Math.round(2e4 - hfDamping * 18e3);
-}
-function buildStereoWidthFilter(width) {
-  if (width === 1) return void 0;
-  if (width < 1) {
-    const mix = (1 - width).toFixed(2);
-    return `stereotools=mlev=${mix}`;
-  }
-  const enhance = ((width - 1) * 2 + 1).toFixed(2);
-  return `extrastereo=m=${enhance}`;
-}
-function buildLoudnessNormalizationFilter() {
-  return "loudnorm=I=-14:LRA=11:TP=-1.5";
-}
-function clamp(value, min, max) {
-  if (value < min) return min;
-  if (value > max) return max;
+function clamp(value, limits) {
+  if (value < limits.min) return limits.min;
+  if (value > limits.max) return limits.max;
   return value;
 }
 
@@ -253,6 +236,8 @@ var SlowverbEngine = class {
 };
 var WorkerRunner = class {
   worker;
+  onMessage;
+  onError;
   pending = /* @__PURE__ */ new Map();
   callbacks;
   requestCounter = 0;
@@ -260,11 +245,13 @@ var WorkerRunner = class {
   constructor(factory, callbacks) {
     this.worker = factory();
     this.callbacks = callbacks;
-    this.worker.addEventListener("message", (event) => this.handleMessage(event.data));
-    this.worker.addEventListener("error", (event) => {
+    this.onMessage = (event) => this.handleMessage(event.data);
+    this.onError = (event) => {
       const message = event.message || "Worker error";
       this.rejectAll(new Error(message));
-    });
+    };
+    this.worker.addEventListener("message", this.onMessage);
+    this.worker.addEventListener("error", this.onError);
   }
   async init(payload) {
     await this.sendWithLog(
@@ -313,6 +300,9 @@ var WorkerRunner = class {
   terminate() {
     this.rejectAll(new Error("Worker terminated"));
     this.worker.terminate();
+    this.worker.removeEventListener("message", this.onMessage);
+    this.worker.removeEventListener("error", this.onError);
+    this.runGc();
   }
   async send(request, options) {
     return new Promise((resolve, reject) => {
@@ -401,6 +391,12 @@ var WorkerRunner = class {
   nextRequestId() {
     this.requestCounter += 1;
     return `req-${this.requestCounter}-${Date.now()}`;
+  }
+  runGc() {
+    const maybeGc = globalThis.gc;
+    if (typeof maybeGc === "function") {
+      maybeGc();
+    }
   }
 };
 var defaultWorkerFactory = () => new Worker(new URL("../core-worker/dist/worker.js", import.meta.url), { type: "module" });

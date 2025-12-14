@@ -1,194 +1,149 @@
-import { DSP_LIMITS } from "./dsp.js";
 import type { DspSpec, EchoSpec, ReverbSpec } from "./dsp.js";
+import { DSP_LIMITS } from "./dsp.js";
 
-type NormalizedReverb = {
-  readonly decay: number;
-  readonly preDelayMs: number;
-  readonly roomScale: number;
-  readonly mix: number;
-};
-
-type NormalizedEcho = {
-  readonly delayMs: number;
-  readonly feedback: number;
-};
-
-type NormalizedSpec = {
-  readonly tempo: number;
-  readonly pitch: number;
-  readonly eqWarmth: number;
-  readonly lowPassCutoffHz?: number;
-  readonly hfDamping: number;
-  readonly stereoWidth: number;
-  readonly normalize: boolean;
-  readonly reverb?: NormalizedReverb;
-  readonly echo?: NormalizedEcho;
-};
+type Limits = { readonly min: number; readonly max: number };
+type NormalizedReverb = Readonly<Required<ReverbSpec>>;
+type NormalizedEcho = Readonly<EchoSpec>;
 
 export function compileFilterChain(spec: DspSpec): string {
-  const normalized = normalizeSpec(spec);
-  const filters = [
-    buildTempoFilter(normalized.tempo),
-    buildPitchFilter(normalized.pitch),
-    buildEqWarmthFilter(normalized.eqWarmth),
-    buildReverbFilter(normalized.reverb),
-    buildEchoFilter(normalized.echo),
-    buildLowPassOrDampingFilter(normalized.lowPassCutoffHz, normalized.hfDamping),
-    buildStereoWidthFilter(normalized.stereoWidth),
-    normalized.normalize ? buildLoudnessNormalizationFilter() : undefined,
-  ].filter((value): value is string => Boolean(value));
+  const filters: string[] = [];
+
+  appendTempo(filters, spec.tempo);
+  appendPitch(filters, spec.pitch);
+  appendEqWarmth(filters, spec.eqWarmth);
+  appendReverb(filters, spec.reverb);
+  appendEcho(filters, spec.echo);
+  appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(filters, spec.stereoWidth);
 
   return filters.length > 0 ? filters.join(",") : "anull";
 }
 
-function normalizeSpec(spec: DspSpec): NormalizedSpec {
-  return {
-    tempo: clamp(spec.tempo ?? DSP_LIMITS.tempo.default, DSP_LIMITS.tempo.min, DSP_LIMITS.tempo.max),
-    pitch: clamp(spec.pitch ?? DSP_LIMITS.pitch.default, DSP_LIMITS.pitch.min, DSP_LIMITS.pitch.max),
-    eqWarmth: clamp(
-      spec.eqWarmth ?? DSP_LIMITS.eqWarmth.default,
-      DSP_LIMITS.eqWarmth.min,
-      DSP_LIMITS.eqWarmth.max,
-    ),
-    lowPassCutoffHz: spec.lowPassCutoffHz !== undefined
-      ? clamp(spec.lowPassCutoffHz, DSP_LIMITS.lowPassCutoffHz.min, DSP_LIMITS.lowPassCutoffHz.max)
-      : undefined,
-    hfDamping: clamp(
-      spec.hfDamping ?? DSP_LIMITS.hfDamping.default,
-      DSP_LIMITS.hfDamping.min,
-      DSP_LIMITS.hfDamping.max,
-    ),
-    stereoWidth: clamp(
-      spec.stereoWidth ?? DSP_LIMITS.stereoWidth.default,
-      DSP_LIMITS.stereoWidth.min,
-      DSP_LIMITS.stereoWidth.max,
-    ),
-    normalize: spec.normalize ?? false,
-    reverb: spec.reverb ? normalizeReverb(spec.reverb) : undefined,
-    echo: spec.echo ? normalizeEcho(spec.echo) : undefined,
-  };
+function appendTempo(filters: string[], tempo?: number): void {
+  if (tempo === undefined || tempo === 1.0) return;
+  filters.push(buildTempoFilter(clamp(tempo, DSP_LIMITS.tempo)));
+}
+
+function appendPitch(filters: string[], pitch?: number): void {
+  if (pitch === undefined || pitch === 0.0) return;
+  filters.push(buildPitchFilter(clamp(pitch, DSP_LIMITS.pitch)));
+}
+
+function appendEqWarmth(filters: string[], warmth?: number): void {
+  if (warmth === undefined || warmth <= 0) return;
+  filters.push(buildEqWarmthFilter(clamp(warmth, DSP_LIMITS.eqWarmth)));
+}
+
+function appendReverb(filters: string[], reverb?: ReverbSpec): void {
+  if (!reverb) return;
+  filters.push(buildReverbFilter(normalizeReverb(reverb)));
+}
+
+function appendEcho(filters: string[], echo?: EchoSpec): void {
+  if (!echo) return;
+  filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+
+function appendLowpass(filters: string[], cutoffHz?: number, hfDamping?: number): void {
+  const lowpass = buildLowpassFilter(cutoffHz, hfDamping);
+  if (!lowpass) return;
+  filters.push(lowpass);
+}
+
+function appendStereoWidth(filters: string[], width?: number): void {
+  if (width === undefined || width === 1.0) return;
+  filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
+}
+
+function buildTempoFilter(tempo: number): string {
+  if (tempo >= 0.5 && tempo <= 2.0) {
+    return `atempo=${tempo.toFixed(4)}`;
+  }
+
+  const filters: string[] = [];
+  let remaining = tempo;
+
+  while (remaining < 0.5) {
+    filters.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+  while (remaining > 2.0) {
+    filters.push("atempo=2.0");
+    remaining /= 2.0;
+  }
+
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
+}
+
+function buildPitchFilter(semitones: number): string {
+  const rate = Math.pow(2, semitones / 12);
+  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
+}
+
+function buildEqWarmthFilter(warmth: number): string {
+  const gain = (warmth * 6).toFixed(1);
+  return `equalizer=f=300:t=h:width=200:g=${gain}`;
+}
+
+function buildReverbFilter(reverb: NormalizedReverb): string {
+  const d1 = reverb.preDelayMs;
+  const d2 = Math.round(d1 * (1 + reverb.roomScale * 0.5));
+  const d3 = Math.round(d2 * 1.3);
+
+  const decay = reverb.decay;
+  const mix = reverb.mix;
+
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}:${(decay * 0.9).toFixed(2)}|${(decay * 0.7).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+}
+
+function buildEchoFilter(echo: NormalizedEcho): string {
+  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+}
+
+function buildLowpassFilter(cutoffHz?: number, hfDamping?: number): string | null {
+  if (cutoffHz !== undefined) {
+    const clamped = clamp(cutoffHz, DSP_LIMITS.lowPassCutoffHz);
+    return `lowpass=f=${clamped}`;
+  }
+  if (hfDamping !== undefined && hfDamping > 0) {
+    const clamped = clamp(hfDamping, DSP_LIMITS.hfDamping);
+    const cutoff = Math.round(20000 - clamped * 18000);
+    return `lowpass=f=${cutoff}`;
+  }
+  return null;
+}
+
+function buildStereoFilter(width: number): string {
+  if (width < 1.0) {
+    return `stereotools=mlev=${width.toFixed(2)}`;
+  }
+
+  const m = (width - 1) * 2.5;
+  return `extrastereo=m=${m.toFixed(2)}`;
 }
 
 function normalizeReverb(reverb: ReverbSpec): NormalizedReverb {
   return {
-    decay: clamp(reverb.decay, DSP_LIMITS.reverb.decay.min, DSP_LIMITS.reverb.decay.max),
-    preDelayMs: clamp(
-      reverb.preDelayMs,
-      DSP_LIMITS.reverb.preDelayMs.min,
-      DSP_LIMITS.reverb.preDelayMs.max,
-    ),
+    decay: clamp(reverb.decay, DSP_LIMITS.reverb.decay),
+    preDelayMs: clamp(reverb.preDelayMs, DSP_LIMITS.reverb.preDelayMs),
     roomScale: clamp(
       reverb.roomScale ?? DSP_LIMITS.reverb.roomScale.default,
-      DSP_LIMITS.reverb.roomScale.min,
-      DSP_LIMITS.reverb.roomScale.max,
+      DSP_LIMITS.reverb.roomScale
     ),
-    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix.min, DSP_LIMITS.reverb.mix.max),
+    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix),
   };
 }
 
 function normalizeEcho(echo: EchoSpec): NormalizedEcho {
   return {
-    delayMs: clamp(echo.delayMs, DSP_LIMITS.echo.delayMs.min, DSP_LIMITS.echo.delayMs.max),
-    feedback: clamp(echo.feedback, DSP_LIMITS.echo.feedback.min, DSP_LIMITS.echo.feedback.max),
+    delayMs: clamp(echo.delayMs, DSP_LIMITS.echo.delayMs),
+    feedback: clamp(echo.feedback, DSP_LIMITS.echo.feedback),
   };
 }
 
-function buildTempoFilter(tempo: number): string | undefined {
-  if (tempo === 1.0) return undefined;
-
-  const stages: string[] = [];
-  let remaining = tempo;
-
-  while (remaining < 0.5 || remaining > 2.0) {
-    if (remaining < 0.5) {
-      stages.push("atempo=0.5");
-      remaining /= 0.5;
-    } else {
-      stages.push("atempo=2.0");
-      remaining /= 2.0;
-    }
-  }
-
-  stages.push(`atempo=${remaining.toFixed(4)}`);
-  return stages.join(",");
-}
-
-function buildPitchFilter(semitones: number): string | undefined {
-  if (semitones === 0.0) return undefined;
-
-  const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
-}
-
-function buildEqWarmthFilter(eqWarmth: number): string | undefined {
-  if (eqWarmth <= 0) return undefined;
-
-  const gain = (eqWarmth * 6).toFixed(1);
-  return `equalizer=f=300:t=h:width=200:g=${gain}`;
-}
-
-function buildReverbFilter(reverb?: NormalizedReverb): string | undefined {
-  if (!reverb || reverb.mix <= 0 || reverb.decay <= 0) return undefined;
-
-  const delay1 = Math.round(reverb.preDelayMs);
-  const delay2 = Math.round(delay1 * (1 + reverb.roomScale * 0.5));
-  const delay3 = Math.round(delay1 * (1 + reverb.roomScale));
-
-  const decay1 = (reverb.decay * 0.9 * reverb.mix).toFixed(2);
-  const decay2 = (reverb.decay * 0.7 * reverb.mix).toFixed(2);
-  const decay3 = (reverb.decay * 0.4 * reverb.mix).toFixed(2);
-
-  return `aecho=0.8:0.88:${delay1}|${delay2}|${delay3}:${decay1}|${decay2}|${decay3}`;
-}
-
-function buildEchoFilter(echo?: NormalizedEcho): string | undefined {
-  if (!echo || echo.feedback <= 0) return undefined;
-
-  const delay = Math.round(echo.delayMs);
-  const decay = echo.feedback.toFixed(2);
-  return `aecho=0.8:0.9:${delay}:${decay}`;
-}
-
-function buildLowPassOrDampingFilter(
-  cutoffHz: number | undefined,
-  hfDamping: number,
-): string | undefined {
-  if (cutoffHz !== undefined) {
-    return buildLowPassFilter(cutoffHz);
-  }
-
-  if (hfDamping <= 0) return undefined;
-
-  return buildLowPassFilter(buildHfDampingCutoff(hfDamping));
-}
-
-function buildLowPassFilter(cutoffHz: number): string {
-  const cutoff = Math.round(cutoffHz);
-  return `lowpass=f=${cutoff}`;
-}
-
-function buildHfDampingCutoff(hfDamping: number): number {
-  return Math.round(20000 - hfDamping * 18000);
-}
-
-function buildStereoWidthFilter(width: number): string | undefined {
-  if (width === 1.0) return undefined;
-
-  if (width < 1.0) {
-    const mix = (1.0 - width).toFixed(2);
-    return `stereotools=mlev=${mix}`;
-  }
-
-  const enhance = ((width - 1.0) * 2 + 1).toFixed(2);
-  return `extrastereo=m=${enhance}`;
-}
-
-function buildLoudnessNormalizationFilter(): string {
-  return "loudnorm=I=-14:LRA=11:TP=-1.5";
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (value < min) return min;
-  if (value > max) return max;
+function clamp(value: number, limits: Limits): number {
+  if (value < limits.min) return limits.min;
+  if (value > limits.max) return limits.max;
   return value;
 }

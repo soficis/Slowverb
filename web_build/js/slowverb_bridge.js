@@ -143,6 +143,17 @@ function createJobId() {
     : `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function getMemoryUsage() {
+  const perf = performance;
+  const memory = perf && perf.memory;
+  if (!memory) return null;
+  return {
+    usedJSHeapSize: memory.usedJSHeapSize,
+    totalJSHeapSize: memory.totalJSHeapSize,
+    jsHeapSizeLimit: memory.jsHeapSizeLimit,
+  };
+}
+
 window.SlowverbBridge = {
   loadAndProbe,
   renderPreview,
@@ -151,4 +162,5 @@ window.SlowverbBridge = {
   cancel,
   setProgressHandler,
   setLogHandler,
+  getMemoryUsage,
 };

@@ -4595,6 +4595,12 @@ var createFFmpegCore = (() => {
   });
 })();
 var ffmpeg_core_default = createFFmpegCore;
+function log(level, message, data) {
+  const env = import.meta.env;
+  if (env?.DEV && typeof console?.[level] === "function") {
+    console[level](message, data);
+  }
+}
 
 // src/worker.ts
 var ctx = self;
@@ -4620,7 +4626,9 @@ var loadedFiles = /* @__PURE__ */ new Set();
 var logCapture = null;
 ctx.onmessage = (event) => {
   const request = event.data;
+  log("debug", "request:received", { type: request.type, jobId: getJobId(request) });
   handleRequest(request).catch((error) => {
+    log("error", "request:failed", { type: request.type, error: error?.message });
     postError("Worker request failed", request.requestId, getJobId(request), error);
   });
 };
@@ -4663,6 +4671,9 @@ async function handleCancel(request) {
     jobId: request.jobId,
     reason: "Worker terminated"
   });
+  log("warn", "cancel:terminate", { jobId: request.jobId });
+  cleanupFiles(...loadedFiles);
+  loadedFiles.clear();
   ctx.close();
 }
 async function ensureFfmpeg(payload, requestId) {
@@ -4763,12 +4774,15 @@ async function handleRender(request) {
   const { args, outputFile } = buildRenderPlan(payload, jobId, isPreview);
   activeJobId = jobId;
   try {
+    log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
     ffmpeg.exec(...args);
     const buffer = await readOutput(outputFile);
+    log("info", "render:ok", { jobId, outputFile });
     postRenderResult(request, buffer);
   } finally {
     activeJobId = void 0;
-    await cleanupOutput(outputFile);
+    log("debug", "render:cleanup", { jobId });
+    cleanupFiles(payload.fileId, outputFile);
   }
 }
 async function handleWaveform(request) {
@@ -4836,11 +4850,15 @@ async function readOutput(path) {
   const copy = bytes.slice();
   return copy.buffer;
 }
-async function cleanupOutput(path) {
+function cleanupFiles(...paths) {
   if (!ffmpeg) return;
-  try {
-    ffmpeg.FS.unlink(path);
-  } catch {
+  for (const path of paths) {
+    if (!path) continue;
+    try {
+      ffmpeg.FS.unlink(path);
+      loadedFiles.delete(path);
+    } catch {
+    }
   }
 }
 function postResult(requestId, payload, transfer) {
@@ -4859,6 +4877,7 @@ function postError(message, requestId, jobId, cause) {
   const causeMessage = cause instanceof Error ? cause.message : cause ? String(cause) : void 0;
   const detail = cause instanceof Error && cause.stack ? `${causeMessage}
 ${cause.stack}` : causeMessage;
+  log("error", "worker:error", { jobId, message, cause: detail });
   postEvent({ type: "ERROR", requestId, jobId, message, cause: detail });
 }
 function mapLogLevel(level) {
@@ -5001,7 +5020,7 @@ async function buildWaveform(fileId, points, jobId) {
     normalizeInPlace(peaks);
     return { fileId, samples: peaks };
   } finally {
-    await cleanupOutput(outputFile);
+    cleanupFiles(fileId, outputFile);
   }
 }
 function ensureFileExists(path) {

@@ -16,7 +16,6 @@ This software is currently in beta. Not all features may work as expected, and y
 - ✅ **WASM-Powered** - Uses WebAssembly FFmpeg for high-performance audio processing
 - ✅ **PWA Support** - Install as a web app on any device
 - ✅ **IndexedDB Storage** - Browser-based file persistence
-- ✅ **YouTube Import** - Download and process audio from YouTube URLs
 - ✅ **Batch Processing** - Process multiple files simultaneously
 - ✅ **Audio Visualizer** - Real-time visual effects (Pipes, Starfield, Maze, Fractal, WMP Retro)
 - ✅ **Shader Effects** - GPU-accelerated visual shaders
@@ -102,23 +101,28 @@ web/
 ## 🔧 Technology Stack
 
 ### Core Framework
+
 - **Flutter Web** - UI framework compiled to HTML/CSS/JavaScript
 - **Dart** - Programming language for Flutter
 
 ### Audio Processing
+
 - **FFmpeg.wasm** - WebAssembly-compiled FFmpeg for audio processing
 - **Web Audio API** - Browser's native audio playback
 - **just_audio** - Flutter audio plugin (web-compatible)
 
 ### State Management & Storage
+
 - **Riverpod** - Reactive state management
 - **IndexedDB** - Browser database via `idb_shim`
 - **File Picker** - Cross-platform file selection
 
 ### Routing & Navigation
+
 - **Go Router** - URL-based navigation
 
 ### Development
+
 - **build_runner** - Code generation for Riverpod
 - **flutter_lints** - Code style enforcement
 
@@ -172,7 +176,7 @@ The web version uses a hybrid architecture for audio processing:
 flutter run -d chrome
 ```
 
-This starts a development server (default: http://localhost:8080) with hot reload support.
+This starts a development server (default: <http://localhost:8080>) with hot reload support.
 
 ### Production Build
 
@@ -181,6 +185,7 @@ flutter build web --release
 ```
 
 **Build Artifacts:**
+
 - `build/web/` - Complete web application
 - Size: ~5-10MB gzipped (includes WASM FFmpeg)
 - All assets are self-contained for static hosting
@@ -188,7 +193,9 @@ flutter build web --release
 ### Deployment Options
 
 #### 1. Static Hosting (Recommended)
+
 Deploy to any static hosting service:
+
 - **GitHub Pages** - Free, built-in CI/CD
 - **Netlify** - Automatic builds from git
 - **Vercel** - Fast CDN, instant deployments
@@ -196,12 +203,14 @@ Deploy to any static hosting service:
 - **AWS S3 + CloudFront** - Enterprise-grade
 
 Example GitHub Pages deployment:
+
 ```bash
 flutter build web --release
 # Deploy build/web/ directory to GitHub Pages
 ```
 
 #### 2. Docker Container
+
 ```dockerfile
 FROM node:18-alpine
 WORKDIR /app
@@ -212,6 +221,7 @@ CMD ["http-server", "-p", "8080", "-c-1"]
 ```
 
 #### 3. Traditional Web Server
+
 ```bash
 # Copy build/web/ to your web server
 # Configure to serve index.html for all routes (SPA routing)
@@ -233,16 +243,19 @@ Most CDNs handle this automatically.
 This project uses **Riverpod** for state management. Key providers:
 
 ### Audio Providers
+
 - `audioFileProvider` - Current loaded audio file
 - `audioProcessingStateProvider` - Processing status (idle, processing, complete)
 - `presetProvider` - Active effect preset
 
 ### Processing Providers
+
 - `tempoProvider` - Tempo multiplier (0.5 - 2.0)
 - `pitchProvider` - Pitch shift amount (-12 to +12)
 - `reverbProvider` - Reverb intensity (0 - 100%)
 
 ### Storage Providers
+
 - `projectsProvider` - Persisted project list
 - `localStorageProvider` - IndexedDB access
 
@@ -253,17 +266,20 @@ See `lib/providers/` for implementation details.
 The web version uses **IndexedDB** for persistence:
 
 ### Stored Data
+
 - Recent projects (file metadata, processing settings)
 - User preferences (theme, default export format)
 - Processing cache (for faster re-processing of similar files)
 
 ### Storage Quota
+
 - Typical: 50MB-1GB (browser-dependent)
 - Chrome: ~50MB by default
 - Firefox: Up to browser's available space
 - Safari: ~50MB per site
 
 ### Clearing Storage
+
 Users can clear storage via browser DevTools or through the app's settings menu.
 
 ## 🐛 Development & Debugging
@@ -275,6 +291,7 @@ flutter run -d chrome
 ```
 
 Then open Chrome DevTools (F12) to debug:
+
 - **Console** - JavaScript errors and logs
 - **Sources** - Debug Dart code via source maps
 - **Network** - Monitor WASM/asset loading
@@ -283,34 +300,41 @@ Then open Chrome DevTools (F12) to debug:
 ### Common Issues
 
 **"FFmpeg not available"**
+
 - Check that WASM files are loaded in DevTools Network tab
 - Verify `assets/wasm/` is included in build
 
 **"Out of memory"**
+
 - Reduce file size or split processing
 - Close other browser tabs to free memory
 
 **"Playback not working on iOS"**
+
 - iOS requires user gesture to enable audio
 - Ensure button tap initiates playback
 
 ## 📊 Performance Optimization
 
 ### Build Optimization
+
 ```bash
 flutter build web --release --dart-define=FLUTTER_WEB_CANVASKIT_URL=https://cdn.example.com/
 ```
 
 ### Compression
+
 - Gzip compression: ~80% size reduction
 - Enable in web server configuration
 
 ### Caching Strategy
+
 - Static assets: Long-term cache (1 year)
 - index.html: No cache (get latest on reload)
 - WASM files: Long-term cache
 
 ### Code Splitting
+
 - Flutter web automatically splits code by route
 - WASM FFmpeg is lazy-loaded on first use
 
@@ -346,4 +370,3 @@ This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 - **Main Repository**: [GitHub](https://github.com/soficis/slowverb)
 - **Main README**: See [README.md](../README.md) for desktop/mobile information
 - **Issue Tracker**: [GitHub Issues](https://github.com/soficis/slowverb/issues)
-

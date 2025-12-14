@@ -133,6 +133,10 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     try {
       final engine = _ref.read(audioEngineProvider);
+      final canLoad = await _allowLoad(engine, fileData);
+      if (!canLoad) {
+        return;
+      }
 
       // Generate unique file ID
       final fileId = 'file-${DateTime.now().millisecondsSinceEpoch}';
@@ -296,6 +300,19 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     );
 
     await repo.saveProject(project, fileHandle: state.fileHandle);
+  }
+
+  Future<bool> _allowLoad(AudioEngine engine, AudioFileData fileData) async {
+    final preflight = await engine.checkMemoryPreflight(fileData.sizeBytes);
+    if (preflight.isBlocked) {
+      state = state.copyWith(isLoading: false, error: preflight.message);
+      return false;
+    }
+    if (preflight.isWarning && preflight.message != null) {
+      // ignore: avoid_print
+      print('[AudioEditor] ${preflight.message}');
+    }
+    return true;
   }
 }
 

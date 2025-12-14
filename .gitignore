@@ -86,7 +86,8 @@ logs/
 # Test coverage
 coverage/
 *.lcov
-
+tests/
+web/test-results/
 # Documentation
 docs/
 # Temporary files

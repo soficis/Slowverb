@@ -23,10 +23,8 @@ import 'package:slowverb_web/features/import/import_screen.dart';
 import 'package:slowverb_web/features/editor/editor_screen.dart';
 import 'package:slowverb_web/features/export/export_screen.dart';
 import 'package:slowverb_web/features/about/about_screen.dart';
-import 'package:slowverb_web/features/youtube/youtube_stream_screen.dart';
 import 'package:slowverb_web/features/library/library_screen.dart';
 import 'package:slowverb_web/features/settings/settings_screen.dart';
-import 'package:slowverb_web/app/app_config.dart';
 
 /// Arguments for navigating to the editor.
 class EditorScreenArgs {
@@ -43,7 +41,6 @@ class AppRoutes {
   static const presets = '/presets';
   static const export = '/export';
   static const about = '/about';
-  static const youtube = '/youtube';
   static const library = '/library';
   static const settings = '/settings';
 }
@@ -103,13 +100,6 @@ final appRouter = GoRouter(
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
     ),
-    // YouTube streaming (experimental)
-    if (AppConfig.enableExperimentalYouTubeMode)
-      GoRoute(
-        path: AppRoutes.youtube,
-        name: 'youtube',
-        builder: (context, state) => const YouTubeStreamScreen(),
-      ),
   ],
   errorBuilder: (context, state) => Scaffold(
     body: Center(

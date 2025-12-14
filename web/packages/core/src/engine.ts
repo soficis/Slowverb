@@ -182,6 +182,8 @@ type PendingRequest = {
 
 class WorkerRunner {
   private readonly worker: Worker;
+  private readonly onMessage: (event: MessageEvent<WorkerEvent>) => void;
+  private readonly onError: (event: ErrorEvent) => void;
   private readonly pending = new Map<string, PendingRequest>();
   private readonly callbacks?: RenderCallbacks;
   private requestCounter = 0;
@@ -190,11 +192,13 @@ class WorkerRunner {
   constructor(factory: WorkerFactory, callbacks?: RenderCallbacks) {
     this.worker = factory();
     this.callbacks = callbacks;
-    this.worker.addEventListener("message", (event) => this.handleMessage(event.data as WorkerEvent));
-    this.worker.addEventListener("error", (event) => {
+    this.onMessage = (event) => this.handleMessage(event.data as WorkerEvent);
+    this.onError = (event) => {
       const message = event.message || "Worker error";
       this.rejectAll(new Error(message));
-    });
+    };
+    this.worker.addEventListener("message", this.onMessage);
+    this.worker.addEventListener("error", this.onError);
   }
 
   async init(payload: InitPayload): Promise<void> {
@@ -254,6 +258,9 @@ class WorkerRunner {
   terminate(): void {
     this.rejectAll(new Error("Worker terminated"));
     this.worker.terminate();
+    this.worker.removeEventListener("message", this.onMessage);
+    this.worker.removeEventListener("error", this.onError);
+    this.runGc();
   }
 
   private async send<T extends WorkerResultPayload | void>(
@@ -364,6 +371,13 @@ class WorkerRunner {
   private nextRequestId(): string {
     this.requestCounter += 1;
     return `req-${this.requestCounter}-${Date.now()}`;
+  }
+
+  private runGc(): void {
+    const maybeGc = (globalThis as { gc?: () => void }).gc;
+    if (typeof maybeGc === "function") {
+      maybeGc();
+    }
   }
 }
 

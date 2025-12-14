@@ -44,28 +44,26 @@ test("reverb and echo clamp values to safe ranges", () => {
     },
   });
 
-  assert.equal(chain, "aecho=0.8:0.88:500|750|1000:0.89|0.69|0.40,aecho=0.8:0.9:1000:0.90");
+  assert.equal(chain, "aecho=0.8:1.00:500|750|975:0.89|0.69|0.40,aecho=0.8:0.5:1000:0.90");
 });
 
-test("composite chain preserves filter order and appends normalization", () => {
+test("composite chain preserves filter order", () => {
   const chain = compileFilterChain({
     ...PRESETS.SLOWED_REVERB,
     specVersion: "1.0.0",
     eqWarmth: 0.5,
     hfDamping: 0.25,
     stereoWidth: 0.8,
-    normalize: true,
   });
 
   const markers = [
     "atempo=",
     "asetrate=",
     "equalizer=",
-    "aecho=0.8:0.88:",
-    "aecho=0.8:0.9:",
+    "aecho=0.8:0.30:",
+    "aecho=0.8:0.5:",
     "lowpass=f=",
     "stereotools=",
-    "loudnorm",
   ];
 
   const positions = markers.map((marker) => {

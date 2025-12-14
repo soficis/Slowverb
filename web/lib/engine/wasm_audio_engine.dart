@@ -22,11 +22,8 @@ import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
-import 'package:slowverb_web/domain/entities/streaming_source.dart';
-import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/engine/engine_js_interop.dart';
-import 'package:slowverb_web/engine/streaming_audio_engine.dart';
 import 'package:web/web.dart' as web;
 
 /// Web implementation of AudioEngine using FFmpeg WASM
@@ -37,7 +34,6 @@ class WasmAudioEngine implements AudioEngine {
   final Map<String, StreamController<RenderProgress>> _progressControllers = {};
   final Map<String, RenderResult> _renderResults = {};
   final Map<String, Uint8List> _loadedFiles = {};
-  StreamingAudioEngine? _streamingEngine;
 
   bool _isInitialized = false;
   bool _progressHandlerInstalled = false;
@@ -51,6 +47,27 @@ class WasmAudioEngine implements AudioEngine {
     _isInitialized = true;
     _installProgressHandler();
     _installLogHandler();
+  }
+
+  @override
+  Future<MemoryPreflightResult> checkMemoryPreflight(int fileSizeBytes) async {
+    const warningThresholdMb = 100;
+    const blockThresholdMb = 200;
+    final sizeMb = fileSizeBytes / (1024 * 1024);
+
+    if (sizeMb > blockThresholdMb) {
+      return MemoryPreflightResult.blocked(
+        'File too large (${sizeMb.toStringAsFixed(1)} MB). Maximum is $blockThresholdMb MB.',
+      );
+    }
+
+    if (sizeMb > warningThresholdMb) {
+      return MemoryPreflightResult.warning(
+        'Large file (${sizeMb.toStringAsFixed(1)} MB) may cause slow performance or browser crashes.',
+      );
+    }
+
+    return const MemoryPreflightResult.ok();
   }
 
   @override
@@ -270,9 +287,6 @@ class WasmAudioEngine implements AudioEngine {
     _progressControllers.clear();
     _renderResults.clear();
     _loadedFiles.clear();
-
-    await _streamingEngine?.dispose();
-    _streamingEngine = null;
   }
 
   void _ensureInitialized() {
@@ -430,36 +444,6 @@ class WasmAudioEngine implements AudioEngine {
   @override
   Future<void> resumeBatch() async {
     _batchPaused = false;
-  }
-
-  // --- Streaming / live remix mode (not implemented yet) ---
-
-  @override
-  Future<StreamingCapability> attachStreamingSource(
-    StreamingSource source,
-  ) async {
-    _streamingEngine ??= StreamingAudioEngine();
-    return _streamingEngine!.attach(source);
-  }
-
-  @override
-  Stream<AudioAnalysisFrame> getStreamingAnalysisStream() {
-    return _streamingEngine?.analysisStream ?? const Stream.empty();
-  }
-
-  @override
-  Future<void> playStreaming() async {
-    await _streamingEngine?.play();
-  }
-
-  @override
-  Future<void> pauseStreaming() async {
-    await _streamingEngine?.pause();
-  }
-
-  @override
-  Future<void> seekStreaming(Duration position) async {
-    await _streamingEngine?.seek(position);
   }
 
   /// Trigger download of rendered file

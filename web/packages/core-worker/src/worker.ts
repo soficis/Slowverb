@@ -1,4 +1,5 @@
 import createFFmpegCore from "@ffmpeg/core";
+import { log } from "@slowverb/shared";
 import type {
   InitPayload,
   RenderPayload,
@@ -38,7 +39,9 @@ let logCapture: { active: boolean; lines: string[]; limit: number } | null = nul
 
 ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
+  log("debug", "request:received", { type: request.type, jobId: getJobId(request) });
   handleRequest(request).catch((error) => {
+    log("error", "request:failed", { type: request.type, error: (error as Error)?.message });
     postError("Worker request failed", request.requestId, getJobId(request), error);
   });
 };
@@ -86,6 +89,9 @@ async function handleCancel(request: Extract<WorkerRequest, { type: "CANCEL" }>)
     jobId: request.jobId,
     reason: "Worker terminated",
   });
+  log("warn", "cancel:terminate", { jobId: request.jobId });
+  cleanupFiles(...loadedFiles);
+  loadedFiles.clear();
   ctx.close();
 }
 
@@ -211,12 +217,15 @@ async function handleRender(
 
   activeJobId = jobId;
   try {
+    log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
     ffmpeg.exec(...args);
     const buffer = await readOutput(outputFile);
+    log("info", "render:ok", { jobId, outputFile });
     postRenderResult(request, buffer);
   } finally {
     activeJobId = undefined;
-    await cleanupOutput(outputFile);
+    log("debug", "render:cleanup", { jobId });
+    cleanupFiles(payload.fileId, outputFile);
   }
 }
 
@@ -293,12 +302,16 @@ async function readOutput(path: string): Promise<ArrayBuffer> {
   return copy.buffer;
 }
 
-async function cleanupOutput(path: string): Promise<void> {
+function cleanupFiles(...paths: string[]): void {
   if (!ffmpeg) return;
-  try {
-    ffmpeg.FS.unlink(path);
-  } catch {
-    // cleanup best effort
+  for (const path of paths) {
+    if (!path) continue;
+    try {
+      ffmpeg.FS.unlink(path);
+      loadedFiles.delete(path);
+    } catch {
+      // Best-effort cleanup
+    }
   }
 }
 
@@ -324,6 +337,7 @@ function postEvent(event: WorkerEvent, transfer?: Transferable[]): void {
 function postError(message: string, requestId?: string, jobId?: string, cause?: unknown): void {
   const causeMessage = cause instanceof Error ? cause.message : cause ? String(cause) : undefined;
   const detail = cause instanceof Error && cause.stack ? `${causeMessage}\n${cause.stack}` : causeMessage;
+  log("error", "worker:error", { jobId, message, cause: detail });
   postEvent({ type: "ERROR", requestId, jobId, message, cause: detail });
 }
 
@@ -493,7 +507,7 @@ async function buildWaveform(fileId: string, points: number, jobId: string): Pro
     normalizeInPlace(peaks);
     return { fileId, samples: peaks };
   } finally {
-    await cleanupOutput(outputFile);
+    cleanupFiles(fileId, outputFile);
   }
 }
 
