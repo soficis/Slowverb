@@ -9,6 +9,7 @@ web/node_modules/
 *.so
 *.dylib
 build/
+.flutter_sdk
 # Flutter/Dart
 .dart_tool/
 .packages
