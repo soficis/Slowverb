@@ -1,20 +1,3 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 import 'package:flutter/material.dart';
 import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
@@ -119,12 +102,7 @@ class EffectControls extends StatelessWidget {
               spacing: SlowverbTokens.spacingLg,
               runSpacing: SlowverbTokens.spacingMd,
               children: sliders
-                  .map(
-                    (slider) => SizedBox(
-                      width: itemWidth,
-                      child: slider,
-                    ),
-                  )
+                  .map((slider) => SizedBox(width: itemWidth, child: slider))
                   .toList(),
             ),
           ],
@@ -163,9 +141,7 @@ class _EffectSlider extends StatelessWidget {
       decoration: BoxDecoration(
         color: SlowverbColors.surfaceVariant,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-        border: Border.all(
-          color: SlowverbColors.surface.withOpacity(0.6),
-        ),
+        border: Border.all(color: SlowverbColors.surface.withOpacity(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,8 +153,8 @@ class _EffectSlider extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: SlowverbColors.textSecondary,
-                    ),
+                  color: SlowverbColors.textSecondary,
+                ),
               ),
               const Spacer(),
               _ValuePill(text: valueFormat(value)),
@@ -225,10 +201,10 @@ class _ValuePill extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: SlowverbColors.accentPink,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+          fontWeight: FontWeight.w600,
+          color: SlowverbColors.accentPink,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }

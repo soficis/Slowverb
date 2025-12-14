@@ -1,20 +1,3 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:slowverb_web/app/colors.dart';
@@ -61,7 +44,9 @@ class SlowverbTheme {
     return inter.copyWith(
       headlineMedium: headline.copyWith(color: SlowverbColors.textPrimary),
       titleLarge: title.copyWith(color: SlowverbColors.textPrimary),
-      bodyMedium: inter.bodyMedium?.copyWith(color: SlowverbColors.textSecondary),
+      bodyMedium: inter.bodyMedium?.copyWith(
+        color: SlowverbColors.textSecondary,
+      ),
       bodySmall: inter.bodySmall?.copyWith(color: SlowverbColors.textHint),
       labelLarge: inter.labelLarge?.copyWith(
         color: SlowverbColors.textPrimary,
