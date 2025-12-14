@@ -1,8 +1,6 @@
 # Slowverb - Gitignore
 
 # Build artifacts
-build/
-web/build/
 web/packages/**/dist/
 node_modules/
 web/node_modules/
@@ -10,7 +8,7 @@ web/node_modules/
 *.dll
 *.so
 *.dylib
-
+build/
 # Flutter/Dart
 .dart_tool/
 .packages

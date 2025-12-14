@@ -8,6 +8,7 @@
   "scripts": {
     "build:ts": "npm run build -w @slowverb/shared && npm run build -w @slowverb/core-worker && npm run build -w @slowverb/core",
     "sync:bridge": "node scripts/sync_bridge_assets.mjs",
+    "vercel-build": "bash scripts/vercel_build.sh",
     "build": "npm run build:ts && npm run sync:bridge",
     "test": "playwright test"
   },
