@@ -1,4 +1,4 @@
-const CACHE_NAME = "slowverb-v1";
+const CACHE_NAME = "slowverb-v2";
 const WASM_FILES = ["/js/ffmpeg-core.js", "/js/ffmpeg-core.wasm"];
 const ASSETS_TO_CACHE = [
   "/",
@@ -37,20 +37,35 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // Skip cross-origin requests, chrome extensions, etc. if needed
+  // But definitely skip non-http/https
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
 
       return fetch(event.request).then((response) => {
+        // Cache only valid responses
         if (
-          event.request.method === "GET" &&
-          !event.request.url.includes("/api/")
+          !response ||
+          response.status !== 200 ||
+          response.type !== "basic" ||
+          event.request.method !== "GET" ||
+          event.request.url.includes("/api/") ||
+          event.request.url.includes("google-analytics") ||
+          event.request.url.includes("vercel") // Avoid caching analytics
         ) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
         }
+
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       });
+    }).catch(() => {
+      // Fallback to network on match error
+      return fetch(event.request);
     })
   );
 });
