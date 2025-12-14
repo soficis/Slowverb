@@ -6,9 +6,6 @@ abstract final class AppConfig {
 
   /// Feature flags
 
-  /// Enable experimental YouTube streaming mode (visualizer only, no audio effects)
-  static const bool enableExperimentalYouTubeMode = true;
-
   /// Show developer/debug options
   static const bool showDevOptions = false;
 

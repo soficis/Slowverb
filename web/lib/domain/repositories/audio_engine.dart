@@ -1,26 +1,7 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
-import 'package:slowverb_web/domain/entities/streaming_source.dart';
-import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
 /// Abstract interface for audio processing operations
 ///
@@ -36,6 +17,9 @@ abstract class AudioEngine {
 
   /// Check if the engine is ready to process audio
   bool get isReady;
+
+  /// Evaluate memory impact before loading a source file.
+  Future<MemoryPreflightResult> checkMemoryPreflight(int fileSizeBytes);
 
   /// Load an audio file into the engine
   ///
@@ -103,23 +87,6 @@ abstract class AudioEngine {
 
   /// Resume a paused batch operation
   Future<void> resumeBatch();
-
-  // --- Streaming / live remix mode (web-only, optional) ---
-
-  /// Attach a streaming source (YouTube or direct media URL) for live processing.
-  Future<StreamingCapability> attachStreamingSource(StreamingSource source);
-
-  /// Analysis frames for visualizers in streaming mode.
-  Stream<AudioAnalysisFrame> getStreamingAnalysisStream();
-
-  /// Start playback for the attached streaming source.
-  Future<void> playStreaming();
-
-  /// Pause playback for the attached streaming source.
-  Future<void> pauseStreaming();
-
-  /// Seek within the streaming source when supported.
-  Future<void> seekStreaming(Duration position);
 }
 
 /// Metadata extracted from an audio file
@@ -277,4 +244,25 @@ class BatchInputFile {
     required this.bytes,
     this.presetOverride,
   });
+}
+
+class MemoryPreflightResult {
+  final bool isBlocked;
+  final bool isWarning;
+  final String? message;
+
+  const MemoryPreflightResult._({
+    required this.isBlocked,
+    required this.isWarning,
+    this.message,
+  });
+
+  const MemoryPreflightResult.ok()
+    : this._(isBlocked: false, isWarning: false, message: null);
+
+  const MemoryPreflightResult.warning(String message)
+    : this._(isBlocked: false, isWarning: true, message: message);
+
+  const MemoryPreflightResult.blocked(String message)
+    : this._(isBlocked: true, isWarning: false, message: message);
 }

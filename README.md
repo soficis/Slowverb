@@ -1,287 +1,314 @@
 # Slowverb 🎵
 
-**Create slowed + reverb audio edits with ease**
-
-Slowverb is a cross-platform audio processing application that transforms any song into dreamy, vaporwave-style remixes with  48kHz audio processing, multi-stage reverb, and bass enhancement.
-
-**⚠️ Beta Software Notice**  
-This software is currently in beta. Not all features may work as expected, and you may encounter bugs or incomplete functionality. Use at your own risk.
+<p align="center">
+  <strong><a href="https://slowverb.vercel.app/">🚀 Try Slowverb Live → https://slowverb.vercel.app/</a></strong>
+</p>
 
 ---
 
-## ✨ Features
+**Slowverb** is a web-based audio editor for creating **slowed + reverb**, **vaporwave**, and other dreamy audio effects. It runs entirely in your browser—no installation or server uploads required. All audio processing happens on your machine using WebAssembly (WASM) technology.
 
-- **Slowed + Reverb Effect** - Classic dreamy vaporwave sound
-- **Professional Audio Quality** - 48kHz sample rate processing
-- **Multi-Stage Reverb** - Rich, layered echo effects
-- **Bass Enhancement** - Enriched low-end frequencies
-- **Real-Time Preview** - Hear changes as you adjust
-- **Multiple Export Formats** - MP3, WAV, AAC
-- **Custom Save Location** - Choose where to save exports
-- **Unified Preset Catalog** - Same 12 presets across web, desktop, and mobile (Slowed + Reverb, Vaporwave Chill, Nightcore, Echo Slow, Lo-Fi, Ambient, Deep Bass, Crystal Clear, Underwater, Synthwave, Slow Motion, Manual)
-- **VaporXP Responsive UI** - Shared VaporXP Luna aesthetic with responsive layout on all platforms
-- **YouTube Import** - Download and process audio directly from YouTube URLs
-- **Batch Processing** - Process multiple audio files at once
-- **Audio Visualizer** - Real-time visual effects synchronized with audio (Pipes, Starfield, Maze, Fractal, WMP Retro presets)
-- **Shader Effects** - GPU-accelerated visual shaders for enhanced aesthetics
-- **History & Undo** - Track changes and revert edits
-- **Waveform Analysis** - Detailed audio waveform visualization
-- **Codec Detection** - Automatic detection of audio formats and codecs
-- **PWA Support** - Install web version as a progressive web app
-- **Offline Functionality** - Web version works without internet connection
-- **IndexedDB Storage** - Browser-based project persistence
+> ⚠️ **Browser Compatibility**: This application has been tested on **Google Chrome** and **Brave** browsers. Other browsers (Firefox, Safari, Edge) may work but are not officially supported.
 
 ---
 
-## 🚀 Quick Start
+## Table of Contents
 
-### Prerequisites
-
-1. **Flutter SDK** (3.0 or higher)
-   - [Flutter Installation Guide](https://docs.flutter.dev/get-started/install)
-
-2. **FFmpeg** (for audio processing)
-   - See [FFmpeg Installation](#ffmpeg-installation) below
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/slowverb.git
-cd slowverb
-
-# Navigate to the app directory
-cd app
-
-# Install dependencies
-flutter pub get
-
-# Run the app
-flutter run
-```
+1. [What is Slowverb?](#what-is-slowverb)
+2. [Key Features](#key-features)
+3. [How It Works](#how-it-works)
+4. [Getting Started (Users)](#getting-started-users)
+5. [Effect Presets](#effect-presets)
+6. [Visualizers](#visualizers)
+7. [Export Formats](#export-formats)
+8. [Project Library](#project-library)
+9. [Technical Architecture](#technical-architecture)
+10. [Developer Setup](#developer-setup)
+11. [Project Structure](#project-structure)
+12. [License](#license)
 
 ---
 
-## FFmpeg Installation
+## What is Slowverb?
 
-Slowverb requires FFmpeg for audio processing. Choose your platform:
+Slowverb takes any audio file and applies a combination of effects to transform it:
 
-### Windows
+- **Slowing down** the tempo (speed).
+- **Shifting the pitch** (higher or lower).
+- **Adding reverb** (echo/room ambiance).
+- **Applying EQ warmth** (bass boost/lo-fi character).
 
-#### Option 1: Automatic (Recommended)
+The result is the signature "slowed + reverb" sound popular in vaporwave, lo-fi hip hop, and chillwave music.
 
-```powershell
-# Run the setup script
-cd app/scripts
-.\download_ffmpeg.ps1
-```
+### Why Local Processing?
 
-#### Option 2: Using winget
+Slowverb uses **FFmpeg.wasm**, a WebAssembly port of the industry-standard FFmpeg audio tool. This means:
 
-```powershell
-winget install FFmpeg
-```
-
-#### Option 3: Using Chocolatey
-
-```powershell
-choco install ffmpeg
-```
-
-#### Option 4: Manual Download
-
-1. Download from [FFmpeg Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
-2. Extract `ffmpeg.exe` to the app directory (next to `slowverb.exe`)
-
-### macOS
-
-#### Using Homebrew (Recommended)
-
-```bash
-brew install ffmpeg
-```
-
-The executable will be at: `build/linux/x64/release/bundle/slowverb`
-
-### Android
-
-```bash
-cd app
-flutter build apk --release
-```
-
-The APK will be at: `build/app/outputs/flutter-apk/app-release.apk`
-
-### iOS
-
-```bash
-cd app
-flutter build ios --release
-```
-
-Follow Xcode instructions to archive and deploy.
-
-### Web
-
-```bash
-cd web
-flutter pub get
-flutter build web --release
-```
-
-The build output will be in `web/build/web/`. See [Web Version Documentation](./web/README.md) for detailed web deployment and development information.
+- Your audio files are processed directly in the browser.
+- No need for a backend server to handle audio encoding.
+- Faster response times since there's no network upload/download.
 
 ---
 
-## Platform Support
+## Key Features
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Windows  | ✅ Full Support | Windows 10/11 |
-| macOS    | ✅ Full Support | macOS 12+ |
-| Linux    | ✅ Full Support | Ubuntu 22.04 |
-| Android  | ✅ Full Support | Android 6.0+ |
-| iOS      | ✅ Full Support | iOS 12+ |
-| Web      | ✅ Full Support | Modern web browsers (Chrome, Firefox, Safari, Edge) |
+### 🎚️ Real-Time Effect Controls
 
-### Linux Audio Note
+The editor screen provides interactive sliders for:
 
-Audio playback on Linux uses web-based APIs and may have limitations compared to Windows. The app will still function, but audio features might not be as robust.
+| Parameter     | Range            | Description                                      |
+|---------------|------------------|--------------------------------------------------|
+| **Tempo**     | 0.5x – 2.0x      | Slow down or speed up the audio.                 |
+| **Pitch**     | -12 to +12 semi  | Lower or raise the pitch.                        |
+| **Reverb**    | 0% – 100%        | Add room echo and decay.                         |
+| **Echo**      | 0% – 100%        | Add a repeating echo effect.                     |
+| **EQ Warmth** | 0% – 100%        | Boost low frequencies for a warmer, lo-fi sound. |
 
-*Note: Linux version tested on SteamOS.*
+### 📊 Waveform Display
+
+The waveform panel shows a visual representation of your audio file. You can click anywhere on the waveform to seek to that position in the track.
+
+### 🎧 Preview Mode
+
+Before exporting, you can generate a **real-time preview** of your processed audio. This lets you hear changes as you tweak the sliders, without waiting for a full render.
+
+### 💾 Automatic Project Saving
+
+Slowverb uses your browser's **IndexedDB** storage to automatically save your projects. This means:
+
+- Your work is saved locally, even if you close the tab.
+- You can return later and pick up where you left off via the **Library** screen.
+
+### 📤 Multiple Export Formats
+
+Export your finished audio in one of three formats:
+
+| Format   | Quality                   | Best For                           |
+|----------|---------------------------|------------------------------------|
+| **MP3**  | Compressed (128-320 kbps) | Sharing, streaming, small files.   |
+| **WAV**  | Uncompressed (Lossless)   | Professional use, no quality loss. |
+| **FLAC** | Compressed (Lossless)     | Archiving, high-quality storage.   |
 
 ---
 
-## Web Version
+## How It Works
 
-Slowverb includes a **full-featured web version** that runs entirely in the browser with **no server-side processing**. This means:
+Here's a simplified breakdown of what happens when you use Slowverb:
 
-- ✅ **Complete privacy** - All audio processing happens locally on your device
-- ✅ **No audio uploads** - Your files never leave your browser
-- ✅ **Instant processing** - No wait times for server processing
-- ✅ **Works offline** - After initial load, the app functions without internet connection
-- ⚠️ **Browser-dependent** - Audio processing performance depends on your browser's capabilities
+```
+┌──────────────┐     ┌───────────────────┐     ┌────────────────┐
+│  Your Audio  │ ──► │  FFmpeg.wasm      │ ──► │  Processed     │
+│  File (.mp3) │     │  (in Web Worker)  │     │  Output (.mp3) │
+└──────────────┘     └───────────────────┘     └────────────────┘
+       ▲                       │
+       │                       ▼
+   File Picker           DSP Filter Chain
+   (Browser API)         (tempo, pitch, reverb, etc.)
+```
 
-### Key Differences from Desktop/Mobile
+1. **Import**: You select an audio file using the browser's file picker.
+2. **Load**: The file is loaded into memory (not uploaded anywhere).
+3. **Process**: FFmpeg.wasm applies audio filters (tempo, pitch, reverb, etc.) in a background Web Worker.
+4. **Preview**: A short preview is generated so you can hear the result.
+5. **Export**: The full audio is rendered and downloaded to your computer.
 
-| Feature | Desktop/Mobile | Web |
-|---------|---|---|
-| **Audio Engine** | Native FFmpeg | Web Audio API + WASM FFmpeg |
-| **Processing** | Fast (native code) | Good (optimized WASM) |
-| **File I/O** | Full filesystem access | Browser storage (IndexedDB) |
-| **Export** | Direct file save | Browser download |
-| **Memory** | System memory | Browser tab memory (~500MB-2GB) |
-| **Browser Support** | N/A | Chrome, Firefox, Safari, Edge 15+ |
+---
 
-**Browser Requirements:**
-- Chrome 57+ (2017)
-- Firefox 52+ (2017)
-- Safari 11+ (2017)
-- Edge 79+ (Chromium-based)
-- Chrome/Firefox on Android
+## Getting Started (Users)
 
-For more details on the web version, see the [Web README](./web/README.md).
+1. **Open the app**: Go to **[https://slowverb.vercel.app/](https://slowverb.vercel.app/)**.
+2. **Import a file**: Click "Drop audio file here" or "click to browse" to select an MP3, WAV, FLAC, M4A, AAC, or OGG file.
+3. **Choose a preset**: Click the preset button (e.g., "Slowed + Reverb") to apply a pre-configured effect.
+4. **Fine-tune**: Adjust the sliders (Tempo, Pitch, Reverb, Echo, Warmth) to taste.
+5. **Preview**: Click the **Preview** button to hear a sample of the processed audio.
+6. **Export**: Navigate to the **Export** screen, choose your format (MP3, WAV, FLAC), and click **Start Export**.
+7. **Download**: Once processing is complete, your new audio file will download automatically.
 
 ---
 
 ## Effect Presets
 
-| Preset | Tempo | Pitch | Reverb | Description |
-|--------|-------|-------|--------|-------------|
-| Slowed + Reverb | 0.7x | -5.1 semi | 40% | Classic dreamy vaporwave |
-| Vaporwave Chill | 0.78x | -3 semi | 35% | Warm, nostalgic sound |
-| Nightcore | 1.25x | +3 semi | 10% | Fast & energetic |
-| Echo Slow | 0.7x | -3 semi | 60% | Hazy with deep echoes |
-| Manual | 1.0x | 0 semi | 0% | Full control |
+Slowverb includes **12 curated presets** to get you started quickly:
+
+| Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
+|--------------------|---------|----------|--------|-------|--------|-----------------------------------|
+| **Slowed + Reverb**| 0.95x   | -2 semi  | 70%    | 20%   | 40%    | Classic dreamy vaporwave.         |
+| **Vaporwave Chill**| 0.78x   | -3 semi  | 80%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
+| **Nightcore**      | 1.25x   | +4 semi  | 30%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
+| **Echo Slow**      | 0.65x   | -4 semi  | 60%    | 80%   | 50%    | Ultra slow with cascading echoes. |
+| **Lo-Fi**          | 0.92x   | -1 semi  | 50%    | 30%   | 80%    | Relaxed, warm, dusty sound.       |
+| **Ambient Space**  | 0.70x   | -2.5 semi| 90%    | 60%   | 30%    | Ethereal, floating atmosphere.    |
+| **Deep Bass**      | 0.80x   | -5 semi  | 40%    | 20%   | 90%    | Heavy low-end focus.              |
+| **Crystal Clear**  | 1.00x   | +2 semi  | 20%    | 10%   | 10%    | Crisp, bright, clean.             |
+| **Underwater**     | 0.72x   | -3.5 semi| 85%    | 50%   | 60%    | Muffled, submerged atmosphere.    |
+| **Synthwave**      | 1.05x   | +1 semi  | 60%    | 40%   | 40%    | Retro 80s vibes.                  |
+| **Slow Motion**    | 0.55x   | -6 semi  | 70%    | 60%   | 50%    | Extreme slow-down effect.         |
+| **Manual**         | 1.00x   | 0 semi   | 0%     | 0%    | 50%    | Start from scratch.               |
 
 ---
 
-## Audio Processing
+## Visualizers
 
-Slowverb uses professional-grade FFmpeg filters for high-quality audio:
+While your audio plays, Slowverb displays an animated visualizer that reacts to the music. Choose from **5 retro-inspired visual styles**:
 
-- **48kHz Sample Rate** - Higher than CD quality
-- **Multi-Stage Reverb** - 3 echo stages (40/50/70ms)
-- **Dynamic Normalization** - Consistent loudness
-- **Bass Enhancement** - 5-10dB boost based on reverb
+| Visualizer        | Description                                                 |
+|-------------------|-------------------------------------------------------------|
+| **Pipes (Vaporwave)** | A neon-colored 3D pipes animation reminiscent of the classic Windows screensaver. |
+| **Starfield Warp**    | A classic starfield "flight through space" effect driven by audio volume. |
+| **Maze Neon**         | A first-person maze runner with neon aesthetics.              |
+| **Fractal Dream**     | Mandelbrot/Julia fractal zooms with shifting color palettes. |
+| **WMP Retro**         | Nostalgic Windows Media Player-style bars and waves.         |
+
+Visualizers are rendered using **GPU shaders (GLSL)** via Flutter's `FragmentShader` API.
+
+---
+
+## Export Formats
+
+| Format | Description                                                                                   |
+|--------|-----------------------------------------------------------------------------------------------|
+| **MP3**| The most widely compatible format. Small file sizes (lossy compression). Configurable bitrate (128-320 kbps). |
+| **WAV**| Uncompressed, lossless audio. Large file sizes. Best for professional editing.               |
+| **FLAC**| Lossless compression. Smaller than WAV, but with no quality loss. Good for archiving.        |
+
+> **Note**: FLAC export is only enabled when the source audio is a lossless format (WAV, FLAC). If you import an MP3, exporting to FLAC won't improve quality.
+
+---
+
+## Project Library
+
+Slowverb automatically saves your work to **IndexedDB**, your browser's built-in database. This includes:
+
+- The original filename.
+- Your selected preset.
+- All effect parameters.
+- The last export format and date.
+
+To access your saved projects:
+
+1. Go to the **Library** screen from the import page.
+2. Click **Open** on any project to resume editing.
+3. Click **Delete** to remove a project from storage.
+
+> **Tip**: If you clear your browser's site data, your saved projects will be lost.
+
+---
+
+## Technical Architecture
+
+Slowverb is built with a modern, modular architecture:
+
+### Frontend (UI Layer)
+
+- **Flutter Web**: Cross-platform UI framework compiled to HTML/CSS/JavaScript.
+- **State Management**: `flutter_riverpod` for reactive state management.
+- **Routing**: `go_router` for URL-based navigation.
+
+### Audio Engine
+
+- **FFmpeg.wasm**: A WebAssembly port of FFmpeg (`@ffmpeg/ffmpeg`). Handles all DSP (Digital Signal Processing) tasks.
+- **Web Workers**: FFmpeg runs in a background thread (`audio_worker.js`) to keep the UI responsive.
+- **Filter Chain**: The Dart code constructs an FFmpeg filter chain string based on your settings (e.g., `atempo=0.85,asetrate=44100*0.9,aecho=...`).
+
+### Audio Playback
+
+- **Web Audio API** (via `just_audio`): For real-time audio playback.
+- **Blob URLs**: Processed audio is converted to a Blob URL for seamless playback.
+
+### Persistence
+
+- **IndexedDB** (via `idb_shim`): Stores project metadata and file handles (where supported).
+- **File System Access API** (Chrome/Edge): Allows re-opening files without re-selecting them.
+
+---
+
+## Developer Setup
+
+### Prerequisites
+
+- **Flutter SDK**: 3.22.0 or higher.
+- **Node.js**: (Optional) For testing the JavaScript worker.
+- **Chrome or Brave**: For development and testing.
+
+### Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/soficis/Slowverb.git
+cd Slowverb
+
+# 2. Navigate to the web project
+cd web
+
+# 3. Install Flutter dependencies
+flutter pub get
+
+# 4. Run the development server
+flutter run -d chrome
+```
+
+### Production Build
+
+```bash
+cd web
+flutter build web --wasm --release
+```
+
+The output will be in `web/build/web/`. You can deploy this folder to any static hosting service (Vercel, Netlify, GitHub Pages, etc.).
 
 ---
 
 ## Project Structure
 
-```text
-slowverb/
-├── app/                    # Flutter application (Mobile + Desktop)
-│   ├── lib/               # Dart source code
-│   │   ├── app/           # App configuration
-│   │   ├── domain/        # Entities & interfaces
-│   │   ├── features/      # Feature modules
-│   │   │   ├── editor/    # Audio editor
-│   │   │   ├── export/    # Export functionality
-│   │   │   └── library/   # Project library
-│   │   └── audio_engine/  # FFmpeg integration
-│   ├── scripts/           # Build scripts
-│   └── test/              # Unit tests
-├── web/                   # Flutter web application
-│   ├── lib/               # Dart source code for web
-│   │   ├── app/           # Web app configuration
-│   │   ├── domain/        # Shared entities & interfaces
-│   │   ├── engine/        # Web audio engine (WASM FFmpeg)
-│   │   ├── features/      # Feature modules (web-optimized)
-│   │   └── providers/     # State management (Riverpod)
-│   ├── web/               # Web assets and HTML
-│   │   ├── js/            # JavaScript utilities
-│   │   ├── fonts/         # Web fonts
-│   │   ├── icons/         # Web app icons
-│   │   └── manifest.json  # PWA manifest
-│   ├── assets/wasm/       # WASM FFmpeg binaries
-│   ├── pubspec.yaml       # Web-specific dependencies
-│   └── README.md          # Web version documentation
-├── docs/                  # Documentation
-├── LICENSE                # GPLv3 License
-└── README.md              # This file
+```
+Slowverb/
+├── web/                          # Flutter Web Application
+│   ├── lib/
+│   │   ├── app/                  # App configuration, routing, colors
+│   │   ├── domain/               # Data models (entities, repositories)
+│   │   │   ├── entities/         # EffectPreset, Project, AudioMetadata, etc.
+│   │   │   └── repositories/     # AudioEngine interface
+│   │   ├── engine/               # Audio engine implementation
+│   │   │   ├── wasm_audio_engine.dart  # Main engine class
+│   │   │   └── filter_chain_builder.dart # FFmpeg filter string builder
+│   │   ├── features/             # UI Screens
+│   │   │   ├── import/           # File import screen
+│   │   │   ├── editor/           # Main audio editor
+│   │   │   ├── export/           # Export screen
+│   │   │   ├── library/          # Project library
+│   │   │   ├── settings/         # Settings screen
+│   │   │   ├── about/            # About screen
+│   │   │   └── visualizer/       # GPU visualizers
+│   │   ├── providers/            # Riverpod state providers
+│   │   └── utils/                # Utility functions
+│   ├── web/
+│   │   ├── index.html            # Entry HTML
+│   │   ├── manifest.json         # PWA manifest
+│   │   └── js/
+│   │       ├── audio_worker.js   # Web Worker (FFmpeg processing)
+│   │       └── slowverb_bridge.js # Dart ↔ JS interop
+│   ├── shaders/                  # GLSL fragment shaders for visualizers
+│   │   ├── pipes_3d.frag
+│   │   ├── starfield.frag
+│   │   ├── maze_3d.frag
+│   │   └── wmp_retro.frag
+│   └── pubspec.yaml              # Flutter dependencies
+├── docs/                         # Documentation
+└── README.md                     # This file
 ```
 
 ---
 
-## Acknowledgments
+## License
 
-- [Flutter](https://flutter.dev) - Cross-platform framework
-- [FFmpeg](https://ffmpeg.org) - Audio processing engine
-- [just_audio](https://pub.dev/packages/just_audio) - Audio playback
-- [Hive](https://pub.dev/packages/hive) - Local storage
+This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 
----
+### FFmpeg Attribution
 
-## FAQ
-
-**Q: Why do I get "FFmpeg not found" error?**  
-A: Install FFmpeg following the [installation instructions](#ffmpeg-installation) above.
-
-**Q: Why is the audio not processed (no reverb)?**  
-A: This means FFmpeg is not installed. The app exports the original file as a fallback.
-
-**Q: Can I use my own presets?**  
-A: Yes! Select "Manual" preset and adjust the sliders to your liking.
-
-**Q: What audio formats are supported for input?**  
-A: MP3, WAV, AAC, FLAC, OGG, and most common audio formats.
-
-**Q: Where are my exported files saved?**  
-A: By default, exports go to your Documents/Slowverb folder. You can change this in the Export screen.
+Slowverb uses [FFmpeg](https://ffmpeg.org) compiled to WebAssembly via `@ffmpeg/ffmpeg`. FFmpeg is licensed under [LGPL 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html). No modifications were made to the FFmpeg source code.
 
 ---
 
-## 📜 License
-
-This project is licensed under the **GNU General Public License v3.0** (GPLv3) - see the [LICENSE](LICENSE) file for details.
-
-### FFmpeg Attribution & Compliance
-
-This software uses libraries from the [FFmpeg](https://ffmpeg.org) project under the [LGPLv2.1](http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html).
-
-- **FFmpeg Source Code:** The exact source code for the FFmpeg build used in this project can be downloaded from: [Link to your source/fork or upstream if unmodified] (e.g., <https://ffmpeg.org/download.html>)
-- **Modifications:** No modifications were made to the FFmpeg source code.
-- **Ownership:** This project does NOT own FFmpeg. FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
-
-Note: Since this project links to FFmpeg libraries (via dynamic linking or command line execution), and is licensed under GPLv3, it is fully compatible with FFmpeg's licensing terms.
+<p align="center">
+  <strong><a href="https://slowverb.vercel.app/">🚀 Try Slowverb Live → https://slowverb.vercel.app/</a></strong>
+</p>

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/app_config.dart';
-import 'package:slowverb_web/providers/settings_provider.dart';
 
 /// Settings screen for configuring experimental features
 class SettingsScreen extends ConsumerWidget {
@@ -11,8 +10,6 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(experimentalFeaturesProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -43,71 +40,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // Experimental features card
-              _buildCard(
-                context,
-                title: 'Experimental Features',
-                children: [
-                  // Experimental warning
-                  Container(
-                    margin: const EdgeInsets.all(12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber,
-                          color: Colors.orange,
-                          size: 20,
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Experimental features may not work with all content and can change or be removed.',
-                            style: TextStyle(
-                              color: Colors.orange,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // YouTube streaming toggle
-                  SwitchListTile(
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: SlowverbColors.neonCyan.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.play_circle_outline,
-                        color: SlowverbColors.neonCyan,
-                      ),
-                    ),
-                    title: const Text('YouTube Streaming Mode'),
-                    subtitle: const Text(
-                      'Stream YouTube videos with synced visualizers. '
-                      'Audio effects cannot be applied due to CORS/DRM restrictions.',
-                    ),
-                    value: settings.streamingAudioEnabled,
-                    onChanged: (value) {
-                      ref
-                          .read(experimentalFeaturesProvider.notifier)
-                          .setStreamingAudioEnabled(value);
-                    },
-                    activeThumbColor: SlowverbColors.neonCyan,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
               // Legal disclaimer
               _buildCard(
                 context,
@@ -116,9 +48,8 @@ class SettingsScreen extends ConsumerWidget {
                   const Padding(
                     padding: EdgeInsets.all(12),
                     child: Text(
-                      'Use streaming features only with content you have rights to transform. '
-                      'Slowverb respects platform terms of service and does not circumvent '
-                      'DRM or content protection measures.',
+                      'Use Slowverb only with content you have rights to transform. '
+                      'All processing happens locally in your browser.',
                       style: TextStyle(
                         color: SlowverbColors.textSecondary,
                         fontSize: 12,

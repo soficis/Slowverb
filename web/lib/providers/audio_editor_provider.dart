@@ -1,20 +1,3 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -133,6 +116,10 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     try {
       final engine = _ref.read(audioEngineProvider);
+      final canLoad = await _allowLoad(engine, fileData);
+      if (!canLoad) {
+        return;
+      }
 
       // Generate unique file ID
       final fileId = 'file-${DateTime.now().millisecondsSinceEpoch}';
@@ -296,6 +283,19 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     );
 
     await repo.saveProject(project, fileHandle: state.fileHandle);
+  }
+
+  Future<bool> _allowLoad(AudioEngine engine, AudioFileData fileData) async {
+    final preflight = await engine.checkMemoryPreflight(fileData.sizeBytes);
+    if (preflight.isBlocked) {
+      state = state.copyWith(isLoading: false, error: preflight.message);
+      return false;
+    }
+    if (preflight.isWarning && preflight.message != null) {
+      // ignore: avoid_print
+      print('[AudioEditor] ${preflight.message}');
+    }
+    return true;
   }
 }
 

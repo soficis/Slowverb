@@ -115,15 +115,8 @@
     }, 5000);
   </script>
 
-  <!-- FFmpeg UMD Scripts (Local - works for dev and prod) -->
-  <!-- FFmpeg v0.11.x (Stable Single Threaded Support) -->
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-  <!-- ffmpeg-util not needed for v0.11 -->
-
-  <!-- Audio engine wrapper (must load before Flutter) -->
-  <script src="js/engine_wrapper.js?v=2"></script>
-  <!-- YouTube player wrapper for experimental streaming -->
-  <script src="js/youtube_player.js"></script>
+  <!-- New TypeScript core bridge (worker-per-job FFmpeg, local assets) -->
+  <script type="module" src="js/slowverb_bridge.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 
   <!-- Vercel Web Analytics -->
@@ -135,6 +128,16 @@
 
   <!-- Vercel Speed Insights -->
   <script defer src="https://cdn.vercel-analytics.com/v1/web.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(() => console.log('SW registered'))
+          .catch((err) => console.warn('SW failed:', err));
+      });
+    }
+  </script>
 </body>
 
 </html>

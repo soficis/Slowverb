@@ -1,20 +1,3 @@
-/*
- * Copyright (C) 2025 Slowverb
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
@@ -23,10 +6,8 @@ import 'package:slowverb_web/features/import/import_screen.dart';
 import 'package:slowverb_web/features/editor/editor_screen.dart';
 import 'package:slowverb_web/features/export/export_screen.dart';
 import 'package:slowverb_web/features/about/about_screen.dart';
-import 'package:slowverb_web/features/youtube/youtube_stream_screen.dart';
 import 'package:slowverb_web/features/library/library_screen.dart';
 import 'package:slowverb_web/features/settings/settings_screen.dart';
-import 'package:slowverb_web/app/app_config.dart';
 
 /// Arguments for navigating to the editor.
 class EditorScreenArgs {
@@ -43,7 +24,6 @@ class AppRoutes {
   static const presets = '/presets';
   static const export = '/export';
   static const about = '/about';
-  static const youtube = '/youtube';
   static const library = '/library';
   static const settings = '/settings';
 }
@@ -103,13 +83,6 @@ final appRouter = GoRouter(
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
     ),
-    // YouTube streaming (experimental)
-    if (AppConfig.enableExperimentalYouTubeMode)
-      GoRoute(
-        path: AppRoutes.youtube,
-        name: 'youtube',
-        builder: (context, state) => const YouTubeStreamScreen(),
-      ),
   ],
   errorBuilder: (context, state) => Scaffold(
     body: Center(
