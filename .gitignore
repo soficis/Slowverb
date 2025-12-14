@@ -74,4 +74,5 @@ run_with_logging.bat
 lints.txt
 lints_utf8.txt
 export_crash_test.dart
-tests/
+web/test
+web/test-results
