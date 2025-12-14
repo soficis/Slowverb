@@ -176,7 +176,7 @@ var SlowverbEngine = class {
     try {
       const jobId = request.source.fileId;
       await this.prepareSource(runner, request.source);
-      return runner.waveform({ fileId: request.source.fileId, points: request.points }, jobId);
+      return await runner.waveform({ fileId: request.source.fileId, points: request.points }, jobId);
     } finally {
       runner.terminate();
     }
@@ -186,7 +186,13 @@ var SlowverbEngine = class {
     try {
       await runner.init(this.initPayload);
       await runner.loadSource(source);
-      return runner.probe({ fileId: source.fileId });
+      callbacks?.onLog?.("debug", `probe:ping-check starting`);
+      const pingOk = await runner.ping();
+      callbacks?.onLog?.("debug", `probe:ping-check result=${pingOk}`);
+      if (!pingOk) {
+        throw new Error("Worker stopped responding after LOAD_SOURCE (ping failed)");
+      }
+      return await runner.probe({ fileId: source.fileId });
     } finally {
       runner.terminate();
     }
@@ -211,6 +217,10 @@ var SlowverbEngine = class {
   async prepareSource(runner, source) {
     await runner.init(this.initPayload);
     await runner.loadSource(source);
+    const pingOk = await runner.ping();
+    if (!pingOk) {
+      throw new Error("Worker stopped responding after LOAD_SOURCE (ping failed)");
+    }
     await runner.probe({ fileId: source.fileId });
   }
   buildRenderPayload(request) {
@@ -277,6 +287,15 @@ var WorkerRunner = class {
     const requestId = this.nextRequestId();
     return this.sendWithLog({ type: "PROBE", requestId, payload });
   }
+  async ping() {
+    const requestId = this.nextRequestId();
+    try {
+      await this.sendWithLog({ type: "PING", requestId });
+      return true;
+    } catch {
+      return false;
+    }
+  }
   async render(type, payload, jobId) {
     const requestId = this.nextRequestId();
     return this.sendWithLog({ type, requestId, jobId, payload }, { transfer: [] });
@@ -302,7 +321,13 @@ var WorkerRunner = class {
         reject,
         resolveOnReady: options?.resolveOnReady
       });
-      this.worker.postMessage(request, options?.transfer ?? []);
+      try {
+        this.worker.postMessage(request, options?.transfer ?? []);
+      } catch (postError) {
+        this.callbacks?.onLog?.("error", `worker:postMessage failed for ${request.type}: ${String(postError)}`);
+        this.pending.delete(request.requestId);
+        reject(new Error(`postMessage failed: ${String(postError)}`));
+      }
     });
   }
   async sendWithLog(request, options) {

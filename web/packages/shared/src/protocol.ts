@@ -5,7 +5,8 @@ export type WorkerRequestType =
   | "RENDER_PREVIEW"
   | "RENDER_FULL"
   | "WAVEFORM"
-  | "CANCEL";
+  | "CANCEL"
+  | "PING";
 
 export type ExportFormat = "mp3" | "wav" | "flac" | "aac";
 
@@ -51,7 +52,8 @@ export type WorkerRequest =
   | { type: "RENDER_PREVIEW"; requestId: string; jobId: string; payload: RenderPayload }
   | { type: "RENDER_FULL"; requestId: string; jobId: string; payload: RenderPayload }
   | { type: "WAVEFORM"; requestId: string; jobId: string; payload: WaveformPayload }
-  | { type: "CANCEL"; requestId: string; jobId: string; payload: CancelPayload };
+  | { type: "CANCEL"; requestId: string; jobId: string; payload: CancelPayload }
+  | { type: "PING"; requestId: string };
 
 export interface LoadSourceResultPayload {
   readonly fileId: string;
@@ -76,11 +78,16 @@ export interface WaveformResultPayload {
   readonly samples: Float32Array;
 }
 
+export interface PingResultPayload {
+  readonly pong: boolean;
+}
+
 export type WorkerResultPayload =
   | LoadSourceResultPayload
   | ProbeResultPayload
   | RenderResultPayload
-  | WaveformResultPayload;
+  | WaveformResultPayload
+  | PingResultPayload;
 
 export type WorkerLogLevel = "info" | "warn" | "error" | "debug";
 
@@ -89,11 +96,11 @@ export type WorkerEvent =
   | { type: "LOG"; level: WorkerLogLevel; message: string }
   | { type: "PROGRESS"; jobId: string; value: number; stage?: string }
   | {
-      type: "RESULT";
-      requestId: string;
-      jobId?: string;
-      payload: WorkerResultPayload;
-    }
+    type: "RESULT";
+    requestId: string;
+    jobId?: string;
+    payload: WorkerResultPayload;
+  }
   | { type: "CANCELLED"; requestId?: string; jobId: string; reason?: string }
   | { type: "ERROR"; requestId?: string; jobId?: string; message: string; cause?: string };
 

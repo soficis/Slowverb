@@ -4601,6 +4601,15 @@ var ctx = self;
 console.info("[slowverb-worker] started", {
   hasProcess: typeof globalThis.process !== "undefined"
 });
+ctx.addEventListener("error", (event) => {
+  postEvent({ type: "LOG", level: "error", message: `worker:error ${event.message || event.type}` });
+});
+ctx.addEventListener("unhandledrejection", (event) => {
+  postEvent({ type: "LOG", level: "error", message: `worker:unhandled ${String(event.reason)}` });
+});
+ctx.addEventListener("messageerror", (event) => {
+  postEvent({ type: "LOG", level: "error", message: `worker:messageerror ${String(event.data)}` });
+});
 var DEFAULT_CORE_URL = "/js/ffmpeg-core.js";
 var DEFAULT_WASM_URL = "/js/ffmpeg-core.wasm";
 var DEFAULT_WORKER_URL = void 0;
@@ -4616,6 +4625,7 @@ ctx.onmessage = (event) => {
   });
 };
 async function handleRequest(request) {
+  console.log(`[slowverb-worker] request:${request.type} (${request.requestId})`);
   postEvent({ type: "LOG", level: "debug", message: `request:${request.type}` });
   switch (request.type) {
     case "INIT":
@@ -4623,7 +4633,7 @@ async function handleRequest(request) {
     case "LOAD_SOURCE":
       return runWithEngine(() => handleLoadSource(request), request.requestId);
     case "PROBE":
-      return runWithEngine(() => handleProbe(request));
+      return runWithEngine(() => handleProbe(request), request.requestId);
     case "RENDER_PREVIEW":
     case "RENDER_FULL":
       return runWithEngine(() => handleRender(request));
@@ -4631,11 +4641,20 @@ async function handleRequest(request) {
       return runWithEngine(() => handleWaveform(request));
     case "CANCEL":
       return handleCancel(request);
+    case "PING":
+      return handlePing(request);
   }
 }
+async function handlePing(request) {
+  postEvent({ type: "LOG", level: "debug", message: `pong:${request.requestId}` });
+  postResult(request.requestId, { pong: true });
+}
 async function runWithEngine(task, requestId) {
+  console.log(`[slowverb-worker] runWithEngine:start (${requestId})`);
   await ensureFfmpeg(void 0, requestId);
+  console.log(`[slowverb-worker] runWithEngine:ffmpeg-ready (${requestId})`);
   await task();
+  console.log(`[slowverb-worker] runWithEngine:task-done (${requestId})`);
 }
 async function handleCancel(request) {
   postEvent({
@@ -4647,8 +4666,10 @@ async function handleCancel(request) {
   ctx.close();
 }
 async function ensureFfmpeg(payload, requestId) {
+  console.log(`[slowverb-worker] ensureFfmpeg:check isReady=${isReady} ffmpeg=${!!ffmpeg} (${requestId})`);
   if (isReady && ffmpeg) {
     if (requestId) postEvent({ type: "READY", requestId });
+    console.log(`[slowverb-worker] ensureFfmpeg:already-ready (${requestId})`);
     return;
   }
   postEvent({ type: "LOG", level: "info", message: "FFmpeg init: start" });
@@ -4705,20 +4726,32 @@ async function handleLoadSource(request) {
     message: `load:ok (${request.payload.fileId}) size=${data.byteLength}`
   });
   postResult(request.requestId, { fileId: request.payload.fileId });
+  setTimeout(() => {
+    postEvent({ type: "LOG", level: "debug", message: `load:heartbeat (${request.payload.fileId}) event-loop-alive` });
+  }, 100);
 }
 async function handleProbe(request) {
+  console.log(`[slowverb-worker] handleProbe:start`, request);
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const fileId = request.payload.fileId;
+  console.log(`[slowverb-worker] handleProbe:fileId=${fileId}`);
+  console.log(`[slowverb-worker] handleProbe:about-to-postEvent-probe-start`);
   postEvent({ type: "LOG", level: "info", message: `probe:start (${fileId})` });
+  console.log(`[slowverb-worker] handleProbe:postEvent-done`);
+  console.log(`[slowverb-worker] handleProbe:about-to-ensureFileExists`);
   ensureFileExists(fileId);
+  console.log(`[slowverb-worker] handleProbe:ensureFileExists-done`);
   postEvent({ type: "LOG", level: "debug", message: `probe:exists (${fileId})` });
   const warnTimeout = setTimeout(() => {
     postEvent({ type: "LOG", level: "warn", message: `probe:still-running (${fileId})` });
   }, 1e4);
   try {
+    console.log(`[slowverb-worker] handleProbe:about-to-probeWithFfmpeg`);
     const metadata = await probeWithFfmpeg(fileId);
+    console.log(`[slowverb-worker] handleProbe:probeWithFfmpeg-done`, metadata);
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
     postResult(request.requestId, metadata);
+    console.log(`[slowverb-worker] handleProbe:result-posted`);
   } finally {
     clearTimeout(warnTimeout);
   }
@@ -4842,13 +4875,25 @@ async function probeWithFfmpeg(fileId) {
   const capture = startLogCapture(250);
   try {
     postEvent({ type: "LOG", level: "debug", message: "probe:exec start" });
-    ffmpeg.exec("-hide_banner", "-i", fileId);
-    postEvent({ type: "LOG", level: "debug", message: "probe:exec done" });
+    const ret = ffmpeg.exec(
+      "-hide_banner",
+      "-t",
+      "0.01",
+      "-i",
+      fileId,
+      "-vn",
+      "-sn",
+      "-dn",
+      "-f",
+      "null",
+      "-"
+    );
+    postEvent({ type: "LOG", level: "debug", message: `probe:exec done ret=${ret}` });
   } catch (error) {
     postEvent({
       type: "LOG",
       level: "debug",
-      message: `probe:exec threw (expected) ${String(error?.message ?? error)}`
+      message: `probe:exec threw ${String(error?.message ?? error)}`
     });
   } finally {
     stopLogCapture(capture);

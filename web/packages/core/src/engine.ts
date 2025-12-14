@@ -5,6 +5,7 @@ import type {
   ExportFormat,
   InitPayload,
   LoadSourcePayload,
+  PingResultPayload,
   ProbeResultPayload,
   RenderPayload,
   RenderResultPayload,
@@ -79,7 +80,7 @@ export class SlowverbEngine {
     try {
       const jobId = request.source.fileId;
       await this.prepareSource(runner, request.source);
-      return runner.waveform({ fileId: request.source.fileId, points: request.points }, jobId);
+      return await runner.waveform({ fileId: request.source.fileId, points: request.points }, jobId);
     } finally {
       runner.terminate();
     }
@@ -90,7 +91,16 @@ export class SlowverbEngine {
     try {
       await runner.init(this.initPayload);
       await runner.loadSource(source);
-      return runner.probe({ fileId: source.fileId });
+
+      // Diagnostic: verify worker is responsive before PROBE
+      callbacks?.onLog?.("debug", `probe:ping-check starting`);
+      const pingOk = await runner.ping();
+      callbacks?.onLog?.("debug", `probe:ping-check result=${pingOk}`);
+      if (!pingOk) {
+        throw new Error("Worker stopped responding after LOAD_SOURCE (ping failed)");
+      }
+
+      return await runner.probe({ fileId: source.fileId });
     } finally {
       runner.terminate();
     }
@@ -123,6 +133,13 @@ export class SlowverbEngine {
   private async prepareSource(runner: WorkerRunner, source: SourceData): Promise<void> {
     await runner.init(this.initPayload);
     await runner.loadSource(source);
+
+    // Diagnostic: verify worker is still responsive after LOAD_SOURCE
+    const pingOk = await runner.ping();
+    if (!pingOk) {
+      throw new Error("Worker stopped responding after LOAD_SOURCE (ping failed)");
+    }
+
     await runner.probe({ fileId: source.fileId });
   }
 
@@ -204,6 +221,16 @@ class WorkerRunner {
     return this.sendWithLog<ProbeResultPayload>({ type: "PROBE", requestId, payload });
   }
 
+  async ping(): Promise<boolean> {
+    const requestId = this.nextRequestId();
+    try {
+      await this.sendWithLog<PingResultPayload>({ type: "PING", requestId });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async render(
     type: "RENDER_PREVIEW" | "RENDER_FULL",
     payload: RenderPayload,
@@ -221,7 +248,7 @@ class WorkerRunner {
   async cancel(jobId: string): Promise<void> {
     const payload: CancelPayload = { jobId };
     const requestId = this.nextRequestId();
-    await this.sendWithLog<void>({ type: "CANCEL", requestId, jobId, payload }).catch(() => {});
+    await this.sendWithLog<void>({ type: "CANCEL", requestId, jobId, payload }).catch(() => { });
   }
 
   terminate(): void {
@@ -239,7 +266,13 @@ class WorkerRunner {
         reject,
         resolveOnReady: options?.resolveOnReady,
       });
-      this.worker.postMessage(request, options?.transfer ?? []);
+      try {
+        this.worker.postMessage(request, options?.transfer ?? []);
+      } catch (postError) {
+        this.callbacks?.onLog?.("error", `worker:postMessage failed for ${request.type}: ${String(postError)}`);
+        this.pending.delete(request.requestId);
+        reject(new Error(`postMessage failed: ${String(postError)}`));
+      }
     });
   }
 

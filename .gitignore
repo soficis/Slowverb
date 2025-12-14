@@ -89,7 +89,6 @@ coverage/
 
 # Documentation
 docs/
-.cursorrules
 # Temporary files
 *.tmp
 *.temp

@@ -62,18 +62,15 @@ class WasmAudioEngine implements AudioEngine {
     _ensureInitialized();
 
     final payload = BridgeInterop.toJsObject({
-      'source': {
-        'fileId': fileId,
-        'filename': filename,
-        'data': bytes.toJS,
-      },
+      'source': {'fileId': fileId, 'filename': filename, 'data': bytes.toJS},
     });
 
     final response = await BridgeInterop.loadAndProbe(payload);
     final payloadObj = response.getProperty<JSObject>('payload'.toJS);
     _loadedFiles[fileId] = bytes;
-    final durationMs =
-        payloadObj.getProperty<JSNumber?>('durationMs'.toJS)?.toDartInt;
+    final durationMs = payloadObj
+        .getProperty<JSNumber?>('durationMs'.toJS)
+        ?.toDartInt;
 
     return AudioMetadata(
       fileId: _getProperty<String>(payloadObj, 'fileId'),
@@ -93,10 +90,7 @@ class WasmAudioEngine implements AudioEngine {
     _ensureInitialized();
 
     final payload = BridgeInterop.toJsObject({
-      'source': {
-        'fileId': fileId,
-        'data': _requireFileBytes(fileId).toJS,
-      },
+      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
       'points': targetSamples,
     });
 
@@ -124,10 +118,7 @@ class WasmAudioEngine implements AudioEngine {
   }) async {
     _ensureInitialized();
     final payload = BridgeInterop.toJsObject({
-      'source': {
-        'fileId': fileId,
-        'data': _requireFileBytes(fileId).toJS,
-      },
+      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
       'dspSpec': _toDspSpec(config),
       'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
       'durationSec': duration != null ? duration.inMilliseconds / 1000.0 : null,
@@ -165,27 +156,48 @@ class WasmAudioEngine implements AudioEngine {
       RenderProgress(jobId: jobId, progress: 0.0, stage: 'processing'),
     );
 
-      try {
-        final payload = BridgeInterop.toJsObject({
-          'source': {
-            'fileId': fileId,
-            'data': _requireFileBytes(fileId).toJS,
-          },
-          'dspSpec': _toDspSpec(config),
-          'format': options.format,
-          'bitrateKbps': options.bitrateKbps ?? 192,
-          'jobId': jobId.value,
-        });
+    // Start the render asynchronously - DO NOT await here!
+    // This allows the caller to subscribe to progress updates before render completes.
+    unawaited(
+      _performRender(
+        jobId: jobId,
+        fileId: fileId,
+        config: config,
+        options: options,
+        controller: controller,
+      ),
+    );
 
-        final response = await BridgeInterop.renderFull(payload);
-        final payloadObj = response.getProperty<JSObject>('payload'.toJS);
-        final buffer = payloadObj.getProperty<JSObject>('outputBuffer'.toJS);
-        final bytes = BridgeInterop.bufferToUint8List(buffer);
+    return jobId;
+  }
 
-        _renderResults[jobId.value] = RenderResult(
-          success: true,
-          outputBytes: bytes,
-        );
+  /// Internal method that performs the actual render.
+  /// Called asynchronously from startRender so the jobId can be returned immediately.
+  Future<void> _performRender({
+    required RenderJobId jobId,
+    required String fileId,
+    required EffectConfig config,
+    required ExportOptions options,
+    required StreamController<RenderProgress> controller,
+  }) async {
+    try {
+      final payload = BridgeInterop.toJsObject({
+        'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
+        'dspSpec': _toDspSpec(config),
+        'format': options.format,
+        'bitrateKbps': options.bitrateKbps ?? 192,
+        'jobId': jobId.value,
+      });
+
+      final response = await BridgeInterop.renderFull(payload);
+      final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+      final buffer = payloadObj.getProperty<JSObject>('outputBuffer'.toJS);
+      final bytes = BridgeInterop.bufferToUint8List(buffer);
+
+      _renderResults[jobId.value] = RenderResult(
+        success: true,
+        outputBytes: bytes,
+      );
 
       controller.add(
         RenderProgress(jobId: jobId, progress: 1.0, stage: 'complete'),
@@ -201,8 +213,6 @@ class WasmAudioEngine implements AudioEngine {
       controller.close();
       _progressControllers.remove(jobId.value);
     }
-
-    return jobId;
   }
 
   @override
@@ -516,7 +526,9 @@ class WasmAudioEngine implements AudioEngine {
   Uint8List _requireFileBytes(String fileId) {
     final bytes = _loadedFiles[fileId];
     if (bytes == null) {
-      throw StateError('File bytes missing for $fileId. Call loadSource first.');
+      throw StateError(
+        'File bytes missing for $fileId. Call loadSource first.',
+      );
     }
     return bytes;
   }
@@ -571,10 +583,8 @@ class WasmAudioEngine implements AudioEngine {
     BridgeInterop.setProgressHandler(
       ((JSObject event) {
         final jobId = _getProperty<String>(event, 'jobId');
-        final value = event
-                .getProperty<JSNumber?>('value'.toJS)
-                ?.toDartDouble ??
-            0.0;
+        final value =
+            event.getProperty<JSNumber?>('value'.toJS)?.toDartDouble ?? 0.0;
         final stage =
             event.getProperty<JSString?>('stage'.toJS)?.toDart ?? 'processing';
         final controller = _progressControllers[jobId];
