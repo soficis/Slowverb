@@ -1,372 +1,352 @@
-# Slowverb Web - Browser-Based Slowed + Reverb Editor
+# Slowverb Web - Technical Documentation
 
-**Run Slowverb entirely in your browser with zero server-side processing**
+<p align="center">
+  <strong><a href="https://slowverb.vercel.app/">🚀 Live App → https://slowverb.vercel.app/</a></strong>
+</p>
 
-This is the web version of Slowverb, a Flutter web application that brings all the audio editing capabilities to modern web browsers. All audio processing happens locally on the user's device—no files are ever uploaded to a server.
+---
 
-**⚠️ Beta Software Notice**  
-This software is currently in beta. Not all features may work as expected, and you may encounter bugs or incomplete functionality. Use at your own risk.
+This document provides in-depth technical details for developers working on or contributing to the Slowverb web application.
 
-## 🎯 Features
+> ⚠️ **Tested Browsers**: Google Chrome and Brave. Other browsers may work but are not officially supported.
 
-- ✅ **Complete Local Processing** - All reverb, tempo, and pitch processing occurs in the browser
-- ✅ **Privacy-First** - Audio files never leave your device
-- ✅ **No Server Required** - Deploy as a static site
-- ✅ **Works Offline** - Fully functional after initial load
-- ✅ **WASM-Powered** - Uses WebAssembly FFmpeg for high-performance audio processing
-- ✅ **PWA Support** - Install as a web app on any device
-- ✅ **IndexedDB Storage** - Browser-based file persistence
-- ✅ **Batch Processing** - Process multiple files simultaneously
-- ✅ **Audio Visualizer** - Real-time visual effects (Pipes, Starfield, Maze, Fractal, WMP Retro)
-- ✅ **Shader Effects** - GPU-accelerated visual shaders
-- ✅ **History & Undo** - Track and revert changes
-- ✅ **Waveform Analysis** - Detailed audio visualization
-- ✅ **Settings Management** - Customizable app preferences
-- ✅ **About Screen** - Information and credits
+---
 
-## 🚀 Quick Start
+## Table of Contents
+
+1. [Quick Start](#quick-start)
+2. [Technology Stack](#technology-stack)
+3. [Audio Engine Deep Dive](#audio-engine-deep-dive)
+4. [State Management](#state-management)
+5. [Screens and Navigation](#screens-and-navigation)
+6. [Visualizers (GPU Shaders)](#visualizers-gpu-shaders)
+7. [IndexedDB Persistence](#indexeddb-persistence)
+8. [Build and Deployment](#build-and-deployment)
+9. [Performance Considerations](#performance-considerations)
+10. [Debugging Tips](#debugging-tips)
+11. [Release Checklist](#release-checklist)
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-- **Flutter SDK** (3.9.2+)
-- **Web browser** with WebAssembly support (Chrome 57+, Firefox 52+, Safari 11+, Edge 79+)
+- **Flutter SDK**: 3.22.0+
+- **Chrome or Brave browser**
 
 ### Development
 
 ```bash
-# Clone and navigate to the web directory
+# Navigate to web project
 cd web
 
 # Install dependencies
 flutter pub get
 
-# Run development server (hot reload enabled)
+# Run dev server (hot reload enabled)
 flutter run -d chrome
 ```
 
 ### Production Build
 
 ```bash
-cd web
-
-# Build for production
-flutter build web --release
-
-# Output location: build/web/
+flutter build web --wasm --release
+# Output: web/build/web/
 ```
 
-## 📁 Project Structure
+---
 
-```text
-web/
-├── lib/
-│   ├── main.dart                  # Web app entry point
-│   ├── app/
-│   │   ├── app.dart              # App widget & routing
-│   │   └── routes.dart           # Go Router configuration
-│   ├── domain/
-│   │   ├── entities/             # Audio data models
-│   │   └── repositories/         # Abstract repository interfaces
-│   ├── engine/
-│   │   ├── wasm_engine.dart      # WASM FFmpeg wrapper
-│   │   ├── audio_processor.dart  # Audio processing logic
-│   │   └── worker/               # Web Worker integration
-│   ├── features/
-│   │   ├── editor/               # Audio editing UI
-│   │   │   ├── views/
-│   │   │   ├── widgets/
-│   │   │   └── providers/
-│   │   └── export/               # Export functionality
-│   └── providers/                # Riverpod state management
-│       ├── audio_provider.dart
-│       ├── export_provider.dart
-│       └── storage_provider.dart
-├── web/
-│   ├── index.html               # Entry HTML file
-│   ├── manifest.json            # PWA manifest
-│   ├── js/
-│   │   └── wasm_loader.js       # WASM initialization
-│   ├── fonts/                   # Web fonts
-│   ├── icons/                   # PWA icons
-│   └── favicon.png
-├── assets/
-│   └── wasm/                    # WebAssembly binaries
-│       ├── ffmpeg.wasm
-│       └── ffmpeg.worker.js
-├── test/
-│   └── widget_test.dart
-└── pubspec.yaml
-```
+## Technology Stack
 
-## 🔧 Technology Stack
+| Layer              | Technology                    | Purpose                              |
+|--------------------|-------------------------------|--------------------------------------|
+| **UI Framework**   | Flutter Web (CanvasKit)       | Cross-platform material UI           |
+| **State**          | `flutter_riverpod`            | Reactive state management            |
+| **Routing**        | `go_router`                   | Declarative URL-based navigation     |
+| **Audio DSP**      | FFmpeg.wasm (`@ffmpeg/ffmpeg`)| Tempo, pitch, reverb, encoding       |
+| **Audio Playback** | `just_audio` + Web Audio API  | Real-time playback                   |
+| **Persistence**    | IndexedDB (`idb_shim`)        | Project storage                      |
+| **Visualizers**    | GLSL Fragment Shaders         | GPU-accelerated audio visualization  |
+| **Animations**     | `flutter_animate`             | Micro-interactions                   |
 
-### Core Framework
+---
 
-- **Flutter Web** - UI framework compiled to HTML/CSS/JavaScript
-- **Dart** - Programming language for Flutter
+## Audio Engine Deep Dive
 
-### Audio Processing
+### Overview
 
-- **FFmpeg.wasm** - WebAssembly-compiled FFmpeg for audio processing
-- **Web Audio API** - Browser's native audio playback
-- **just_audio** - Flutter audio plugin (web-compatible)
+The audio engine is implemented in `lib/engine/wasm_audio_engine.dart`. It communicates with a **Web Worker** (`web/js/audio_worker.js`) that runs FFmpeg.wasm in a background thread.
 
-### State Management & Storage
-
-- **Riverpod** - Reactive state management
-- **IndexedDB** - Browser database via `idb_shim`
-- **File Picker** - Cross-platform file selection
-
-### Routing & Navigation
-
-- **Go Router** - URL-based navigation
-
-### Development
-
-- **build_runner** - Code generation for Riverpod
-- **flutter_lints** - Code style enforcement
-
-## 🎛️ Audio Engine Architecture
-
-### Web Audio Processing Pipeline
-
-The web version uses a hybrid architecture for audio processing:
-
-1. **WASM FFmpeg Engine** - Runs FFmpeg compiled to WebAssembly
-   - Handles tempo shifting (0.5x - 2.0x)
-   - Pitch shifting (-12 to +12 semitones)
-   - Reverb effect (40ms, 50ms, 70ms delays)
-   - Normalization and bass enhancement
-   - Supports: MP3, WAV, AAC, FLAC, OGG
-
-2. **Web Audio API** - Native browser audio
-   - Playback and real-time preview
-   - Latency-optimized processing
-   - Hardware acceleration support
-
-3. **Web Workers** - Background processing
-   - Offloads heavy computation to prevent UI blocking
-   - Parallel processing of audio chunks
-
-### Memory & Performance
-
-- **Chunk Processing** - Audio is processed in manageable chunks to prevent memory overflow
-- **Memory Limit** - Browser tab typically has 500MB-2GB available (varies by browser)
-- **File Size Limit** - Practical limit ~500MB before processing becomes slow
-- **Processing Time** - Scales with audio length; typical 3-5min songs process in 30-60 seconds
-
-### Browser Compatibility
-
-| Browser | Version | WebAssembly | Web Audio API | IndexedDB | Status |
-|---------|---------|---|---|---|---|
-| Chrome | 57+ | ✅ | ✅ | ✅ | ✅ Full Support |
-| Firefox | 52+ | ✅ | ✅ | ✅ | ✅ Full Support |
-| Safari | 11+ | ✅ | ✅ | ✅ | ✅ Full Support |
-| Edge | 79+ | ✅ | ✅ | ✅ | ✅ Full Support |
-| Android Chrome | Latest | ✅ | ✅ | ✅ | ✅ Full Support |
-| iOS Safari | 12+ | ✅ | ⚠️ | ✅ | ⚠️ Limited (no playback in background) |
-
-**Note:** iOS Safari has restrictions on background audio and may require user interaction to enable audio processing.
-
-## 📦 Build & Deployment
-
-### Local Development Build
-
-```bash
-flutter run -d chrome
-```
-
-This starts a development server (default: <http://localhost:8080>) with hot reload support.
-
-### Production Build
-
-```bash
-flutter build web --release
-```
-
-**Build Artifacts:**
-
-- `build/web/` - Complete web application
-- Size: ~5-10MB gzipped (includes WASM FFmpeg)
-- All assets are self-contained for static hosting
-
-### Deployment Options
-
-#### 1. Static Hosting (Recommended)
-
-Deploy to any static hosting service:
-
-- **GitHub Pages** - Free, built-in CI/CD
-- **Netlify** - Automatic builds from git
-- **Vercel** - Fast CDN, instant deployments
-- **Firebase Hosting** - Serverless, great DX
-- **AWS S3 + CloudFront** - Enterprise-grade
-
-Example GitHub Pages deployment:
-
-```bash
-flutter build web --release
-# Deploy build/web/ directory to GitHub Pages
-```
-
-#### 2. Docker Container
-
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY build/web/ .
-RUN npm install -g http-server
-EXPOSE 8080
-CMD ["http-server", "-p", "8080", "-c-1"]
-```
-
-#### 3. Traditional Web Server
-
-```bash
-# Copy build/web/ to your web server
-# Configure to serve index.html for all routes (SPA routing)
-```
-
-### Cross-Origin Resource Sharing (CORS)
-
-The web app requires CORS headers if assets are served from a different domain:
+### Message Flow
 
 ```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+┌────────────────────┐          ┌────────────────────┐
+│  Dart (UI Thread)  │  ─────►  │  Web Worker        │
+│  WasmAudioEngine   │  JS      │  audio_worker.js   │
+│                    │  Interop │                    │
+│                    │  ◄─────  │  FFmpeg.wasm       │
+└────────────────────┘          └────────────────────┘
 ```
 
-Most CDNs handle this automatically.
+1. **Dart → JS**: Uses `dart:js_interop` to call functions exposed by `slowverb_bridge.js`.
+2. **JS → Worker**: `slowverb_bridge.js` sends messages to the Web Worker.
+3. **Worker → FFmpeg**: The worker loads `@ffmpeg/ffmpeg` and executes FFmpeg commands.
+4. **Result**: The processed audio buffer is sent back to Dart via `postMessage`.
 
-## 🔄 State Management with Riverpod
+### Key Methods
 
-This project uses **Riverpod** for state management. Key providers:
+| Method               | Description                                                       |
+|----------------------|-------------------------------------------------------------------|
+| `initialize()`       | Sets up progress and log handlers.                                |
+| `loadSource()`       | Loads a file into memory, probes metadata (duration, sample rate).|
+| `getWaveform()`      | Extracts waveform amplitude data for visualization.               |
+| `renderPreview()`    | Renders a short preview (30 seconds) for playback.                |
+| `startRender()`      | Starts a full render job (non-blocking, returns `RenderJobId`).   |
+| `watchProgress()`    | Returns a `Stream<RenderProgress>` for tracking export progress.  |
+| `getResult()`        | Retrieves the final rendered bytes after completion.              |
+| `cancelRender()`     | Aborts an in-progress render.                                     |
+| `renderBatch()`      | Processes multiple files sequentially (up to 50).                 |
 
-### Audio Providers
+### DSP Specification
 
-- `audioFileProvider` - Current loaded audio file
-- `audioProcessingStateProvider` - Processing status (idle, processing, complete)
-- `presetProvider` - Active effect preset
+Effect parameters are converted to a **DSP spec object** and sent to the worker:
 
-### Processing Providers
+```dart
+Map<String, Object?> _toDspSpec(EffectConfig config) {
+  return {
+    'specVersion': '1.0.0',
+    'tempo': config.tempo,           // 0.5 – 2.0
+    'pitch': config.pitchSemitones,  // -12 – +12
+    'eqWarmth': config.eqWarmth,     // 0.0 – 1.0
+    'reverb': {
+      'decay': config.reverbAmount,
+      'preDelayMs': 30,
+      'roomScale': 0.7,
+    },
+    'echo': {
+      'delayMs': 500 * config.echoAmount,
+      'feedback': config.echoAmount * 0.6,
+    },
+  };
+}
+```
 
-- `tempoProvider` - Tempo multiplier (0.5 - 2.0)
-- `pitchProvider` - Pitch shift amount (-12 to +12)
-- `reverbProvider` - Reverb intensity (0 - 100%)
+The worker translates this spec into FFmpeg filter arguments.
 
-### Storage Providers
+---
 
-- `projectsProvider` - Persisted project list
-- `localStorageProvider` - IndexedDB access
+## State Management
 
-See `lib/providers/` for implementation details.
+Slowverb uses **Riverpod** for state management. Key providers are in `lib/providers/`:
 
-## 💾 Local Storage
+### `audio_editor_provider.dart`
 
-The web version uses **IndexedDB** for persistence:
+- `audioEditorProvider`: Main editor state (loaded file, metadata, effect config).
+- `AudioEditorNotifier`: Methods like `importFile()`, `setPreset()`, `updateEffect()`, `renderPreview()`.
+
+### `audio_playback_provider.dart`
+
+- `audioPlaybackProvider`: Playback state (playing, paused, position).
+- `AudioPlaybackNotifier`: Controls the `just_audio` player.
+
+### `audio_engine_provider.dart`
+
+- `audioEngineProvider`: Singleton `WasmAudioEngine` instance.
+
+### `project_repository_provider.dart`
+
+- `projectsProvider`: Async list of all saved projects.
+- `projectRepositoryProvider`: CRUD operations for projects in IndexedDB.
+
+---
+
+## Screens and Navigation
+
+Navigation is handled by `go_router` in `lib/app/router.dart`:
+
+| Route       | Screen             | Description                        |
+|-------------|--------------------|------------------------------------|
+| `/`         | `ImportScreen`     | File picker, drop zone.            |
+| `/editor`   | `EditorScreen`     | Main editor with waveform, controls.|
+| `/export`   | `ExportScreen`     | Format selection, render progress. |
+| `/library`  | `LibraryScreen`    | Saved projects list.               |
+| `/settings` | `SettingsScreen`   | App version, usage guidelines.     |
+| `/about`    | `AboutScreen`      | Credits, features, license info.   |
+
+### Editor Screen Layout
+
+The `EditorScreen` adapts to screen size:
+
+- **Wide layout (>1000px)**: Side-by-side panels (visualizer + controls).
+- **Stacked layout (<1000px)**: Vertically stacked panels for mobile/tablet.
+
+---
+
+## Visualizers (GPU Shaders)
+
+Visualizers are implemented as **GLSL fragment shaders** in `web/shaders/`:
+
+| File               | Visualizer          |
+|--------------------|---------------------|
+| `pipes_3d.frag`    | 3D Pipes            |
+| `starfield.frag`   | Starfield Warp      |
+| `maze_3d.frag`     | Neon Maze           |
+| `wmp_retro.frag`   | WMP Retro Bars      |
+
+### Audio Analysis
+
+The `VisualizerPanel` widget (`lib/features/visualizer/visualizer_panel.dart`) connects audio analysis data to the shader:
+
+- **RMS (Volume)**: Overall loudness.
+- **Bass/Mid/Treble**: Frequency band energies.
+- **Time**: Current playback position.
+
+These values are passed as shader uniforms to drive the animation.
+
+---
+
+## IndexedDB Persistence
+
+Projects are stored in IndexedDB via `idb_shim`:
 
 ### Stored Data
 
-- Recent projects (file metadata, processing settings)
-- User preferences (theme, default export format)
-- Processing cache (for faster re-processing of similar files)
+```dart
+class Project {
+  String id;
+  String name;
+  String? sourceFileName;
+  int durationMs;
+  String presetId;
+  Map<String, double> parameters;
+  DateTime createdAt;
+  DateTime? updatedAt;
+  String? lastExportFormat;
+  DateTime? lastExportDate;
+}
+```
 
-### Storage Quota
+### File System Access API
 
-- Typical: 50MB-1GB (browser-dependent)
-- Chrome: ~50MB by default
-- Firefox: Up to browser's available space
-- Safari: ~50MB per site
+On supported browsers (Chrome, Edge), Slowverb uses the **File System Access API** to store file handles. This allows reopening a file without the user re-selecting it.
 
-### Clearing Storage
+If the handle is invalid (e.g., user moved the file), the Library screen shows a dialog prompting the user to re-select the file.
 
-Users can clear storage via browser DevTools or through the app's settings menu.
+---
 
-## 🐛 Development & Debugging
+## Build and Deployment
 
-### Debug Build
+### Development Build
 
 ```bash
 flutter run -d chrome
 ```
 
-Then open Chrome DevTools (F12) to debug:
+Starts a dev server at `http://localhost:PORT` with hot reload.
 
-- **Console** - JavaScript errors and logs
-- **Sources** - Debug Dart code via source maps
-- **Network** - Monitor WASM/asset loading
-- **Storage** - Inspect IndexedDB
+### Production Build
+
+```bash
+flutter build web --wasm --release
+```
+
+- Output: `web/build/web/`
+- Size: ~5-10 MB gzipped (includes FFmpeg.wasm ~30MB uncompressed).
+
+### Deployment Options
+
+| Platform        | Instructions                                    |
+|-----------------|-------------------------------------------------|
+| **Vercel**      | Connect GitHub repo, auto-deploys on push.      |
+| **Netlify**     | Drag-and-drop `build/web/` or connect repo.     |
+| **GitHub Pages**| Deploy `build/web/` to `gh-pages` branch.       |
+| **Firebase**    | `firebase deploy --only hosting`.               |
+
+### CORS Headers
+
+If hosting FFmpeg.wasm on a separate CDN, ensure:
+
+```
+Access-Control-Allow-Origin: *
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Opener-Policy: same-origin
+```
+
+---
+
+## Performance Considerations
+
+### Memory Limits
+
+- Browser tabs typically have 500MB–2GB memory.
+- Files over ~100MB may cause slowdowns.
+- Files over 200MB are blocked with an error message.
+
+### Processing Time
+
+- A 3-minute song typically processes in 30-60 seconds.
+- Longer songs scale linearly.
+
+### Optimization Tips
+
+- Use **Web Workers** (already implemented) to keep UI responsive.
+- **Chunk processing** for very large files (not yet implemented).
+- Enable **gzip compression** on your hosting provider (~80% size reduction).
+
+---
+
+## Debugging Tips
+
+### Browser DevTools
+
+- **Console**: Watch for `[WasmAudioEngine]` and `[audio_worker]` logs.
+- **Network**: Verify FFmpeg.wasm and core files are loading.
+- **Application > IndexedDB**: Inspect saved projects.
+- **Performance**: Profile rendering bottlenecks.
 
 ### Common Issues
 
-**"FFmpeg not available"**
+| Issue                          | Solution                                              |
+|--------------------------------|-------------------------------------------------------|
+| "FFmpeg not available"         | Check Network tab for failed WASM downloads.          |
+| "Out of memory"                | Reduce file size or close other tabs.                 |
+| "Playback not working on iOS"  | iOS requires user gesture to enable audio.            |
+| "Render job not found"         | Ensure `startRender` completes before `watchProgress`.|
 
-- Check that WASM files are loaded in DevTools Network tab
-- Verify `assets/wasm/` is included in build
+---
 
-**"Out of memory"**
+## Release Checklist
 
-- Reduce file size or split processing
-- Close other browser tabs to free memory
-
-**"Playback not working on iOS"**
-
-- iOS requires user gesture to enable audio
-- Ensure button tap initiates playback
-
-## 📊 Performance Optimization
-
-### Build Optimization
-
-```bash
-flutter build web --release --dart-define=FLUTTER_WEB_CANVASKIT_URL=https://cdn.example.com/
-```
-
-### Compression
-
-- Gzip compression: ~80% size reduction
-- Enable in web server configuration
-
-### Caching Strategy
-
-- Static assets: Long-term cache (1 year)
-- index.html: No cache (get latest on reload)
-- WASM files: Long-term cache
-
-### Code Splitting
-
-- Flutter web automatically splits code by route
-- WASM FFmpeg is lazy-loaded on first use
-
-## 🚢 Release Checklist
-
-Before pushing to production:
+Before deploying to production:
 
 - [ ] Run `flutter clean && flutter pub get`
-- [ ] Run all tests: `flutter test`
-- [ ] Build release: `flutter build web --release`
-- [ ] Test in multiple browsers (Chrome, Firefox, Safari, Edge)
-- [ ] Test on mobile browsers
-- [ ] Verify WASM assets load correctly
-- [ ] Check performance with DevTools
-- [ ] Update version in `pubspec.yaml`
-- [ ] Test offline functionality
-- [ ] Verify PWA manifest and icons
+- [ ] Run `flutter analyze` (no errors)
+- [ ] Run `flutter test` (if tests exist)
+- [ ] Build: `flutter build web --wasm --release`
+- [ ] Test in Chrome and Brave
+- [ ] Test on mobile browser (Android Chrome)
+- [ ] Verify FFmpeg.wasm loads correctly
+- [ ] Check IndexedDB persistence
+- [ ] Update version in `lib/app/app_config.dart`
 
-## 📚 Additional Resources
+---
+
+## Additional Resources
 
 - [Flutter Web Documentation](https://docs.flutter.dev/platform-integration/web)
 - [FFmpeg.wasm Documentation](https://github.com/ffmpegwasm/ffmpeg.wasm)
 - [Riverpod Documentation](https://riverpod.dev)
-- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
-- [WebAssembly Docs](https://webassembly.org/)
+- [Web Audio API (MDN)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 
-## � License
+---
+
+## License
 
 This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 
-## �🔗 Links
+---
 
-- **Main Repository**: [GitHub](https://github.com/soficis/slowverb)
-- **Main README**: See [README.md](../README.md) for desktop/mobile information
-- **Issue Tracker**: [GitHub Issues](https://github.com/soficis/slowverb/issues)
+<p align="center">
+  <strong><a href="https://slowverb.vercel.app/">🚀 Try Slowverb Live → https://slowverb.vercel.app/</a></strong>
+</p>
