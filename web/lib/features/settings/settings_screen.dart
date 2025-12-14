@@ -77,12 +77,12 @@ class SettingsScreen extends ConsumerWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            SlowverbColors.surface.withOpacity(0.9),
-            SlowverbColors.surfaceVariant.withOpacity(0.8),
+            SlowverbColors.surface.withValues(alpha: 0.9),
+            SlowverbColors.surfaceVariant.withValues(alpha: 0.8),
           ],
         ),
         border: Border.all(
-          color: SlowverbColors.primaryPurple.withOpacity(0.2),
+          color: SlowverbColors.primaryPurple.withValues(alpha: 0.2),
         ),
       ),
       child: Column(

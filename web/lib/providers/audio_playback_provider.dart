@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Provider for audio playback
 final audioPlayerProvider = Provider<AudioPlayer>((ref) {
@@ -72,7 +73,7 @@ class AudioPlaybackNotifier extends StateNotifier<bool> {
     try {
       await loadAndPlay(audioUri);
     } catch (e) {
-      print('Error playing preview: $e');
+      debugPrint('Error playing preview: $e');
       state = false;
     }
   }

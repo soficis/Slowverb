@@ -80,7 +80,7 @@ class SlowverbTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
         ),
-        shadowColor: SlowverbColors.primaryPurple.withOpacity(0.4),
+        shadowColor: SlowverbColors.primaryPurple.withValues(alpha: 0.4),
         textStyle: GoogleFonts.inter(
           fontSize: 16,
           fontWeight: FontWeight.w600,
@@ -106,9 +106,9 @@ class SlowverbTheme {
   static SliderThemeData _buildSliderTheme() {
     return SliderThemeData(
       activeTrackColor: SlowverbColors.primaryPurple,
-      inactiveTrackColor: SlowverbColors.textSecondary.withOpacity(0.35),
+      inactiveTrackColor: SlowverbColors.textSecondary.withValues(alpha: 0.35),
       thumbColor: SlowverbColors.accentPink,
-      overlayColor: SlowverbColors.accentPink.withOpacity(0.2),
+      overlayColor: SlowverbColors.accentPink.withValues(alpha: 0.2),
       valueIndicatorColor: SlowverbColors.primaryPurple,
       trackHeight: 6.0,
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),

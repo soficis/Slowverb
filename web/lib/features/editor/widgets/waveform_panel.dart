@@ -38,7 +38,9 @@ class _WaveformPanelState extends ConsumerState<WaveformPanel> {
           colors: [Color(0xFF1F1B2F), Color(0xFF2A2343)],
         ),
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
-        border: Border.all(color: SlowverbColors.accentCyan.withOpacity(0.25)),
+        border: Border.all(
+          color: SlowverbColors.accentCyan.withValues(alpha: 0.25),
+        ),
         boxShadow: [SlowverbTokens.shadowCard],
       ),
       child: ClipRRect(
@@ -134,7 +136,7 @@ class WaveformPainter extends CustomPainter {
       ..strokeWidth = 2.0;
 
     final hoverPaint = Paint()
-      ..color = SlowverbColors.textSecondary.withOpacity(0.5)
+      ..color = SlowverbColors.textSecondary.withValues(alpha: 0.5)
       ..strokeWidth = 1.0;
 
     // Draw waveform

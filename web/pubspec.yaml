@@ -60,5 +60,5 @@ flutter:
 
   # WASM assets and worker scripts
   assets:
-    - assets/wasm/
+
     - web/js/

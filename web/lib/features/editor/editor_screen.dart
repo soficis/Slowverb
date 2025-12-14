@@ -544,10 +544,10 @@ class _FileInfoBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
       decoration: BoxDecoration(
-        color: SlowverbColors.surface.withOpacity(0.85),
+        color: SlowverbColors.surface.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
         boxShadow: [SlowverbTokens.shadowCard],
-        border: Border.all(color: SlowverbColors.accentPink.withOpacity(0.25)),
+        border: Border.all(color: SlowverbColors.accentPink.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
@@ -875,7 +875,7 @@ class _PresetQuickSwitch extends StatelessWidget {
               label: Text(preset.name),
               selected: isSelected,
               onSelected: (_) => onPresetSelected(preset),
-              selectedColor: SlowverbColors.accentPink.withOpacity(0.2),
+              selectedColor: SlowverbColors.accentPink.withValues(alpha: 0.2),
               backgroundColor: SlowverbColors.surfaceVariant,
               labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: isSelected
@@ -907,7 +907,7 @@ class _ChromeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.2),
+      color: Colors.white.withValues(alpha: 0.2),
       borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -934,7 +934,7 @@ class _PresetBadge extends StatelessWidget {
         vertical: SlowverbTokens.spacingXs + 2,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
         border: Border.all(color: Colors.white24),
       ),
@@ -963,7 +963,7 @@ class _LoadingOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: DecoratedBox(
-        decoration: BoxDecoration(color: Colors.black.withOpacity(0.45)),
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45)),
         child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

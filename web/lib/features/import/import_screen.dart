@@ -167,7 +167,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 ? [
                                     BoxShadow(
                                       color: SlowverbColors.primaryPurple
-                                          .withOpacity(0.3),
+                                          .withValues(alpha: 0.3),
                                       blurRadius: 20,
                                       spreadRadius: 2,
                                     ),
@@ -253,7 +253,7 @@ class _ImportScreenState extends State<ImportScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: SlowverbColors.surface.withOpacity(0.5),
+                        color: SlowverbColors.surface.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(

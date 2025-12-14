@@ -38,7 +38,7 @@ class TransportBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: SlowverbColors.surfaceVariant,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
-        border: Border.all(color: SlowverbColors.accentPink.withOpacity(0.25)),
+        border: Border.all(color: SlowverbColors.accentPink.withValues(alpha: 0.25)),
         boxShadow: [SlowverbTokens.shadowCard],
       ),
       child: LayoutBuilder(
@@ -117,7 +117,7 @@ class _SeekSection extends StatelessWidget {
           value: progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0),
           onChanged: onSeek,
           activeColor: SlowverbColors.primaryPurple,
-          inactiveColor: SlowverbColors.textSecondary.withOpacity(0.3),
+          inactiveColor: SlowverbColors.textSecondary.withValues(alpha: 0.3),
         ),
         Text(
           '${_formatDuration(currentTime)} / ${_formatDuration(totalTime)}',
@@ -156,7 +156,7 @@ class _TransportControls extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: SlowverbColors.primaryPurple.withOpacity(0.4),
+                color: SlowverbColors.primaryPurple.withValues(alpha: 0.4),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -235,7 +235,7 @@ class _ChromeIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.08),
+      color: Colors.white.withValues(alpha: 0.08),
       shape: const CircleBorder(),
       child: IconButton(
         tooltip: tooltip,

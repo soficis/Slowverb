@@ -596,6 +596,7 @@ class WasmAudioEngine implements AudioEngine {
     if (T == bool) {
       return object.getProperty<JSBoolean?>(property.toJS)?.toDart as T;
     }
+    // ignore: invalid_runtime_check_with_js_interop_types
     return object.getProperty<JSAny?>(property.toJS) as T;
   }
 }

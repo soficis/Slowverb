@@ -41,13 +41,13 @@ abstract final class SlowverbTokens {
 
   // === SHADOWS ===
   static final BoxShadow shadowCard = BoxShadow(
-    color: Colors.black.withOpacity(0.25),
+    color: Colors.black.withValues(alpha: 0.25),
     blurRadius: 20,
     offset: const Offset(0, 8),
   );
 
   static final BoxShadow shadowGlow = BoxShadow(
-    color: primaryCyan.withOpacity(0.3),
+    color: primaryCyan.withValues(alpha: 0.3),
     blurRadius: 30,
     spreadRadius: 5,
   );

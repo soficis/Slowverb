@@ -141,7 +141,7 @@ class _EffectSlider extends StatelessWidget {
       decoration: BoxDecoration(
         color: SlowverbColors.surfaceVariant,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-        border: Border.all(color: SlowverbColors.surface.withOpacity(0.6)),
+        border: Border.all(color: SlowverbColors.surface.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

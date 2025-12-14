@@ -171,7 +171,7 @@ class _PresetCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? SlowverbColors.primaryPurple.withOpacity(0.2)
+              ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
               : SlowverbColors.surfaceVariant,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

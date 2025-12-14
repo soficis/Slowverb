@@ -27,7 +27,7 @@ class LibraryScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.refresh(projectsProvider),
+            onPressed: () => ref.invalidate(projectsProvider),
           ),
         ],
       ),
@@ -70,7 +70,7 @@ class LibraryScreen extends ConsumerWidget {
                       onDelete: () async {
                         final repo = ref.read(projectRepositoryProvider);
                         await repo.deleteProject(project.id);
-                        ref.refresh(projectsProvider);
+                        ref.invalidate(projectsProvider);
                       },
                     );
                   },
@@ -95,6 +95,7 @@ class LibraryScreen extends ConsumerWidget {
       if (handle != null) {
         final fileData = await FileSystemAccess.loadFromHandle(handle);
         if (fileData != null) {
+          if (!context.mounted) return;
           context.push(
             AppRoutes.editor,
             extra: EditorScreenArgs(fileData: fileData, project: project),
@@ -104,6 +105,7 @@ class LibraryScreen extends ConsumerWidget {
       }
 
       // Handle unavailable - show relink dialog
+      if (!context.mounted) return;
       final shouldRelink = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -157,6 +159,7 @@ class LibraryScreen extends ConsumerWidget {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       if (file.bytes == null) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to read file data'),
@@ -167,11 +170,13 @@ class LibraryScreen extends ConsumerWidget {
       }
 
       final fileData = AudioFileData(filename: file.name, bytes: file.bytes!);
+      if (!context.mounted) return;
       context.push(
         AppRoutes.editor,
         extra: EditorScreenArgs(fileData: fileData, project: project),
       );
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error opening project: $e'),
@@ -208,17 +213,17 @@ class _ProjectCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            SlowverbColors.surface.withOpacity(0.9),
-            SlowverbColors.surfaceVariant.withOpacity(0.8),
+            SlowverbColors.surface.withValues(alpha: 0.9),
+            SlowverbColors.surfaceVariant.withValues(alpha: 0.8),
           ],
         ),
         border: Border.all(
-          color: SlowverbColors.primaryPurple.withOpacity(0.3),
+          color: SlowverbColors.primaryPurple.withValues(alpha: 0.3),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: SlowverbColors.primaryPurple.withOpacity(0.15),
+            color: SlowverbColors.primaryPurple.withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -407,9 +412,9 @@ class _ProjectCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,

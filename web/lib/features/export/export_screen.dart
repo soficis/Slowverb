@@ -320,7 +320,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: SlowverbColors.error.withOpacity(0.1),
+              color: SlowverbColors.error.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -415,7 +415,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       decoration: BoxDecoration(
         color: SlowverbColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: SlowverbColors.accentMint.withOpacity(0.4)),
+        border: Border.all(color: SlowverbColors.accentMint.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
