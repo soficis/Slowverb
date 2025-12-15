@@ -1382,8 +1382,8 @@ class _VisualizerSelector extends ConsumerWidget {
       offset: const Offset(0, 40),
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: SlowverbTokens.spacingSm,
-          vertical: 4,
+          horizontal: SlowverbTokens.spacingMd,
+          vertical: 8,
         ),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.15),
@@ -1393,19 +1393,20 @@ class _VisualizerSelector extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
-            const SizedBox(width: 4),
+            const Icon(Icons.auto_awesome, size: 18, color: Colors.white),
+            const SizedBox(width: 6),
             Text(
               currentPreset.name,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: Colors.white,
-                letterSpacing: 0.5,
-                fontSize: 11,
+                letterSpacing: 0.8,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 2),
-            const Icon(Icons.arrow_drop_down, size: 14, color: Colors.white70),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 18, color: Colors.white70),
           ],
         ),
       ),

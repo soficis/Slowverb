@@ -39,46 +39,69 @@ class SlowverbTheme {
   static TextTheme _buildTextTheme(TextTheme base) {
     final rajdhani = GoogleFonts.rajdhaniTextTheme(base);
     final headline = GoogleFonts.rajdhani(
-      textStyle: base.headlineMedium,
-      fontWeight: FontWeight.w600,
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
+      height: 1.2,
     );
     final title = GoogleFonts.rajdhani(
-      textStyle: base.titleLarge,
-      fontWeight: FontWeight.w600,
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
+      height: 1.2,
     );
 
     return rajdhani.copyWith(
       headlineMedium: headline.copyWith(color: SlowverbColors.textPrimary),
       titleLarge: title.copyWith(color: SlowverbColors.textPrimary),
       titleMedium: GoogleFonts.rajdhani(
-        textStyle: base.titleMedium,
-        fontWeight: FontWeight.w500,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
         color: SlowverbColors.textPrimary,
+        height: 1.3,
       ),
       titleSmall: GoogleFonts.rajdhani(
-        textStyle: base.titleSmall,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: SlowverbColors.textPrimary,
+        height: 1.3,
+      ),
+      bodyLarge: GoogleFonts.rajdhani(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: SlowverbColors.textPrimary,
+        height: 1.4,
+      ),
+      bodyMedium: GoogleFonts.rajdhani(
+        fontSize: 16,
         fontWeight: FontWeight.w500,
-        color: SlowverbColors.textPrimary,
-      ),
-      bodyLarge: rajdhani.bodyLarge?.copyWith(
-        color: SlowverbColors.textPrimary,
-      ),
-      bodyMedium: rajdhani.bodyMedium?.copyWith(
         color: SlowverbColors.textSecondary,
+        height: 1.4,
       ),
-      bodySmall: rajdhani.bodySmall?.copyWith(color: SlowverbColors.textHint),
-      labelLarge: rajdhani.labelLarge?.copyWith(
+      bodySmall: GoogleFonts.rajdhani(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: SlowverbColors.textHint,
+        height: 1.4,
+      ),
+      labelLarge: GoogleFonts.rajdhani(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
         color: SlowverbColors.textPrimary,
         letterSpacing: 1.2,
-        fontWeight: FontWeight.w500,
+        height: 1.3,
       ),
-      labelMedium: rajdhani.labelMedium?.copyWith(
+      labelMedium: GoogleFonts.rajdhani(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
         color: SlowverbColors.textPrimary,
         letterSpacing: 1.0,
+        height: 1.3,
       ),
-      labelSmall: rajdhani.labelSmall?.copyWith(
+      labelSmall: GoogleFonts.rajdhani(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
         color: SlowverbColors.textSecondary,
         letterSpacing: 0.8,
+        height: 1.3,
       ),
     );
   }
@@ -110,8 +133,8 @@ class SlowverbTheme {
         ),
         shadowColor: SlowverbColors.primaryPurple.withValues(alpha: 0.4),
         textStyle: GoogleFonts.rajdhani(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
         ),
       ),
