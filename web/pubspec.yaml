@@ -57,6 +57,9 @@ flutter:
     - shaders/starfield.frag
     - shaders/pipes_3d.frag
     - shaders/wmp_retro.frag
+    - shaders/time_gate.frag
+    - shaders/rainy_window_3d.frag
+    - shaders/fractal_dreams_3d.frag
 
   # WASM assets and worker scripts
   assets:

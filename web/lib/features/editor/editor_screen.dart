@@ -1133,66 +1133,204 @@ class _EffectColumn extends StatelessWidget {
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
         boxShadow: [SlowverbTokens.shadowCard],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Quick Presets',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              _ChromeButton(icon: Icons.unfold_less, onTap: onMinimize),
-            ],
-          ),
-          const SizedBox(height: SlowverbTokens.spacingSm),
-          Wrap(
-            spacing: SlowverbTokens.spacingSm,
-            runSpacing: SlowverbTokens.spacingSm,
-            children: Presets.all.map((preset) {
-              final isSelected = preset.id == selectedPresetId;
-              return ChoiceChip(
-                label: Text(preset.name),
-                selected: isSelected,
-                onSelected: (_) => onPresetSelected(preset.id),
-                selectedColor: SlowverbColors.hotPink.withValues(alpha: 0.2),
-                backgroundColor: SlowverbColors.surfaceVariant,
-                labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: isSelected
-                      ? SlowverbColors.hotPink
-                      : SlowverbColors.textPrimary,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
-                  side: BorderSide(
-                    color: isSelected
-                        ? SlowverbColors.hotPink
-                        : SlowverbColors.surfaceVariant,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // If we have enough width (e.g. tablet/desktop), split side-by-side
+          final useSideBySide = constraints.maxWidth > 500;
+
+          if (useSideBySide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // PRESETS COLUMN
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Presets',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          // Minimize button moved to far right, but we need it somewhere.
+                          // Actually, keeping it on the far right of the whole container is better.
+                          // But we can put it here if the header is split.
+                          // Let's put it in the Settings column header to align with "top right".
+                        ],
+                      ),
+                      const SizedBox(height: SlowverbTokens.spacingSm),
+                      // Vertical list of presets
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: Presets.all.map((preset) {
+                          final isSelected = preset.id == selectedPresetId;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: InkWell(
+                              onTap: () => onPresetSelected(preset.id),
+                              borderRadius: BorderRadius.circular(
+                                SlowverbTokens.radiusSm,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? SlowverbColors.hotPink.withValues(
+                                          alpha: 0.1,
+                                        )
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(
+                                    SlowverbTokens.radiusSm,
+                                  ),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? SlowverbColors.hotPink
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                child: Text(
+                                  preset.name,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: isSelected
+                                            ? SlowverbColors.hotPink
+                                            : SlowverbColors.textSecondary,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: SlowverbTokens.spacingMd),
-          // All effect parameters
-          ..._kParameterDefinitions.map(
-            (param) => Padding(
-              padding: const EdgeInsets.only(bottom: SlowverbTokens.spacingMd),
-              child: EffectSlider(
-                label: param.label,
-                value: parameters[param.id] ?? param.defaultValue,
-                min: param.min,
-                max: param.max,
-                unit: param.id == 'pitch' ? 'st' : '%',
-                formatValue: param.id == 'pitch'
-                    ? (v) => v.toStringAsFixed(1)
-                    : (v) => '${(v * 100).toInt()}%',
-                onChanged: (value) => onUpdateParam(param.id, value),
+                const SizedBox(width: SlowverbTokens.spacingLg),
+                // SETTINGS COLUMN
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Settings',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          _ChromeButton(
+                            icon: Icons.unfold_less,
+                            onTap: onMinimize,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: SlowverbTokens.spacingMd),
+                      ..._kParameterDefinitions.map(
+                        (param) => Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: SlowverbTokens.spacingMd,
+                          ),
+                          child: EffectSlider(
+                            label: param.label,
+                            value: parameters[param.id] ?? param.defaultValue,
+                            min: param.min,
+                            max: param.max,
+                            unit: param.id == 'pitch' ? 'st' : '%',
+                            formatValue: param.id == 'pitch'
+                                ? (v) => v.toStringAsFixed(1)
+                                : (v) => '${(v * 100).toInt()}%',
+                            onChanged: (value) =>
+                                onUpdateParam(param.id, value),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+
+          // Fallback to vertical stack for narrow spaces
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Quick Presets',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  _ChromeButton(icon: Icons.unfold_less, onTap: onMinimize),
+                ],
               ),
-            ),
-          ),
-        ],
+              const SizedBox(height: SlowverbTokens.spacingSm),
+              Wrap(
+                spacing: SlowverbTokens.spacingSm,
+                runSpacing: SlowverbTokens.spacingSm,
+                children: Presets.all.map((preset) {
+                  final isSelected = preset.id == selectedPresetId;
+                  return ChoiceChip(
+                    label: Text(preset.name),
+                    selected: isSelected,
+                    onSelected: (_) => onPresetSelected(preset.id),
+                    selectedColor: SlowverbColors.hotPink.withValues(
+                      alpha: 0.2,
+                    ),
+                    backgroundColor: SlowverbColors.surfaceVariant,
+                    labelStyle: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(
+                          color: isSelected
+                              ? SlowverbColors.hotPink
+                              : SlowverbColors.textPrimary,
+                        ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        SlowverbTokens.radiusSm,
+                      ),
+                      side: BorderSide(
+                        color: isSelected
+                            ? SlowverbColors.hotPink
+                            : SlowverbColors.surfaceVariant,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              // All effect parameters
+              ..._kParameterDefinitions.map(
+                (param) => Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: SlowverbTokens.spacingMd,
+                  ),
+                  child: EffectSlider(
+                    label: param.label,
+                    value: parameters[param.id] ?? param.defaultValue,
+                    min: param.min,
+                    max: param.max,
+                    unit: param.id == 'pitch' ? 'st' : '%',
+                    formatValue: param.id == 'pitch'
+                        ? (v) => v.toStringAsFixed(1)
+                        : (v) => '${(v * 100).toInt()}%',
+                    onChanged: (value) => onUpdateParam(param.id, value),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
