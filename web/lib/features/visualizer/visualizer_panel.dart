@@ -80,6 +80,11 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
   int _targetFps = 60;
   int _frameSkip = 0;
 
+  // Idle frame skipping for battery/CPU savings
+  int _idleFrameCounter = 0;
+  static const int _idleFrameSkip =
+      2; // Skip every other frame when idle (~20fps)
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +105,10 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
     if (widget.analysisStream != oldWidget.analysisStream) {
       _subscribeToAnalysis();
     }
+    // Reset idle frame counter on playback state change
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      _idleFrameCounter = 0;
+    }
     // Keep animation running always - visualizers should always be alive
     if (!_controller.isAnimating) {
       _controller.repeat();
@@ -107,6 +116,15 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
   }
 
   void _tick() {
+    // Idle framerate reduction: skip frames when audio is not playing
+    if (!widget.isPlaying) {
+      _idleFrameCounter++;
+      if (_idleFrameCounter % _idleFrameSkip != 0) {
+        return; // Skip this frame
+      }
+    } else {
+      _idleFrameCounter = 0; // Reset when playing
+    }
     // Frame rate measurement and throttling
     _frameCount++;
     if (_fpsWatch.elapsedMilliseconds >= 1000) {

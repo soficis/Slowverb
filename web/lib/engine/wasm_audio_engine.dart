@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
@@ -17,6 +18,10 @@ class WasmAudioEngine implements AudioEngine {
   final Map<String, StreamController<RenderProgress>> _progressControllers = {};
   final Map<String, RenderResult> _renderResults = {};
   final Map<String, Uint8List> _loadedFiles = {};
+
+  // Blob URL lifecycle management to prevent memory leaks
+  final Set<String> _activeBlobUrls = {};
+  String? _currentPreviewUrl;
 
   bool _isInitialized = false;
   bool _progressHandlerInstalled = false;
@@ -117,6 +122,14 @@ class WasmAudioEngine implements AudioEngine {
     Duration? duration,
   }) async {
     _ensureInitialized();
+
+    // Revoke previous preview URL to prevent memory leak
+    if (_currentPreviewUrl != null) {
+      web.URL.revokeObjectURL(_currentPreviewUrl!);
+      _activeBlobUrls.remove(_currentPreviewUrl);
+      _currentPreviewUrl = null;
+    }
+
     final payload = BridgeInterop.toJsObject({
       'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
       'dspSpec': _toDspSpec(config),
@@ -135,6 +148,11 @@ class WasmAudioEngine implements AudioEngine {
       web.BlobPropertyBag(type: 'audio/mp3'),
     );
     final url = web.URL.createObjectURL(blob);
+
+    // Track blob URL for cleanup
+    _currentPreviewUrl = url;
+    _activeBlobUrls.add(url);
+
     return Uri.parse(url);
   }
 
@@ -262,6 +280,17 @@ class WasmAudioEngine implements AudioEngine {
       BridgeInterop.setProgressHandler(null);
       _progressHandlerInstalled = false;
     }
+
+    // Revoke all blob URLs to prevent memory leaks
+    for (final url in _activeBlobUrls) {
+      try {
+        web.URL.revokeObjectURL(url);
+      } catch (_) {
+        // Best-effort cleanup - ignore errors
+      }
+    }
+    _activeBlobUrls.clear();
+    _currentPreviewUrl = null;
 
     // Close all progress controllers
     for (final controller in _progressControllers.values) {
@@ -397,10 +426,26 @@ class WasmAudioEngine implements AudioEngine {
 
         // Cleanup to free memory
         await cleanup(fileId: file.fileId);
-      } catch (e) {
+      } catch (e, stackTrace) {
+        // Robust error recovery: log, cleanup, delay, continue
+        debugPrint('[Batch] Error processing ${file.fileName}: $e');
+        debugPrint('[Batch] Stack trace: $stackTrace');
+
         failedCount++;
         errors[file.fileName] = e.toString();
+
+        // Force cleanup before proceeding to next file
+        try {
+          await cleanup(fileId: file.fileId);
+        } catch (cleanupError) {
+          debugPrint('[Batch] Cleanup error: $cleanupError');
+        }
+
+        // Small delay to ensure worker state is clean
+        await Future.delayed(const Duration(milliseconds: 100));
+
         // Continue with next file
+        continue;
       }
     }
 

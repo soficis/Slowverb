@@ -635,7 +635,7 @@ class BatchExportScreen extends ConsumerWidget {
         Text('EFFECT PRESET', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: state.selectedPreset.id,
+          initialValue: state.selectedPreset.id,
           decoration: InputDecoration(
             filled: true,
             fillColor: SlowverbColors.backgroundLight,

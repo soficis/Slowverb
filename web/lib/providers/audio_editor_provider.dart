@@ -90,6 +90,8 @@ class AudioEditorState {
 /// Audio editor state notifier
 class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   final Ref _ref;
+  Timer? _previewDebounce;
+  static const _debounceDuration = Duration(milliseconds: 400);
 
   AudioEditorNotifier(this._ref)
     : super(
@@ -198,13 +200,21 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     unawaited(_persistProjectSnapshot());
   }
 
-  /// Update single parameter
+  /// Update single parameter with debounced preview generation.
+  /// UI updates instantly for responsiveness, but preview generation is
+  /// debounced to avoid excessive rendering during slider drag.
   void updateParameter(String key, double value) {
+    // 1. Immediate UI update (optimistic update for slider responsiveness)
     final newParams = Map<String, double>.from(state.currentParameters);
     newParams[key] = value;
-    newParams[key] = value;
     state = state.copyWith(currentParameters: newParams, isPreviewDirty: true);
-    unawaited(_persistProjectSnapshot());
+
+    // 2. Debounce expensive preview generation and persistence
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(_debounceDuration, () {
+      // Only persist after debounce completes
+      unawaited(_persistProjectSnapshot());
+    });
   }
 
   /// Toggle playback - renders effects and plays via just_audio.
@@ -422,6 +432,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       print('[AudioEditor] ${preflight.message}');
     }
     return true;
+  }
+
+  @override
+  void dispose() {
+    _previewDebounce?.cancel();
+    super.dispose();
   }
 }
 

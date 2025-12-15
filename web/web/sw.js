@@ -1,6 +1,12 @@
-const CACHE_NAME = "slowverb-v2";
+// Separate cache names for better versioning control
+const STATIC_CACHE_NAME = "slowverb-static-v2";
+const WASM_CACHE_NAME = "slowverb-wasm-v1";
+
+// WASM files get separate cache for easier maintenance
 const WASM_FILES = ["/js/ffmpeg-core.js", "/js/ffmpeg-core.wasm"];
-const ASSETS_TO_CACHE = [
+
+// Static assets (app code, UI assets)
+const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/main.dart.js",
@@ -13,13 +19,21 @@ const ASSETS_TO_CACHE = [
   "/js/ts/worker.js",
   "/icons/Icon-192.png",
   "/icons/Icon-512.png",
-  ...WASM_FILES,
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      await cache.addAll(ASSETS_TO_CACHE);
+    Promise.all([
+      caches.open(STATIC_CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
+      caches.open(WASM_CACHE_NAME).then((cache) => cache.addAll(WASM_FILES)),
+    ]).then(() => {
+      // Log cache sizes for debugging
+      return Promise.all([
+        caches.open(STATIC_CACHE_NAME).then(cache => cache.keys()),
+        caches.open(WASM_CACHE_NAME).then(cache => cache.keys()),
+      ]).then(([staticKeys, wasmKeys]) => {
+        console.log(`[SW] Cached ${staticKeys.length} static assets, ${wasmKeys.length} WASM files`);
+      });
     })
   );
   self.skipWaiting();
@@ -29,7 +43,12 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys
+          .filter((key) => key !== STATIC_CACHE_NAME && key !== WASM_CACHE_NAME)
+          .map((key) => {
+            console.log(`[SW] Deleting old cache: ${key}`);
+            return caches.delete(key);
+          })
       )
     )
   );
@@ -37,10 +56,28 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Skip cross-origin requests, chrome extensions, etc. if needed
-  // But definitely skip non-http/https
+  // Skip non-http/https requests
   if (!event.request.url.startsWith('http')) return;
 
+  // Stale-while-revalidate for WASM files (important for initial load)
+  if (WASM_FILES.some(path => event.request.url.includes(path))) {
+    event.respondWith(
+      caches.open(WASM_CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        const fetchPromise = fetch(event.request).then((response) => {
+          if (response && response.ok) {
+            cache.put(event.request, response.clone());
+          }
+          return response;
+        });
+        // Return cached version immediately if available, otherwise wait for network
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // Cache-first for static assets
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
@@ -60,7 +97,7 @@ self.addEventListener("fetch", (event) => {
         }
 
         const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       });
     }).catch(() => {

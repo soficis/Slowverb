@@ -8,7 +8,7 @@ import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
-import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
+import 'package:slowverb_web/features/editor/layouts/mobile_editor_layout.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
@@ -154,7 +154,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
                   // Mobile-optimized minimal overlay layout
                   if (isMobile) {
-                    return _MobileOverlayLayout(
+                    return MobileEditorLayout(
                       projectName: projectName,
                       presetName: presetName,
                       position: position,
@@ -171,9 +171,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         context.go(AppRoutes.import_);
                       },
                     );
-                  }
-
-                  // Desktop/tablet layout
+                  } // Desktop/tablet layout
                   return Padding(
                     padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
                     child: Column(
@@ -986,29 +984,47 @@ class _EditorTitleBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Left: Back button
           _ChromeButton(icon: Icons.arrow_back, onTap: onBack),
           const SizedBox(width: SlowverbTokens.spacingSm),
-          const Flexible(child: _VisualizerSelector()),
-          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
-          if (!isNarrow)
-            Flexible(
+
+          // Left: Fullscreen button (prominent position)
+          _ChromeButton(icon: Icons.fullscreen, onTap: onFullscreen),
+          const SizedBox(width: SlowverbTokens.spacingMd),
+
+          // Left: Compact visualizer selector
+          const _VisualizerSelector(),
+
+          // Center: Slowverb title with Roboto font
+          Expanded(
+            child: Center(
               child: Text(
-                'Slowverb Editor',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                'Slowverb',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: isNarrow ? 20 : 28,
+                  fontWeight: FontWeight.w500,
                   color: Colors.white,
-                  letterSpacing: 1.2,
+                  letterSpacing: 1.5,
                   shadows: const [
-                    Shadow(color: Colors.black54, offset: Offset(0, 1)),
+                    Shadow(
+                      color: Colors.black54,
+                      offset: Offset(0, 2),
+                      blurRadius: 4,
+                    ),
                   ],
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
             ),
-          const Spacer(),
-          _ChromeButton(icon: Icons.fullscreen, onTap: onFullscreen),
-          if (!isNarrow) const SizedBox(width: SlowverbTokens.spacingSm),
-          if (!isNarrow) Flexible(child: _PresetBadge(presetName: presetName)),
-          const SizedBox(width: SlowverbTokens.spacingSm),
+          ),
+
+          // Right: Preset badge (if not narrow)
+          if (!isNarrow) ...[
+            _PresetBadge(presetName: presetName),
+            const SizedBox(width: SlowverbTokens.spacingMd),
+          ],
+
+          // Right: Export button
           isNarrow
               ? IconButton(
                   onPressed: onExport,
@@ -1127,7 +1143,7 @@ class _EffectColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(SlowverbTokens.spacingMd),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: SlowverbColors.surface,
         borderRadius: BorderRadius.circular(SlowverbTokens.radiusLg),
@@ -1153,22 +1169,18 @@ class _EffectColumn extends StatelessWidget {
                         children: [
                           Text(
                             'Presets',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context).textTheme.titleSmall,
                           ),
-                          // Minimize button moved to far right, but we need it somewhere.
-                          // Actually, keeping it on the far right of the whole container is better.
-                          // But we can put it here if the header is split.
-                          // Let's put it in the Settings column header to align with "top right".
                         ],
                       ),
-                      const SizedBox(height: SlowverbTokens.spacingSm),
-                      // Vertical list of presets
+                      const SizedBox(height: 8),
+                      // Vertical list of presets with reduced padding
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: Presets.all.map((preset) {
                           final isSelected = preset.id == selectedPresetId;
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.only(bottom: 4),
                             child: InkWell(
                               onTap: () => onPresetSelected(preset.id),
                               borderRadius: BorderRadius.circular(
@@ -1176,8 +1188,8 @@ class _EffectColumn extends StatelessWidget {
                               ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
+                                  horizontal: 8,
+                                  vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
@@ -1196,14 +1208,12 @@ class _EffectColumn extends StatelessWidget {
                                 ),
                                 child: Text(
                                   preset.name,
-                                  style: Theme.of(context).textTheme.bodyMedium
+                                  style: Theme.of(context).textTheme.bodyLarge
                                       ?.copyWith(
                                         color: isSelected
                                             ? SlowverbColors.hotPink
                                             : SlowverbColors.textSecondary,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                 ),
                               ),
@@ -1214,7 +1224,7 @@ class _EffectColumn extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: SlowverbTokens.spacingLg),
+                const SizedBox(width: SlowverbTokens.spacingMd),
                 // SETTINGS COLUMN
                 Expanded(
                   flex: 2,
@@ -1226,7 +1236,7 @@ class _EffectColumn extends StatelessWidget {
                         children: [
                           Text(
                             'Settings',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context).textTheme.titleSmall,
                           ),
                           _ChromeButton(
                             icon: Icons.unfold_less,
@@ -1234,12 +1244,10 @@ class _EffectColumn extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: SlowverbTokens.spacingMd),
+                      const SizedBox(height: 8),
                       ..._kParameterDefinitions.map(
                         (param) => Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: SlowverbTokens.spacingMd,
-                          ),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: EffectSlider(
                             label: param.label,
                             value: parameters[param.id] ?? param.defaultValue,
@@ -1374,31 +1382,30 @@ class _VisualizerSelector extends ConsumerWidget {
       offset: const Offset(0, 40),
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: SlowverbTokens.spacingMd,
-          vertical: SlowverbTokens.spacingXs + 2,
+          horizontal: SlowverbTokens.spacingSm,
+          vertical: 4,
         ),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15), // Fixed withOpacity
+          color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
           border: Border.all(color: Colors.white24),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
-            const SizedBox(width: SlowverbTokens.spacingXs),
-            Flexible(
-              child: Text(
-                currentPreset.name,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 0.8,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
             const SizedBox(width: 4),
-            const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white70),
+            Text(
+              currentPreset.name,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white,
+                letterSpacing: 0.5,
+                fontSize: 11,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down, size: 14, color: Colors.white70),
           ],
         ),
       ),
@@ -1410,11 +1417,12 @@ class _VisualizerSelector extends ConsumerWidget {
           final isSelected = preset.id == currentPreset.id;
           return PopupMenuItem<String>(
             value: preset.id,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
                 Icon(
                   isSelected ? Icons.check_circle : Icons.circle_outlined,
-                  size: 18,
+                  size: 16,
                   color: isSelected ? SlowverbColors.neonCyan : Colors.grey,
                 ),
                 const SizedBox(width: 8),
@@ -1426,6 +1434,7 @@ class _VisualizerSelector extends ConsumerWidget {
                       Text(
                         preset.name,
                         style: TextStyle(
+                          fontSize: 13,
                           fontWeight: isSelected
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -1433,9 +1442,12 @@ class _VisualizerSelector extends ConsumerWidget {
                       ),
                       Text(
                         preset.description,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

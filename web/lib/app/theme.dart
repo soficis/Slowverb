@@ -37,20 +37,48 @@ class SlowverbTheme {
   }
 
   static TextTheme _buildTextTheme(TextTheme base) {
-    final inter = GoogleFonts.interTextTheme(base);
-    final headline = GoogleFonts.spaceGrotesk(textStyle: base.headlineMedium);
-    final title = GoogleFonts.spaceGrotesk(textStyle: base.titleLarge);
+    final rajdhani = GoogleFonts.rajdhaniTextTheme(base);
+    final headline = GoogleFonts.rajdhani(
+      textStyle: base.headlineMedium,
+      fontWeight: FontWeight.w600,
+    );
+    final title = GoogleFonts.rajdhani(
+      textStyle: base.titleLarge,
+      fontWeight: FontWeight.w600,
+    );
 
-    return inter.copyWith(
+    return rajdhani.copyWith(
       headlineMedium: headline.copyWith(color: SlowverbColors.textPrimary),
       titleLarge: title.copyWith(color: SlowverbColors.textPrimary),
-      bodyMedium: inter.bodyMedium?.copyWith(
+      titleMedium: GoogleFonts.rajdhani(
+        textStyle: base.titleMedium,
+        fontWeight: FontWeight.w500,
+        color: SlowverbColors.textPrimary,
+      ),
+      titleSmall: GoogleFonts.rajdhani(
+        textStyle: base.titleSmall,
+        fontWeight: FontWeight.w500,
+        color: SlowverbColors.textPrimary,
+      ),
+      bodyLarge: rajdhani.bodyLarge?.copyWith(
+        color: SlowverbColors.textPrimary,
+      ),
+      bodyMedium: rajdhani.bodyMedium?.copyWith(
         color: SlowverbColors.textSecondary,
       ),
-      bodySmall: inter.bodySmall?.copyWith(color: SlowverbColors.textHint),
-      labelLarge: inter.labelLarge?.copyWith(
+      bodySmall: rajdhani.bodySmall?.copyWith(color: SlowverbColors.textHint),
+      labelLarge: rajdhani.labelLarge?.copyWith(
         color: SlowverbColors.textPrimary,
-        letterSpacing: 1.1,
+        letterSpacing: 1.2,
+        fontWeight: FontWeight.w500,
+      ),
+      labelMedium: rajdhani.labelMedium?.copyWith(
+        color: SlowverbColors.textPrimary,
+        letterSpacing: 1.0,
+      ),
+      labelSmall: rajdhani.labelSmall?.copyWith(
+        color: SlowverbColors.textSecondary,
+        letterSpacing: 0.8,
       ),
     );
   }
@@ -81,10 +109,10 @@ class SlowverbTheme {
           borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
         ),
         shadowColor: SlowverbColors.primaryPurple.withValues(alpha: 0.4),
-        textStyle: GoogleFonts.inter(
+        textStyle: GoogleFonts.rajdhani(
           fontSize: 16,
           fontWeight: FontWeight.w600,
-          letterSpacing: 1.0,
+          letterSpacing: 1.2,
         ),
       ),
     );
@@ -94,10 +122,10 @@ class SlowverbTheme {
     return TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: SlowverbColors.accentPink,
-        textStyle: GoogleFonts.inter(
+        textStyle: GoogleFonts.rajdhani(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.6,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -113,9 +141,10 @@ class SlowverbTheme {
       trackHeight: 6.0,
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
       overlayShape: const RoundSliderOverlayShape(overlayRadius: 18.0),
-      valueIndicatorTextStyle: GoogleFonts.inter(
+      valueIndicatorTextStyle: GoogleFonts.rajdhani(
         color: Colors.white,
         fontSize: 12,
+        fontWeight: FontWeight.w500,
       ),
     );
   }
@@ -157,9 +186,10 @@ class SlowverbTheme {
   static SnackBarThemeData _buildSnackBarTheme() {
     return SnackBarThemeData(
       backgroundColor: SlowverbColors.surfaceVariant,
-      contentTextStyle: GoogleFonts.inter(
+      contentTextStyle: GoogleFonts.rajdhani(
         color: SlowverbColors.textPrimary,
         fontSize: 14,
+        fontWeight: FontWeight.w500,
       ),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
