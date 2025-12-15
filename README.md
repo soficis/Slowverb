@@ -149,15 +149,22 @@ Slowverb includes **12 curated presets** to get you started quickly:
 
 ## Visualizers
 
-While your audio plays, Slowverb displays an animated visualizer that reacts to the music. Choose from **5 retro-inspired visual styles**:
+While your audio plays, Slowverb displays an animated visualizer that reacts to the music. Choose from **12 retro-inspired visual styles**:
 
-| Visualizer        | Description                                                 |
-|-------------------|-------------------------------------------------------------|
-| **Pipes (Vaporwave)** | A neon-colored 3D pipes animation reminiscent of the classic Windows screensaver. |
-| **Starfield Warp**    | A classic starfield "flight through space" effect driven by audio volume. |
-| **Maze Neon**         | A first-person maze runner with neon aesthetics.              |
-| **Fractal Dream**     | Mandelbrot/Julia fractal zooms with shifting color palettes. |
-| **WMP Retro**         | Nostalgic Windows Media Player-style bars and waves.         |
+| Visualizer | Description |
+|------------|-------------|
+| **Pipes** | Windows 3D Pipes homage with neon gradients. |
+| **Starfield Warp** | A classic starfield "flight through space" effect driven by audio volume. |
+| **Maze Neon** | Neon maze runner with turn frequency driven by mid frequencies. |
+| **Maze Repeat** | CPU-based neon maze with specialized repeating patterns. |
+| **Fractal Dream** | Mandelbrot/Julia fractal zooms with shifting color palettes. |
+| **Fractal Dreams 3D** | Enhanced fractal journey with spatial warping and chromatic effects. |
+| **WMP Retro** | Nostalgic Windows Media Player-style bars and waves. |
+| **Mystify** | Classic polygon morphing screensaver. |
+| **DVD Bounce** | Bouncing logo homage that changes color on impact. |
+| **Rainy Window** | 90s PC box gazing at a stormy day with lightning. |
+| **Rainy Window 3D** | GPU-accelerated 3D scene with PC, CRT, rain, and lightning. |
+| **Time Gate** | 3D time portal tunnel with temporal distortion effects. |
 
 Visualizers are rendered using **GPU shaders (GLSL)** via Flutter's `FragmentShader` API.
 
