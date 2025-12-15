@@ -415,7 +415,9 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       decoration: BoxDecoration(
         color: SlowverbColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: SlowverbColors.accentMint.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: SlowverbColors.accentMint.withValues(alpha: 0.4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -673,6 +675,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     switch (format) {
       case 'mp3':
         return 'audio/mpeg';
+      case 'aac':
+        return 'audio/aac';
       case 'flac':
         return 'audio/flac';
       case 'wav':

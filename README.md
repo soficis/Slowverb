@@ -81,11 +81,12 @@ Slowverb uses your browser's **IndexedDB** storage to automatically save your pr
 
 ### 📤 Multiple Export Formats
 
-Export your finished audio in one of three formats:
+Export your finished audio in one of four formats:
 
 | Format   | Quality                   | Best For                           |
 |----------|---------------------------|------------------------------------|
 | **MP3**  | Compressed (128-320 kbps) | Sharing, streaming, small files.   |
+| **AAC**  | Compressed (128-256 kbps) | Modern codec, better quality/size. |
 | **WAV**  | Uncompressed (Lossless)   | Professional use, no quality loss. |
 | **FLAC** | Compressed (Lossless)     | Archiving, high-quality storage.   |
 
@@ -121,7 +122,7 @@ Here's a simplified breakdown of what happens when you use Slowverb:
 3. **Choose a preset**: Click the preset button (e.g., "Slowed + Reverb") to apply a pre-configured effect.
 4. **Fine-tune**: Adjust the sliders (Tempo, Pitch, Reverb, Echo, Warmth) to taste.
 5. **Preview**: Click the **Preview** button to hear a sample of the processed audio.
-6. **Export**: Navigate to the **Export** screen, choose your format (MP3, WAV, FLAC), and click **Start Export**.
+6. **Export**: Navigate to the **Export** screen, choose your format (MP3, AAC, WAV, FLAC), and click **Start Export**.
 7. **Download**: Once processing is complete, your new audio file will download automatically.
 
 ---
@@ -175,6 +176,7 @@ Visualizers are rendered using **GPU shaders (GLSL)** via Flutter's `FragmentSha
 | Format | Description                                                                                   |
 |--------|-----------------------------------------------------------------------------------------------|
 | **MP3**| The most widely compatible format. Small file sizes (lossy compression). Configurable bitrate (128-320 kbps). |
+| **AAC**| Modern, efficient codec. Better quality than MP3 at the same bitrate. Configurable bitrate (128-256 kbps). |
 | **WAV**| Uncompressed, lossless audio. Large file sizes. Best for professional editing.               |
 | **FLAC**| Lossless compression. Smaller than WAV, but with no quality loss. Good for archiving.        |
 
