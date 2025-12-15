@@ -64,17 +64,7 @@ class AboutScreen extends StatelessWidget {
                     icon: Icons.info_outline,
                     title: 'About',
                     content:
-                        'Slowverb is a browser-based audio editor for creating dreamy slowed + reverb and vaporwave effects. All audio processing happens locally in your browser using WebAssembly.',
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.security,
-                    title: 'Privacy First',
-                    content:
-                        'Your audio files NEVER leave your device. Everything is processed locally using FFmpeg.wasm. No uploads, no tracking, no data collection.',
+                        'Slowverb is a browser-based audio editor for creating dreamy slowed + reverb effects. All audio processing happens locally in your browser using WebAssembly.',
                   ),
 
                   const SizedBox(height: 24),
@@ -112,7 +102,7 @@ class AboutScreen extends StatelessWidget {
                         '• Flutter Web for the UI\n'
                         '• FFmpeg.wasm for audio processing\n'
                         '• Web Workers for background processing\n'
-                        '• Material Design 3 with custom vaporwave theme',
+                        '• Material Design 3 with custom theme',
                   ),
 
                   const SizedBox(height: 24),

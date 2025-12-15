@@ -207,7 +207,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     unawaited(_persistProjectSnapshot());
   }
 
-  /// Toggle playback - renders effects and plays via just_audio
+  /// Toggle playback - renders effects and plays via just_audio.
+  /// If the preview is already generated (isPreviewDirty=false) and cached,
+  /// playback resumes instantly without re-rendering.
   Future<void> togglePlayback() async {
     print(
       '[AudioEditor] togglePlayback called. current fileId: ${state.fileId}, isPlaying: ${state.isPlaying}',
@@ -227,48 +229,44 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       return;
     }
 
-    // Start playback - generate preview if needed
+    // Check if we can use cached preview (no re-rendering needed)
+    if (!state.isPreviewDirty && state.currentPreviewUri != null) {
+      print(
+        '[AudioEditor] Reusing cached preview (instant resume): ${state.currentPreviewUri}',
+      );
+      try {
+        await playback.playPreview(state.currentPreviewUri!);
+        state = state.copyWith(isPlaying: true);
+        print('[AudioEditor] Cached playback started.');
+      } catch (e, stack) {
+        print('[AudioEditor] Cached playback failed: $e\n$stack');
+        state = state.copyWith(isPlaying: false, error: 'Playback failed: $e');
+      }
+      return;
+    }
+
+    // Need to generate preview - show loading indicator
     try {
       state = state.copyWith(isLoading: true, error: null);
 
-      // Check if we have a cached preview URI
-      Uri? previewUri = state.currentPreviewUri;
+      print(
+        '[AudioEditor] Generating preview (dirty=${state.isPreviewDirty})...',
+      );
 
-      // Use existing preview if available and parameters haven't changed
-      if (!state.isPreviewDirty && state.currentPreviewUri != null) {
-        print(
-          '[AudioEditor] reusing existing preview: ${state.currentPreviewUri}',
-        );
-        previewUri = state.currentPreviewUri;
-      } else {
-        // Regenerate preview
-        print(
-          '[AudioEditor] Generating preview (dirty=${state.isPreviewDirty})...',
-        );
-
-        // Show loading only if we are actually processing
-        state = state.copyWith(isLoading: true, error: null);
-
-        final uri = await generatePreview();
-        if (uri != null) {
-          print('[AudioEditor] Preview generated successfully: $uri');
-          previewUri = uri;
-          state = state.copyWith(
-            currentPreviewUri: previewUri,
-            isPreviewDirty: false,
-          );
-        } else {
-          print('[AudioEditor] generatePreview returned null.');
-        }
-      }
-
+      final previewUri = await generatePreview();
       if (previewUri != null) {
+        print('[AudioEditor] Preview generated successfully: $previewUri');
+        state = state.copyWith(
+          currentPreviewUri: previewUri,
+          isPreviewDirty: false,
+        );
+
         print('[AudioEditor] Playing preview URI...');
         await playback.playPreview(previewUri);
         state = state.copyWith(isPlaying: true, isLoading: false);
         print('[AudioEditor] Playback started.');
       } else {
-        print('[AudioEditor] Failed to start playback: No preview URI.');
+        print('[AudioEditor] generatePreview returned null.');
         state = state.copyWith(
           isLoading: false,
           error: 'Failed to generate audio preview',

@@ -64,7 +64,7 @@ class AudioPlaybackNotifier extends StateNotifier<bool> {
     final player = _ref.read(audioPlayerProvider);
 
     await player.setUrl(audioUri.toString());
-    await player.play();
+    unawaited(player.play());
     state = true;
   }
 
@@ -98,7 +98,7 @@ class AudioPlaybackNotifier extends StateNotifier<bool> {
       await player.pause();
       state = false;
     } else {
-      await player.play();
+      unawaited(player.play());
       state = true;
     }
   }

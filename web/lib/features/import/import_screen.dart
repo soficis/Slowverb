@@ -241,10 +241,21 @@ class _ImportScreenState extends State<ImportScreen> {
                     ),
 
                     const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: () => context.push(AppRoutes.library),
-                      icon: const Icon(Icons.library_music),
-                      label: const Text('Open Library'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => context.push(AppRoutes.library),
+                          icon: const Icon(Icons.library_music),
+                          label: const Text('Open Library'),
+                        ),
+                        const SizedBox(width: 16),
+                        TextButton.icon(
+                          onPressed: () => context.push(AppRoutes.batchExport),
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Batch Export'),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 48),

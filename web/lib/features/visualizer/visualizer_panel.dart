@@ -8,30 +8,35 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
 /// Provides loaded GPU shaders for visualizers.
-/// Returns empty map if shaders fail to load, triggering CPU fallback.
+/// Returns map with successfully loaded shaders, CPU fallback for failed ones.
 final webShaderProvider = FutureProvider<Map<String, ui.FragmentProgram>>((
   ref,
 ) async {
-  try {
-    final wmpRetro = await ui.FragmentProgram.fromAsset(
-      'shaders/wmp_retro.frag',
-    );
-    final starfield = await ui.FragmentProgram.fromAsset(
-      'shaders/starfield.frag',
-    );
-    final pipes3d = await ui.FragmentProgram.fromAsset('shaders/pipes_3d.frag');
-    final maze3d = await ui.FragmentProgram.fromAsset('shaders/maze_3d.frag');
+  final shaders = <String, ui.FragmentProgram>{};
 
-    return {
-      'wmp_retro': wmpRetro,
-      'starfield_warp': starfield,
-      'pipes_vaporwave': pipes3d,
-      'maze_neon': maze3d,
-    };
-  } catch (e) {
-    debugPrint('Failed to load GPU shaders: $e');
-    return {};
+  // Load each shader individually so one failure doesn't break all
+  final shaderPaths = {
+    'wmp_retro': 'shaders/wmp_retro.frag',
+    'starfield_warp': 'shaders/starfield.frag',
+    'pipes_vaporwave': 'shaders/pipes_3d.frag',
+    'maze_neon': 'shaders/maze_3d.frag',
+    'time_gate': 'shaders/time_gate.frag',
+    'rainy_window_3d': 'shaders/rainy_window_3d.frag',
+    'fractal_dreams_3d': 'shaders/fractal_dreams_3d.frag',
+  };
+
+  for (final entry in shaderPaths.entries) {
+    try {
+      final shader = await ui.FragmentProgram.fromAsset(entry.value);
+      shaders[entry.key] = shader;
+    } catch (e) {
+      debugPrint('Failed to load shader ${entry.key}: $e');
+      // Continue loading other shaders
+    }
   }
+
+  debugPrint('Loaded ${shaders.length}/${shaderPaths.length} GPU shaders');
+  return shaders;
 });
 
 /// Rendering mode indicator
@@ -171,6 +176,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                         shader: shader,
                         frame: _currentFrame,
                         time: _time,
+                        presetId: presetId,
                       ),
                       size: Size.infinite,
                       isComplex: true,
@@ -269,6 +275,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                         shader: shader,
                         frame: _currentFrame,
                         time: _time,
+                        presetId: presetId,
                       ),
                       size: Size.infinite,
                       isComplex: true,
@@ -372,13 +379,32 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
           isPlaying: widget.isPlaying,
         );
       case 'maze_neon':
+      case 'maze_repeat':
         return _MazePainter(
+          frame: _currentFrame,
+          time: _time,
+          isPlaying: widget.isPlaying,
+        );
+      case 'mystify':
+        return _MystifyPainter(
+          frame: _currentFrame,
+          time: _time,
+          isPlaying: widget.isPlaying,
+        );
+      case 'dvd_bounce':
+        return _DvdBouncePainter(
           frame: _currentFrame,
           time: _time,
           isPlaying: widget.isPlaying,
         );
       case 'fractal_dream':
         return _FractalDreamPainter(
+          frame: _currentFrame,
+          time: _time,
+          isPlaying: widget.isPlaying,
+        );
+      case 'rainy_window':
+        return _RainyWindowPainter(
           frame: _currentFrame,
           time: _time,
           isPlaying: widget.isPlaying,
@@ -398,26 +424,49 @@ class GpuVisualizerPainter extends CustomPainter {
   final ui.FragmentProgram shader;
   final AudioAnalysisFrame frame;
   final double time;
+  final String presetId;
 
   GpuVisualizerPainter({
     required this.shader,
     required this.frame,
     required this.time,
+    required this.presetId,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final fragmentShader = shader.fragmentShader();
 
-    // Set uniforms matching shader declarations:
-    // uniform float uTime;
-    // uniform float uResolutionX;
-    // uniform float uResolutionY;
-    // uniform float uLevel;
-    fragmentShader.setFloat(0, time);
-    fragmentShader.setFloat(1, size.width);
-    fragmentShader.setFloat(2, size.height);
-    fragmentShader.setFloat(3, _calculateLevel());
+    // Set uniforms based on preset type
+    if (presetId == 'fractal_dreams_3d') {
+      // Fractal Dreams 3D shader uniforms:
+      // uniform float uTime;
+      // uniform vec2 uResolution;
+      // uniform float uWarp;
+      // uniform float uChroma;
+      // uniform float uVig;
+      // uniform float uGrain;
+      fragmentShader.setFloat(0, time);
+      fragmentShader.setFloat(1, size.width);
+      fragmentShader.setFloat(2, size.height);
+
+      // Effect parameters with slow modulation
+      final breath = 0.5 + 0.5 * sin(time * 0.11);
+      fragmentShader.setFloat(3, 0.4 + 0.2 * breath); // uWarp
+      fragmentShader.setFloat(4, 0.4 + 0.3 * breath); // uChroma
+      fragmentShader.setFloat(5, 0.5); // uVig
+      fragmentShader.setFloat(6, 0.2); // uGrain
+    } else {
+      // Standard shader uniforms:
+      // uniform float uTime;
+      // uniform float uResolutionX;
+      // uniform float uResolutionY;
+      // uniform float uLevel;
+      fragmentShader.setFloat(0, time);
+      fragmentShader.setFloat(1, size.width);
+      fragmentShader.setFloat(2, size.height);
+      fragmentShader.setFloat(3, _calculateLevel());
+    }
 
     final paint = Paint()..shader = fragmentShader;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
@@ -771,6 +820,859 @@ class _FractalDreamPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FractalDreamPainter oldDelegate) {
+    return oldDelegate.time != time ||
+        oldDelegate.frame.bass != frame.bass ||
+        oldDelegate.isPlaying != isPlaying;
+  }
+}
+
+/// Mystify - classic polygon morphing screensaver screensaver
+class _MystifyPainter extends CustomPainter {
+  final AudioAnalysisFrame frame;
+  final double time;
+  final bool isPlaying;
+
+  _MystifyPainter({
+    required this.frame,
+    required this.time,
+    required this.isPlaying,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final width = size.width;
+    final height = size.height;
+
+    // Use bass to pump the speed/intensity
+    final boost = isPlaying ? 1.0 + frame.bass * 2.0 : 0.5;
+    final t = time * 0.4 * boost;
+
+    // Draw 4 trailing polygons
+    for (int trail = 0; trail < 4; trail++) {
+      final trailOffset = trail * 0.05;
+      final trailAlpha = (1.0 - trail * 0.2).clamp(0.1, 1.0);
+
+      // Color cycles
+      final hue =
+          (time * 40 + trail * 20 + (isPlaying ? frame.mid * 100 : 0)) % 360;
+      paint.color = HSLColor.fromAHSL(trailAlpha, hue, 0.8, 0.6).toColor();
+      paint.strokeWidth = isPlaying ? 2.0 + frame.treble * 4 : 2.0;
+
+      final path = Path();
+
+      // A polygon with 4 vertices
+      for (int v = 0; v < 4; v++) {
+        // Unique speeds for each vertex's components
+        final sx = (v + 1) * 0.73;
+        final sy = (v + 2) * 0.61;
+
+        final vx = _bounce(t - trailOffset, sx, width);
+        final vy = _bounce(t - trailOffset + 100, sy, height);
+
+        if (v == 0) {
+          path.moveTo(vx, vy);
+        } else {
+          path.lineTo(vx, vy);
+        }
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  // Triangle wave function to simulate bouncing between 0 and max
+  double _bounce(double t, double speed, double max) {
+    final period = max * 2;
+    // Normalized position in cycle [0, 2]
+    double pos = (t * speed * 100) % period;
+    // Fold back
+    if (pos > max) {
+      pos = period - pos;
+    }
+    return pos;
+  }
+
+  @override
+  bool shouldRepaint(covariant _MystifyPainter oldDelegate) {
+    return oldDelegate.time != time || oldDelegate.isPlaying != isPlaying;
+  }
+}
+
+/// DVD Bounce - bouncing logo homage
+class _DvdBouncePainter extends CustomPainter {
+  final AudioAnalysisFrame frame;
+  final double time;
+  final bool isPlaying;
+
+  _DvdBouncePainter({
+    required this.frame,
+    required this.time,
+    required this.isPlaying,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+
+    const logoWidth = 80.0;
+    const logoHeight = 40.0;
+    final maxX = size.width - logoWidth;
+    final maxY = size.height - logoHeight;
+
+    // Speed heavily influenced by BPM/Rhythm if possible, essentially bass
+    final speed = isPlaying ? 100.0 + frame.bass * 200.0 : 60.0;
+    final t = time * speed;
+
+    // Position
+    final x = _bounce(t, 1.0, maxX);
+    final y = _bounce(t, 0.8, maxY);
+
+    // Determine wall hits to change color
+    // A hit happens when the triangle wave peaks or troughs.
+    // Total bounces ~ t / maxX ... rough approximation for color change:
+    final bounceCount = (t / maxX).floor() + (t / maxY).floor();
+
+    // Color
+    final hue = ((bounceCount * 60 + (isPlaying ? frame.mid * 30 : 0)) % 360)
+        .toDouble();
+    final color = HSLColor.fromAHSL(1.0, hue, 0.8, 0.6).toColor();
+
+    // Draw "DVD" / "Slowverb" pill
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+
+    // Glow effect
+    if (isPlaying && frame.bass > 0.6) {
+      paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      // Double draw for glow
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, logoWidth, logoHeight),
+          const Radius.circular(20),
+        ),
+        paint,
+      );
+      paint.maskFilter = null;
+    }
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, logoWidth, logoHeight),
+        const Radius.circular(20),
+      ),
+      paint,
+    );
+
+    // Text
+    textPainter.text = TextSpan(
+      text: 'DVD',
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.bold,
+        fontSize: 20,
+        letterSpacing: 2,
+        fontFamily: 'Courier',
+        shadows: [
+          Shadow(
+            color: color.withOpacity(0.5),
+            blurRadius: dataFromAmp(frame.bass).toDouble(),
+          ),
+        ],
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        x + (logoWidth - textPainter.width) / 2,
+        y + (logoHeight - textPainter.height) / 2,
+      ),
+    );
+  }
+
+  double dataFromAmp(double amp) => amp * 10;
+
+  double _bounce(double t, double speedFactor, double max) {
+    if (max <= 0) return 0;
+    final fullRange = max * 2;
+    double val = (t * speedFactor) % fullRange;
+    if (val > max) {
+      val = fullRange - val;
+    }
+    return val;
+  }
+
+  @override
+  bool shouldRepaint(covariant _DvdBouncePainter oldDelegate) {
+    return oldDelegate.time != time || oldDelegate.isPlaying != isPlaying;
+  }
+}
+
+/// Rainy Window - 90s PC box looking at a stormy day
+class _RainyWindowPainter extends CustomPainter {
+  final AudioAnalysisFrame frame;
+  final double time;
+  final bool isPlaying;
+
+  _RainyWindowPainter({
+    required this.frame,
+    required this.time,
+    required this.isPlaying,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Background - dark stormy sky
+    final skyGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [const Color(0xFF1a1a2e), const Color(0xFF2d3561)],
+    );
+    final skyPaint = Paint()
+      ..shader = skyGradient.createShader(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+      );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), skyPaint);
+
+    // Lightning flash - triggered by bass
+    if (isPlaying && frame.bass > 0.65) {
+      final flashIntensity = (frame.bass - 0.65) / 0.35;
+      final flashPaint = Paint()
+        ..color = Colors.white.withOpacity(flashIntensity * 0.3);
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), flashPaint);
+
+      // Lightning bolt
+      _drawLightning(canvas, size, flashIntensity);
+    }
+
+    // Window frame
+    _drawWindow(canvas, size);
+
+    // Rain - intensity based on mid/treble
+    _drawRain(canvas, size);
+
+    // Warm room glow from desk lamp
+    _drawRoomAmbience(canvas, size);
+
+    // Desk surface
+    _drawDesk(canvas, size);
+
+    // PC box
+    _drawPCBox(canvas, size);
+
+    // CRT Monitor with music-reactive screen
+    _drawCRTMonitor(canvas, size);
+
+    // Coffee mug
+    _drawCoffeeMug(canvas, size);
+
+    // Desk lamp
+    _drawDeskLamp(canvas, size);
+  }
+
+  void _drawLightning(Canvas canvas, Size size, double intensity) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.7 + intensity * 0.3)
+      ..strokeWidth = 2 + intensity * 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    // Lightning bolt path - jagged line from top to middle
+    final startX = size.width * 0.6 + (time * 100 % 40) - 20;
+    final path = Path()..moveTo(startX, 0);
+
+    var currentX = startX;
+    var currentY = 0.0;
+    final segments = 8;
+
+    for (var i = 0; i < segments; i++) {
+      final newY = currentY + size.height / segments / 2;
+      final jitter = ((i * 17 + time * 50) % 30) - 15;
+      currentX += jitter;
+      path.lineTo(currentX, newY);
+      currentY = newY;
+    }
+
+    canvas.drawPath(path, paint);
+
+    // Glow effect
+    paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    paint.strokeWidth = 4;
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawWindow(Canvas canvas, Size size) {
+    final framePaint = Paint()
+      ..color = const Color(0xFF4a4a4a)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8;
+
+    // Outer window frame
+    final frameRect = Rect.fromLTWH(
+      size.width * 0.1,
+      size.height * 0.1,
+      size.width * 0.8,
+      size.height * 0.7,
+    );
+    canvas.drawRect(frameRect, framePaint);
+
+    // Muntins (window dividers) - create 6 panes
+    framePaint.strokeWidth = 4;
+
+    // Vertical dividers
+    final dividerX1 = size.width * 0.1 + (size.width * 0.8) / 3;
+    final dividerX2 = size.width * 0.1 + (size.width * 0.8) * 2 / 3;
+    canvas.drawLine(
+      Offset(dividerX1, size.height * 0.1),
+      Offset(dividerX1, size.height * 0.8),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(dividerX2, size.height * 0.1),
+      Offset(dividerX2, size.height * 0.8),
+      framePaint,
+    );
+
+    // Horizontal divider
+    final dividerY = size.height * 0.1 + (size.height * 0.7) / 2;
+    canvas.drawLine(
+      Offset(size.width * 0.1, dividerY),
+      Offset(size.width * 0.9, dividerY),
+      framePaint,
+    );
+  }
+
+  void _drawRain(Canvas canvas, Size size) {
+    final rainPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+
+    // Rain intensity based on audio
+    final rainSpeed = isPlaying ? 1.0 + frame.mid * 2.0 : 0.5;
+    final rainCount = isPlaying ? 80 + (frame.treble * 40).round() : 50;
+
+    for (var i = 0; i < rainCount; i++) {
+      // Pseudo-random but deterministic positions
+      final seed = i * 11 + 7;
+      final x = (seed * 19 % size.width.toInt()).toDouble();
+      final baseY = (seed * 23 % size.height.toInt()).toDouble();
+
+      // Animated fall
+      final y = (baseY + time * rainSpeed * 200) % size.height;
+      final rainLength = 15 + (seed % 10);
+
+      // Rain color - blue-gray with transparency
+      final alpha = (100 + (seed % 100)).clamp(80, 180);
+      rainPaint.color = Color.fromARGB(alpha, 120, 140, 180);
+
+      // Draw raindrop
+      canvas.drawLine(Offset(x, y), Offset(x + 2, y + rainLength), rainPaint);
+    }
+  }
+
+  void _drawPCBox(Canvas canvas, Size size) {
+    final pcWidth = size.width * 0.15;
+    final pcHeight = size.height * 0.35;
+    final pcX = size.width * 0.05;
+    final pcY = size.height - pcHeight - size.height * 0.05;
+
+    // PC case - beige color
+    final pcPaint = Paint()
+      ..color =
+          const Color(0xFFe8d5b7) // Classic beige
+      ..style = PaintingStyle.fill;
+
+    final pcRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pcX, pcY, pcWidth, pcHeight),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(pcRect, pcPaint);
+
+    // Panel details - darker shade for depth
+    final panelPaint = Paint()
+      ..color = const Color(0xFFd4c4a8)
+      ..style = PaintingStyle.fill;
+
+    // Drive bays
+    final bayHeight = pcHeight * 0.08;
+    final bayY1 = pcY + pcHeight * 0.15;
+    final bayY2 = pcY + pcHeight * 0.25;
+
+    canvas.drawRect(
+      Rect.fromLTWH(pcX + pcWidth * 0.1, bayY1, pcWidth * 0.8, bayHeight),
+      panelPaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(pcX + pcWidth * 0.1, bayY2, pcWidth * 0.8, bayHeight),
+      panelPaint,
+    );
+
+    // Power button
+    final buttonPaint = Paint()
+      ..color = const Color(0xFF888888)
+      ..style = PaintingStyle.fill;
+
+    final buttonX = pcX + pcWidth * 0.5;
+    final buttonY = pcY + pcHeight * 0.7;
+    canvas.drawCircle(Offset(buttonX, buttonY), pcWidth * 0.08, buttonPaint);
+
+    // LED indicator - glows green, pulses with RMS
+    final ledIntensity = isPlaying ? 0.5 + frame.rms * 0.5 : 0.3;
+    final ledPaint = Paint()
+      ..color = const Color(0xFF00ff00).withOpacity(ledIntensity)
+      ..style = PaintingStyle.fill;
+
+    final ledX = pcX + pcWidth * 0.5;
+    final ledY = pcY + pcHeight * 0.85;
+    canvas.drawCircle(Offset(ledX, ledY), pcWidth * 0.04, ledPaint);
+
+    // LED glow
+    if (isPlaying) {
+      ledPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      canvas.drawCircle(Offset(ledX, ledY), pcWidth * 0.06, ledPaint);
+    }
+
+    // Edge highlights for 3D effect
+    final highlightPaint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    canvas.drawLine(
+      Offset(pcX, pcY),
+      Offset(pcX + pcWidth, pcY),
+      highlightPaint,
+    );
+    canvas.drawLine(
+      Offset(pcX, pcY),
+      Offset(pcX, pcY + pcHeight),
+      highlightPaint,
+    );
+  }
+
+  void _drawRoomAmbience(Canvas canvas, Size size) {
+    // Warm amber glow from desk lamp in bottom right
+    final glowPaint = Paint()
+      ..shader =
+          RadialGradient(
+            colors: [
+              const Color(0xFFffb347).withOpacity(0.15),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 1.0],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(size.width * 0.85, size.height * 0.75),
+              radius: size.width * 0.35,
+            ),
+          );
+
+    canvas.drawCircle(
+      Offset(size.width * 0.85, size.height * 0.75),
+      size.width * 0.35,
+      glowPaint,
+    );
+  }
+
+  void _drawDesk(Canvas canvas, Size size) {
+    // Wooden desk surface - warm brown
+    final deskPaint = Paint()
+      ..color = const Color(0xFF8B7355)
+      ..style = PaintingStyle.fill;
+
+    final deskRect = Rect.fromLTWH(
+      0,
+      size.height * 0.78,
+      size.width,
+      size.height * 0.22,
+    );
+    canvas.drawRect(deskRect, deskPaint);
+
+    // Wood grain texture (subtle lines)
+    final grainPaint = Paint()
+      ..color = const Color(0xFF6d5d47).withOpacity(0.3)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < 5; i++) {
+      final y = size.height * 0.78 + (i * 15.0);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grainPaint);
+    }
+
+    // Desk edge highlight
+    final edgePaint = Paint()
+      ..color = const Color(0xFFa08968)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(0, size.height * 0.78),
+      Offset(size.width, size.height * 0.78),
+      edgePaint,
+    );
+  }
+
+  void _drawCRTMonitor(Canvas canvas, Size size) {
+    final monitorX = size.width * 0.25;
+    final monitorY = size.height * 0.55;
+    final monitorWidth = size.width * 0.25;
+    final monitorHeight = size.height * 0.23;
+
+    // Monitor casing - beige/gray plastic
+    final casingPaint = Paint()
+      ..color = const Color(0xFFd4d0c8)
+      ..style = PaintingStyle.fill;
+
+    final casingRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(monitorX, monitorY, monitorWidth, monitorHeight),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(casingRect, casingPaint);
+
+    // Screen bezel - darker
+    final bezelPaint = Paint()
+      ..color = const Color(0xFF3a3a3a)
+      ..style = PaintingStyle.fill;
+
+    final bezelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        monitorX + monitorWidth * 0.08,
+        monitorY + monitorHeight * 0.06,
+        monitorWidth * 0.84,
+        monitorHeight * 0.7,
+      ),
+      const Radius.circular(3),
+    );
+    canvas.drawRRect(bezelRect, bezelPaint);
+
+    // CRT screen - slightly curved, dark when off, glowing when playing
+    final screenX = monitorX + monitorWidth * 0.1;
+    final screenY = monitorY + monitorHeight * 0.08;
+    final screenWidth = monitorWidth * 0.8;
+    final screenHeight = monitorHeight * 0.66;
+
+    // Screen glow - reacts to music
+    if (isPlaying) {
+      final screenGlowIntensity = 0.3 + frame.rms * 0.4;
+      final glowPaint = Paint()
+        ..shader =
+            RadialGradient(
+              colors: [
+                const Color(0xFF00ff88).withOpacity(screenGlowIntensity * 0.4),
+                Colors.transparent,
+              ],
+            ).createShader(
+              Rect.fromCircle(
+                center: Offset(
+                  screenX + screenWidth / 2,
+                  screenY + screenHeight / 2,
+                ),
+                radius: screenWidth * 0.7,
+              ),
+            );
+
+      canvas.drawRect(
+        Rect.fromLTWH(screenX, screenY, screenWidth, screenHeight),
+        glowPaint,
+      );
+    }
+
+    // Screen content - music visualizer bars
+    final screenPaint = Paint()
+      ..color = isPlaying ? const Color(0xFF003322) : const Color(0xFF1a1a1a)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(screenX, screenY, screenWidth, screenHeight),
+        const Radius.circular(2),
+      ),
+      screenPaint,
+    );
+
+    // Music-reactive content on screen
+    if (isPlaying) {
+      _drawCRTContent(canvas, screenX, screenY, screenWidth, screenHeight);
+    }
+
+    // CRT scanlines
+    final scanlinePaint = Paint()
+      ..color = Colors.black.withOpacity(0.1)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < screenHeight ~/ 2; i++) {
+      canvas.drawLine(
+        Offset(screenX, screenY + i * 2.0),
+        Offset(screenX + screenWidth, screenY + i * 2.0),
+        scanlinePaint,
+      );
+    }
+
+    // Screen reflection
+    final reflectionPaint = Paint()
+      ..shader =
+          LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.15),
+              Colors.transparent,
+              Colors.black.withOpacity(0.1),
+            ],
+          ).createShader(
+            Rect.fromLTWH(screenX, screenY, screenWidth, screenHeight),
+          );
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(screenX, screenY, screenWidth, screenHeight),
+        const Radius.circular(2),
+      ),
+      reflectionPaint,
+    );
+
+    // Monitor brand logo (subtle)
+    final logoPaint = Paint()
+      ..color = const Color(0xFF888888)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(
+      Offset(monitorX + monitorWidth / 2, monitorY + monitorHeight * 0.85),
+      4,
+      logoPaint,
+    );
+
+    // Power LED
+    final powerLedPaint = Paint()
+      ..color = isPlaying
+          ? const Color(0xFF00ff00).withOpacity(0.8)
+          : const Color(0xFF333333)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(
+      Offset(monitorX + monitorWidth * 0.2, monitorY + monitorHeight * 0.88),
+      3,
+      powerLedPaint,
+    );
+
+    if (isPlaying) {
+      powerLedPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+      canvas.drawCircle(
+        Offset(monitorX + monitorWidth * 0.2, monitorY + monitorHeight * 0.88),
+        5,
+        powerLedPaint,
+      );
+    }
+  }
+
+  void _drawCRTContent(
+    Canvas canvas,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    // Simple frequency bars on the CRT screen
+    final barCount = 16;
+    final barWidth = width / barCount - 2;
+    final barPaint = Paint()..style = PaintingStyle.fill;
+
+    for (var i = 0; i < barCount; i++) {
+      double barHeight;
+      if (frame.spectrum.isNotEmpty) {
+        final idx = (i * frame.spectrum.length / barCount).floor().clamp(
+          0,
+          frame.spectrum.length - 1,
+        );
+        barHeight = frame.spectrum[idx] * height * 0.8;
+      } else {
+        // Fake animation
+        final phase = i * 0.3 + time * 2;
+        barHeight = (0.2 + 0.3 * (sin(phase) + 1) / 2) * height * 0.8;
+      }
+
+      final barX = x + i * (barWidth + 2) + 2;
+      final barY = y + height - barHeight - 4;
+
+      // Green phosphor glow
+      barPaint.color = const Color(0xFF00ff88).withOpacity(0.9);
+
+      canvas.drawRect(Rect.fromLTWH(barX, barY, barWidth, barHeight), barPaint);
+
+      // Phosphor glow effect
+      barPaint.color = const Color(0xFF00ff88).withOpacity(0.3);
+      barPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+      canvas.drawRect(
+        Rect.fromLTWH(barX - 1, barY - 1, barWidth + 2, barHeight + 2),
+        barPaint,
+      );
+      barPaint.maskFilter = null;
+    }
+  }
+
+  void _drawCoffeeMug(Canvas canvas, Size size) {
+    final mugX = size.width * 0.65;
+    final mugY = size.height * 0.83;
+    final mugWidth = size.width * 0.06;
+    final mugHeight = size.height * 0.08;
+
+    // Mug body - ceramic white/cream
+    final mugPaint = Paint()
+      ..color = const Color(0xFFeee8d5)
+      ..style = PaintingStyle.fill;
+
+    final mugRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(mugX, mugY, mugWidth, mugHeight),
+      const Radius.circular(3),
+    );
+    canvas.drawRRect(mugRect, mugPaint);
+
+    // Coffee inside - dark brown
+    final coffeePaint = Paint()
+      ..color = const Color(0xFF3e2723)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawOval(
+      Rect.fromLTWH(
+        mugX + mugWidth * 0.1,
+        mugY + mugHeight * 0.15,
+        mugWidth * 0.8,
+        mugHeight * 0.2,
+      ),
+      coffeePaint,
+    );
+
+    // Steam - rises with music intensity
+    final steamIntensity = isPlaying ? 0.3 + frame.mid * 0.5 : 0.3;
+    _drawSteam(canvas, mugX + mugWidth / 2, mugY, steamIntensity);
+
+    // Mug handle
+    final handlePaint = Paint()
+      ..color = const Color(0xFFddd8c5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final handlePath = Path()
+      ..moveTo(mugX + mugWidth, mugY + mugHeight * 0.3)
+      ..quadraticBezierTo(
+        mugX + mugWidth * 1.3,
+        mugY + mugHeight * 0.5,
+        mugX + mugWidth,
+        mugY + mugHeight * 0.7,
+      );
+
+    canvas.drawPath(handlePath, handlePaint);
+
+    // Mug shadow/depth
+    final shadowPaint = Paint()
+      ..color = const Color(0xFFc9c3b0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    canvas.drawLine(
+      Offset(mugX + mugWidth * 0.9, mugY),
+      Offset(mugX + mugWidth * 0.9, mugY + mugHeight),
+      shadowPaint,
+    );
+  }
+
+  void _drawSteam(Canvas canvas, double x, double y, double intensity) {
+    final steamPaint = Paint()
+      ..color = Colors.white.withOpacity(intensity * 0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+
+    for (var i = 0; i < 3; i++) {
+      final offset = i * 8.0;
+
+      final path = Path()..moveTo(x + offset - 8, y);
+
+      for (var j = 0; j < 5; j++) {
+        final waveY = y - j * 8.0;
+        final waveX = x + offset - 8 + sin(time * 3 + j * 0.5 + i) * 3;
+        path.lineTo(waveX, waveY);
+      }
+
+      canvas.drawPath(path, steamPaint);
+    }
+  }
+
+  void _drawDeskLamp(Canvas canvas, Size size) {
+    final lampX = size.width * 0.85;
+    final lampBaseY = size.height * 0.78;
+
+    // Lamp base - round metal
+    final basePaint = Paint()
+      ..color = const Color(0xFF505050)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset(lampX, lampBaseY), 12, basePaint);
+
+    // Lamp arm - articulated
+    final armPaint = Paint()
+      ..color = const Color(0xFF606060)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final armPath = Path()
+      ..moveTo(lampX, lampBaseY)
+      ..lineTo(lampX + 15, lampBaseY - 30)
+      ..lineTo(lampX + 25, lampBaseY - 50);
+
+    canvas.drawPath(armPath, armPaint);
+
+    // Lamp shade - conical
+    final shadePaint = Paint()
+      ..color = const Color(0xFF4a4a4a)
+      ..style = PaintingStyle.fill;
+
+    final shadePath = Path()
+      ..moveTo(lampX + 15, lampBaseY - 50)
+      ..lineTo(lampX + 35, lampBaseY - 45)
+      ..lineTo(lampX + 30, lampBaseY - 35)
+      ..close();
+
+    canvas.drawPath(shadePath, shadePaint);
+
+    // Light glow - warm amber
+    final lightIntensity = isPlaying ? 0.6 + frame.rms * 0.4 : 0.5;
+    final glowPaint = Paint()
+      ..shader =
+          RadialGradient(
+            colors: [
+              const Color(0xFFffcc66).withOpacity(lightIntensity),
+              Colors.transparent,
+            ],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(lampX + 25, lampBaseY - 40),
+              radius: 60,
+            ),
+          );
+
+    canvas.drawCircle(Offset(lampX + 25, lampBaseY - 40), 60, glowPaint);
+
+    // Bulb (subtle)
+    final bulbPaint = Paint()
+      ..color = const Color(0xFFffffcc).withOpacity(lightIntensity * 0.8)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset(lampX + 25, lampBaseY - 42), 6, bulbPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RainyWindowPainter oldDelegate) {
     return oldDelegate.time != time ||
         oldDelegate.frame.bass != frame.bass ||
         oldDelegate.isPlaying != isPlaying;

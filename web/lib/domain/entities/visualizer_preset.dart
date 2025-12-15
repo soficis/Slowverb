@@ -1,5 +1,5 @@
 /// Supported categories of visualizers.
-enum VisualizerType { screensaver, fractal, wmp }
+enum VisualizerType { screensaver, fractal, wmp, mystify, dvdBounce }
 
 /// Configuration for a visualizer preset.
 class VisualizerPreset {
@@ -54,7 +54,7 @@ class AudioAnalysisFrame {
 abstract final class VisualizerPresets {
   static const pipesVaporwave = VisualizerPreset(
     id: 'pipes_vaporwave',
-    name: 'Pipes (Vaporwave)',
+    name: 'Pipes',
     description: 'Windows 3D Pipes homage with neon gradients.',
     type: VisualizerType.screensaver,
     colorScheme: 'vaporwave',
@@ -79,6 +79,15 @@ abstract final class VisualizerPresets {
     defaultIntensity: 0.65,
   );
 
+  static const mazeRepeat = VisualizerPreset(
+    id: 'maze_repeat',
+    name: 'Maze Repeat',
+    description: 'CPU-based neon maze with repeating patterns.',
+    type: VisualizerType.screensaver,
+    colorScheme: 'luna',
+    defaultIntensity: 0.65,
+  );
+
   static const fractalDream = VisualizerPreset(
     id: 'fractal_dream',
     name: 'Fractal Dream',
@@ -97,20 +106,88 @@ abstract final class VisualizerPresets {
     defaultIntensity: 0.7,
   );
 
+  static const fractalDreams3d = VisualizerPreset(
+    id: 'fractal_dreams_3d',
+    name: 'Fractal Dreams 3D',
+    description:
+        'Enhanced fractal journey with spatial warping and chromatic effects.',
+    type: VisualizerType.fractal,
+    colorScheme: 'vaporwave',
+    defaultIntensity: 0.8,
+  );
+
   static const all = [
     pipesVaporwave,
     starfieldWarp,
     mazeNeon,
+    mazeRepeat,
     fractalDream,
+    fractalDreams3d,
     wmpRetro,
+    mystify,
+    dvdBounce,
+    rainyWindow,
+    rainyWindow3d,
+    timeGate,
   ];
 
-  /// Visualizers eligible for random selection (excludes WMP Retro)
+  static const mystify = VisualizerPreset(
+    id: 'mystify',
+    name: 'Mystify',
+    description: 'Classic polygon morphing screensaver.',
+    type: VisualizerType.mystify,
+    colorScheme: 'luna',
+    defaultIntensity: 0.8,
+  );
+
+  static const dvdBounce = VisualizerPreset(
+    id: 'dvd_bounce',
+    name: 'DVD Bounce',
+    description: 'Bouncing logo homage that changes color on impact.',
+    type: VisualizerType.dvdBounce,
+    colorScheme: 'vaporwave',
+    defaultIntensity: 0.6,
+  );
+
+  static const rainyWindow = VisualizerPreset(
+    id: 'rainy_window',
+    name: 'Rainy Window',
+    description: '90s PC box gazing at a stormy day with lightning.',
+    type: VisualizerType.screensaver,
+    colorScheme: 'luna',
+    defaultIntensity: 0.7,
+  );
+
+  static const rainyWindow3d = VisualizerPreset(
+    id: 'rainy_window_3d',
+    name: 'Rainy Window 3D',
+    description: 'GPU-accelerated 3D scene with PC, CRT, rain, and lightning.',
+    type: VisualizerType.screensaver,
+    colorScheme: 'luna',
+    defaultIntensity: 0.75,
+  );
+
+  static const timeGate = VisualizerPreset(
+    id: 'time_gate',
+    name: 'Time Gate',
+    description: '3D time portal tunnel with temporal distortion effects.',
+    type: VisualizerType.screensaver,
+    colorScheme: 'vaporwave',
+    defaultIntensity: 0.8,
+  );
+
+  /// Visualizers eligible for random selection (excludes WMP Retro and DVD Bounce)
   static const randomSelectable = [
     pipesVaporwave,
     starfieldWarp,
     mazeNeon,
+    mazeRepeat,
     fractalDream,
+    fractalDreams3d,
+    mystify,
+    rainyWindow,
+    rainyWindow3d,
+    timeGate,
   ];
 
   /// Returns a random visualizer from the selectable list
