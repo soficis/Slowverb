@@ -134,6 +134,8 @@ Slowverb includes **12 curated presets** to get you started quickly:
 | Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
 |--------------------|---------|----------|--------|-------|--------|-----------------------------------|
 | **Slowed + Reverb**| 0.95x   | -2 semi  | 70%    | 20%   | 40%    | Classic dreamy vaporwave.         |
+| **Slowed + Reverb 2**| 0.74x | -4.5 semi| 40%    | 15%   | 50%    | Precise -25.926% slowdown.        |
+| **Slowed + Reverb 3**| 0.81x | -3.2 semi| 50%    | 20%   | 50%    | -19% speed with balanced reverb.  |
 | **Vaporwave Chill**| 0.78x   | -3 semi  | 80%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
 | **Nightcore**      | 1.25x   | +4 semi  | 30%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
 | **Echo Slow**      | 0.65x   | -4 semi  | 60%    | 80%   | 50%    | Ultra slow with cascading echoes. |
@@ -145,6 +147,15 @@ Slowverb includes **12 curated presets** to get you started quickly:
 | **Synthwave**      | 1.05x   | +1 semi  | 60%    | 40%   | 40%    | Retro 80s vibes.                  |
 | **Slow Motion**    | 0.55x   | -6 semi  | 70%    | 60%   | 50%    | Extreme slow-down effect.         |
 | **Manual**         | 1.00x   | 0 semi   | 0%     | 0%    | 50%    | Start from scratch.               |
+
+### 💾 Custom Presets
+
+You can now create your own custom presets!
+
+1. Select **Manual** mode or tweak any existing preset.
+2. Click the **Save** button that appears in the preset list header.
+3. Give your preset a name and description.
+4. It will appear at the bottom of the presets list, saved to your browser's local storage.
 
 ---
 

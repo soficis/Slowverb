@@ -14,6 +14,8 @@ import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
+import 'package:slowverb_web/providers/preset_repository_provider.dart';
+import 'package:uuid/uuid.dart';
 
 // Parameter metadata definition
 class _ParamDef {
@@ -275,10 +277,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                         child: _EffectColumn(
                                           selectedPresetId: selectedPresetId,
                                           parameters: parameters,
-                                          onPresetSelected: (id) {
-                                            final preset =
-                                                Presets.getById(id) ??
-                                                Presets.slowedReverb;
+                                          onPresetSelected: (preset) {
                                             notifier.applyPreset(preset);
                                           },
                                           onUpdateParam:
@@ -356,10 +355,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               selectedPresetId:
                                                   selectedPresetId,
                                               parameters: parameters,
-                                              onPresetSelected: (id) {
-                                                final preset =
-                                                    Presets.getById(id) ??
-                                                    Presets.slowedReverb;
+                                              onPresetSelected: (preset) {
                                                 notifier.applyPreset(preset);
                                               },
                                               onUpdateParam:
@@ -431,10 +427,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               selectedPresetId:
                                                   selectedPresetId,
                                               parameters: parameters,
-                                              onPresetSelected: (id) {
-                                                final preset =
-                                                    Presets.getById(id) ??
-                                                    Presets.slowedReverb;
+                                              onPresetSelected: (preset) {
                                                 notifier.applyPreset(preset);
                                               },
                                               onUpdateParam:
@@ -1125,10 +1118,10 @@ class _WaveformTransportCard extends StatelessWidget {
   }
 }
 
-class _EffectColumn extends StatelessWidget {
+class _EffectColumn extends ConsumerWidget {
   final String selectedPresetId;
   final Map<String, double> parameters;
-  final ValueChanged<String> onPresetSelected;
+  final ValueChanged<EffectPreset> onPresetSelected;
   final void Function(String, double) onUpdateParam;
   final VoidCallback onMinimize;
 
@@ -1141,7 +1134,7 @@ class _EffectColumn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1171,56 +1164,180 @@ class _EffectColumn extends StatelessWidget {
                             'Presets',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
+                          // Save Preset button (only visible in Manual mode)
+                          if (selectedPresetId == 'manual')
+                            TextButton.icon(
+                              icon: const Icon(Icons.save, size: 16),
+                              label: const Text('Save'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () => _showSavePresetDialog(
+                                context,
+                                ref,
+                                parameters,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       // Vertical list of presets with reduced padding
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: Presets.all.map((preset) {
-                          final isSelected = preset.id == selectedPresetId;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: InkWell(
-                              onTap: () => onPresetSelected(preset.id),
-                              borderRadius: BorderRadius.circular(
-                                SlowverbTokens.radiusSm,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? SlowverbColors.hotPink.withValues(
-                                          alpha: 0.1,
-                                        )
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(
-                                    SlowverbTokens.radiusSm,
-                                  ),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? SlowverbColors.hotPink
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: Text(
-                                  preset.name,
-                                  style: Theme.of(context).textTheme.bodyLarge
-                                      ?.copyWith(
+                      // Watching all presets (built-in + custom)
+                      ref
+                          .watch(allPresetsProvider)
+                          .when(
+                            data: (allPresets) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: allPresets.map((preset) {
+                                final isSelected =
+                                    preset.id == selectedPresetId;
+                                final isCustom = !Presets.all.any(
+                                  (p) => p.id == preset.id,
+                                );
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? SlowverbColors.hotPink.withValues(
+                                              alpha: 0.1,
+                                            )
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(
+                                        SlowverbTokens.radiusSm,
+                                      ),
+                                      border: Border.all(
                                         color: isSelected
                                             ? SlowverbColors.hotPink
-                                            : SlowverbColors.textSecondary,
-                                        fontWeight: FontWeight.bold,
+                                            : Colors.transparent,
                                       ),
-                                ),
-                              ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Clickable preset name area
+                                        Expanded(
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              onTap: () =>
+                                                  onPresetSelected(preset),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    SlowverbTokens.radiusSm,
+                                                  ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 2,
+                                                    ),
+                                                child: Text(
+                                                  preset.name,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyLarge
+                                                      ?.copyWith(
+                                                        color: isSelected
+                                                            ? SlowverbColors
+                                                                  .hotPink
+                                                            : SlowverbColors
+                                                                  .textSecondary,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Delete button for custom presets
+                                        if (isCustom)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 18,
+                                            ),
+                                            color: SlowverbColors.textHint,
+                                            padding: const EdgeInsets.all(4),
+                                            constraints: const BoxConstraints(),
+                                            tooltip: 'Delete preset',
+                                            onPressed: () async {
+                                              final repo = ref.read(
+                                                presetRepositoryProvider,
+                                              );
+                                              await repo.deleteCustomPreset(
+                                                preset.id,
+                                              );
+                                              ref.invalidate(
+                                                customPresetsProvider,
+                                              );
+                                            },
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
-                          );
-                        }).toList(),
-                      ),
+                            loading: () => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            error: (_, __) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: Presets.all.map((preset) {
+                                final isSelected =
+                                    preset.id == selectedPresetId;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: InkWell(
+                                    onTap: () => onPresetSelected(preset),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? SlowverbColors.hotPink.withValues(
+                                                alpha: 0.1,
+                                              )
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(
+                                          SlowverbTokens.radiusSm,
+                                        ),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? SlowverbColors.hotPink
+                                              : Colors.transparent,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        preset.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.copyWith(
+                                              color: isSelected
+                                                  ? SlowverbColors.hotPink
+                                                  : SlowverbColors
+                                                        .textSecondary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
                     ],
                   ),
                 ),
@@ -1292,7 +1409,7 @@ class _EffectColumn extends StatelessWidget {
                   return ChoiceChip(
                     label: Text(preset.name),
                     selected: isSelected,
-                    onSelected: (_) => onPresetSelected(preset.id),
+                    onSelected: (_) => onPresetSelected(preset),
                     selectedColor: SlowverbColors.hotPink.withValues(
                       alpha: 0.2,
                     ),
@@ -1504,4 +1621,85 @@ String _formatDuration(Duration duration) {
   final minutes = duration.inMinutes;
   final seconds = duration.inSeconds % 60;
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+/// Show dialog to save current parameters as a custom preset
+void _showSavePresetDialog(
+  BuildContext context,
+  WidgetRef ref,
+  Map<String, double> parameters,
+) {
+  final nameController = TextEditingController();
+  final descriptionController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Save Custom Preset'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Preset Name',
+              hintText: 'My Custom Sound',
+            ),
+            autofocus: true,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: descriptionController,
+            decoration: const InputDecoration(
+              labelText: 'Description (Optional)',
+              hintText: 'A brief description',
+            ),
+            maxLines: 2,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            final name = nameController.text.trim();
+            if (name.isEmpty) {
+              // Show error
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please enter a preset name')),
+              );
+              return;
+            }
+
+            // Create preset
+            const uuid = Uuid();
+            final preset = EffectPreset(
+              id: 'custom_${uuid.v4()}',
+              name: name,
+              description: descriptionController.text.trim(),
+              parameters: Map.from(parameters),
+            );
+
+            // Save to repository
+            final repo = ref.read(presetRepositoryProvider);
+            await repo.saveCustomPreset(preset);
+
+            // Refresh provider
+            ref.invalidate(customPresetsProvider);
+
+            if (context.mounted) {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Saved preset "${preset.name}"')),
+              );
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
 }

@@ -32,6 +32,34 @@ abstract final class Presets {
     },
   );
 
+  /// Slowed + Reverb with specific settings (-25.926%)
+  static const slowedReverb2 = EffectPreset(
+    id: 'slowed_reverb_2',
+    name: 'Slowed + Reverb 2',
+    description: 'Precise -25.926% slowdown with detailed reverb',
+    parameters: {
+      'tempo': 0.74074, // -25.926% = multiply by 0.74074
+      'pitch': -4.5, // Matching tempo slow
+      'reverbAmount': 0.4, // 40% reverbance from screenshot
+      'echoAmount': 0.15,
+      'eqWarmth': 0.5, // Balanced warmth
+    },
+  );
+
+  /// Slowed + Reverb with -19% speed and 50% reverb
+  static const slowedReverb3 = EffectPreset(
+    id: 'slowed_reverb_3',
+    name: 'Slowed + Reverb 3',
+    description: '-19% speed with balanced reverb',
+    parameters: {
+      'tempo': 0.81, // -19% speed from Audacity
+      'pitch': -3.2, // Matching tempo slow (~19% = ~3.2 semitones)
+      'reverbAmount': 0.5, // 50% reverbance
+      'echoAmount': 0.2,
+      'eqWarmth': 0.5, // 50% tone balance
+    },
+  );
+
   /// Warm, chill vaporwave sound
   static const vaporwaveChill = EffectPreset(
     id: 'vaporwave_chill',
@@ -189,6 +217,8 @@ abstract final class Presets {
   /// All available presets
   static const all = [
     slowedReverb,
+    slowedReverb2,
+    slowedReverb3,
     vaporwaveChill,
     nightcore,
     echoSlow,
