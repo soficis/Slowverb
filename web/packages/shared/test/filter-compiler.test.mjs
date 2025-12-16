@@ -76,3 +76,34 @@ test("composite chain preserves filter order", () => {
     assert.ok(positions[i] > positions[i - 1], `Filter order violated for ${markers[i]}`);
   }
 });
+
+test("mastering disabled does not append mastering filters", () => {
+  const chain = compileFilterChain({
+    specVersion: "1.0.0",
+    mastering: { enabled: false, algorithm: "simple" },
+  });
+
+  assert.equal(chain, "anull");
+  assert.ok(!chain.includes("alimiter="));
+});
+
+test("mastering enabled appends limiter at end", () => {
+  const chain = compileFilterChain({
+    specVersion: "1.0.0",
+    mastering: { enabled: true, algorithm: "simple" },
+  });
+
+  assert.ok(chain.endsWith("alimiter=limit=0.95"));
+});
+
+test("mastering enabled is last stage after stereo width", () => {
+  const chain = compileFilterChain({
+    specVersion: "1.0.0",
+    stereoWidth: 1.5,
+    mastering: { enabled: true, algorithm: "simple" },
+  });
+
+  assert.ok(chain.includes("extrastereo="));
+  assert.ok(chain.endsWith("alimiter=limit=0.95"));
+  assert.ok(chain.indexOf("extrastereo=") < chain.indexOf("highpass=f=20"));
+});

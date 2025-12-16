@@ -17,6 +17,7 @@ var DSP_LIMITS = {
   hfDamping: { min: 0, max: 1},
   stereoWidth: { min: 0.5, max: 2}
 };
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
 function compileFilterChain(spec) {
   const filters = [];
   appendTempo(filters, spec.tempo);
@@ -26,6 +27,7 @@ function compileFilterChain(spec) {
   appendEcho(filters, spec.echo);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
+  appendMastering(filters, spec.mastering);
   return filters.length > 0 ? filters.join(",") : "anull";
 }
 function appendTempo(filters, tempo) {
@@ -56,6 +58,18 @@ function appendLowpass(filters, cutoffHz, hfDamping) {
 function appendStereoWidth(filters, width) {
   if (width === void 0 || width === 1) return;
   filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
+}
+function appendMastering(filters, mastering) {
+  if (!isMasteringEnabled(mastering)) return;
+  const algorithm = mastering?.algorithm ?? "simple";
+  if (algorithm !== "simple") return;
+  filters.push(buildSimpleMasteringFilterChain());
+}
+function isMasteringEnabled(mastering) {
+  return mastering?.enabled === true;
+}
+function buildSimpleMasteringFilterChain() {
+  return SIMPLE_MASTERING_FILTER_CHAIN;
 }
 function buildTempoFilter(tempo) {
   if (tempo >= 0.5 && tempo <= 2) {

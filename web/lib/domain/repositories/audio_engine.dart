@@ -123,6 +123,7 @@ class EffectConfig {
   final double reverbAmount; // 0.0 - 1.0
   final double echoAmount; // 0.0 - 1.0
   final double eqWarmth; // 0.0 - 1.0
+  final double masteringEnabled; // 0.0 or 1.0
   final double? preDelayMs; // 0 - 200
   final double? hfDamping; // 0.0 - 1.0
   final double? roomScale; // 0.0 - 1.0
@@ -135,6 +136,7 @@ class EffectConfig {
     required this.reverbAmount,
     this.echoAmount = 0.0,
     this.eqWarmth = 0.0,
+    this.masteringEnabled = 0.0,
     this.preDelayMs,
     this.hfDamping,
     this.roomScale,
@@ -150,6 +152,7 @@ class EffectConfig {
       reverbAmount: params['reverbAmount'] ?? 0.0,
       echoAmount: params['echoAmount'] ?? 0.0,
       eqWarmth: params['eqWarmth'] ?? 0.0,
+      masteringEnabled: params['masteringEnabled'] ?? 0.0,
       preDelayMs: params['preDelayMs'],
       hfDamping: params['hfDamping'],
       roomScale: params['roomScale'],

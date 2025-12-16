@@ -81,6 +81,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     final isGeneratingPreview = state.isLoading; // Approximate
     final selectedPresetId = state.selectedPreset.id;
     final parameters = state.currentParameters;
+    final masteringEnabled = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
 
     if (state.error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -165,6 +166,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       isGeneratingPreview: isGeneratingPreview,
                       selectedPresetId: selectedPresetId,
                       parameters: parameters,
+                      masteringEnabled: masteringEnabled,
 
                       notifier: notifier,
                       projectId: projectId,
@@ -182,6 +184,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         // Top Bar with Fullscreen Toggle
                         _EditorTitleBar(
                           presetName: presetName,
+                          masteringEnabled: masteringEnabled,
                           onBack: () {
                             notifier.stop();
                             context.go(AppRoutes.import_);
@@ -238,6 +241,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                           isPlaying: isPlaying,
                                           isGeneratingPreview:
                                               isGeneratingPreview,
+                                          masteringEnabled: masteringEnabled,
                                           onPlayPause: notifier.togglePlayback,
                                           onSeek: (pos) => notifier.seek(
                                             duration.inMilliseconds > 0
@@ -307,6 +311,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               isPlaying: isPlaying,
                                               isGeneratingPreview:
                                                   isGeneratingPreview,
+                                              masteringEnabled: masteringEnabled,
                                               onPlayPause:
                                                   notifier.togglePlayback,
                                               onSeek: (pos) => notifier.seek(
@@ -380,6 +385,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               isPlaying: isPlaying,
                                               isGeneratingPreview:
                                                   isGeneratingPreview,
+                                              masteringEnabled: masteringEnabled,
                                               onPlayPause:
                                                   notifier.togglePlayback,
                                               onSeek: (pos) => notifier.seek(
@@ -948,12 +954,14 @@ class _CompactSlider extends StatelessWidget {
 
 class _EditorTitleBar extends StatelessWidget {
   final String presetName;
+  final bool masteringEnabled;
   final VoidCallback onBack;
   final VoidCallback onExport;
   final VoidCallback onFullscreen;
 
   const _EditorTitleBar({
     required this.presetName,
+    required this.masteringEnabled,
     required this.onBack,
     required this.onExport,
     required this.onFullscreen,
@@ -1017,6 +1025,20 @@ class _EditorTitleBar extends StatelessWidget {
             const SizedBox(width: SlowverbTokens.spacingMd),
           ],
 
+          if (masteringEnabled) ...[
+            Icon(Icons.auto_awesome, color: Colors.white.withValues(alpha: 0.85), size: 18),
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              Text(
+                'Mastering On',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+            const SizedBox(width: SlowverbTokens.spacingSm),
+          ],
+
           // Right: Export button
           isNarrow
               ? IconButton(
@@ -1041,6 +1063,7 @@ class _WaveformTransportCard extends StatelessWidget {
   final Duration duration;
   final bool isPlaying;
   final bool isGeneratingPreview;
+  final bool masteringEnabled;
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
   final VoidCallback onSeekBackward;
@@ -1052,6 +1075,7 @@ class _WaveformTransportCard extends StatelessWidget {
     required this.duration,
     required this.isPlaying,
     required this.isGeneratingPreview,
+    required this.masteringEnabled,
     required this.onPlayPause,
     required this.onSeek,
     required this.onSeekBackward,
@@ -1073,7 +1097,33 @@ class _WaveformTransportCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(projectName, style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text(projectName, style: Theme.of(context).textTheme.titleLarge),
+              ),
+              if (masteringEnabled)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Mastering On',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: SlowverbTokens.spacingMd),
           // Visualizer is now in background
           Slider(
@@ -1135,6 +1185,8 @@ class _EffectColumn extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final masteringOn = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1362,6 +1414,43 @@ class _EffectColumn extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: SlowverbColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Mastering',
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Adds final peak safety + polish to previews and exports.',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: SlowverbColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: masteringOn,
+                              onChanged: (v) => onUpdateParam('masteringEnabled', v ? 1.0 : 0.0),
+                              activeThumbColor: SlowverbColors.hotPink,
+                              activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       ..._kParameterDefinitions.map(
                         (param) => Padding(
                           padding: const EdgeInsets.only(bottom: 8),
@@ -1432,6 +1521,43 @@ class _EffectColumn extends ConsumerWidget {
                     ),
                   );
                 }).toList(),
+              ),
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: SlowverbColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Mastering',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Adds final peak safety + polish to previews and exports.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: SlowverbColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: masteringOn,
+                      onChanged: (v) => onUpdateParam('masteringEnabled', v ? 1.0 : 0.0),
+                      activeThumbColor: SlowverbColors.hotPink,
+                      activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: SlowverbTokens.spacingMd),
               // All effect parameters

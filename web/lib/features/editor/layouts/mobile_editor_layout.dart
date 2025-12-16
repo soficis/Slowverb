@@ -19,6 +19,7 @@ class MobileEditorLayout extends StatefulWidget {
   final AudioEditorNotifier notifier;
   final String projectId;
   final VoidCallback onBack;
+  final bool masteringEnabled;
 
   // Flattened state props
   final Duration position;
@@ -35,6 +36,7 @@ class MobileEditorLayout extends StatefulWidget {
     required this.notifier,
     required this.projectId,
     required this.onBack,
+    required this.masteringEnabled,
     required this.position,
     required this.duration,
     required this.isPlaying,
@@ -94,6 +96,7 @@ class _MobileEditorLayoutState extends State<MobileEditorLayout> {
                 setState(() => _showEffectsSheet = !_showEffectsSheet),
             isEffectsExpanded: _showEffectsSheet,
             presetName: widget.presetName,
+            masteringEnabled: widget.masteringEnabled,
           ),
         ),
 
@@ -150,6 +153,7 @@ class _MiniTransportBar extends StatelessWidget {
   final VoidCallback onExpandEffects;
   final bool isEffectsExpanded;
   final String presetName;
+  final bool masteringEnabled;
 
   const _MiniTransportBar({
     required this.projectName,
@@ -161,6 +165,7 @@ class _MiniTransportBar extends StatelessWidget {
     required this.onExpandEffects,
     required this.isEffectsExpanded,
     required this.presetName,
+    required this.masteringEnabled,
   });
 
   @override
@@ -277,11 +282,24 @@ class _MiniTransportBar extends StatelessWidget {
                     SlowverbTokens.radiusPill,
                   ),
                 ),
-                child: Text(
-                  presetName,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: SlowverbColors.hotPink,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      presetName,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: SlowverbColors.hotPink,
+                      ),
+                    ),
+                    if (masteringEnabled) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: SlowverbColors.neonCyan,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -324,6 +342,7 @@ class _MobileEffectsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final presetId = selectedPresetId;
+    final masteringOn = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
 
     return Container(
       height: 320,
@@ -382,6 +401,42 @@ class _MobileEffectsSheet extends StatelessWidget {
           ),
 
           const Divider(height: 1),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SlowverbTokens.spacingMd,
+              vertical: SlowverbTokens.spacingSm,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Mastering',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Adds final peak safety + polish.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: SlowverbColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: masteringOn,
+                  onChanged: (v) =>
+                      notifier.updateParameter('masteringEnabled', v ? 1.0 : 0.0),
+                  activeThumbColor: SlowverbColors.hotPink,
+                  activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
+          ),
 
           // Parameter sliders (scrollable)
           Expanded(

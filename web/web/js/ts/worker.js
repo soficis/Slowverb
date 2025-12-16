@@ -4624,6 +4624,7 @@ var isReady = false;
 var activeJobId;
 var loadedFiles = /* @__PURE__ */ new Set();
 var logCapture = null;
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
 ctx.onmessage = (event) => {
   const request = event.data;
   log("debug", "request:received", { type: request.type, jobId: getJobId(request) });
@@ -4775,7 +4776,15 @@ async function handleRender(request) {
   activeJobId = jobId;
   try {
     log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
-    ffmpeg.exec(...args);
+    try {
+      ffmpeg.exec(...args);
+    } catch (error) {
+      const fallbackGraph = stripSimpleMasteringFromFilterGraph(payload.filterGraph);
+      if (!fallbackGraph) throw error;
+      log("warn", "render:retry-without-mastering", { jobId, fileId: payload.fileId });
+      const fallbackPlan = buildRenderPlan({ ...payload, filterGraph: fallbackGraph }, jobId, isPreview);
+      ffmpeg.exec(...fallbackPlan.args);
+    }
     const buffer = await readOutput(outputFile);
     log("info", "render:ok", { jobId, outputFile });
     postRenderResult(request, buffer);
@@ -4820,6 +4829,13 @@ function addInputArgs(args, payload) {
   if (payload.filterGraph && payload.filterGraph !== "anull") {
     args.push("-af", payload.filterGraph);
   }
+}
+function stripSimpleMasteringFromFilterGraph(filterGraph) {
+  if (!filterGraph || filterGraph === "anull") return null;
+  if (!filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return null;
+  const withoutSuffix = filterGraph.slice(0, -SIMPLE_MASTERING_FILTER_CHAIN.length);
+  const withoutTrailingComma = withoutSuffix.endsWith(",") ? withoutSuffix.slice(0, -1) : withoutSuffix;
+  return withoutTrailingComma.length > 0 ? withoutTrailingComma : "anull";
 }
 function addCodecArgs(args, payload) {
   switch (payload.format) {

@@ -3,6 +3,13 @@ export type PitchSemitones = number;
 export type NormalizedUnit = number;
 export type SpecVersion = "1.0.0";
 
+export type MasteringAlgorithm = "simple" | "phaselimiter";
+
+export interface MasteringSpec {
+  readonly enabled?: boolean;
+  readonly algorithm?: MasteringAlgorithm;
+}
+
 export interface ReverbSpec {
   readonly decay: NormalizedUnit;
   readonly preDelayMs: number;
@@ -25,6 +32,7 @@ export interface DspSpec {
   readonly eqWarmth?: NormalizedUnit;
   readonly hfDamping?: NormalizedUnit;
   readonly stereoWidth?: number;
+  readonly mastering?: MasteringSpec;
   readonly normalize?: boolean;
 }
 

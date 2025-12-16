@@ -1,9 +1,12 @@
-import type { DspSpec, EchoSpec, ReverbSpec } from "./dsp.js";
+import type { DspSpec, EchoSpec, MasteringSpec, ReverbSpec } from "./dsp.js";
 import { DSP_LIMITS } from "./dsp.js";
 
 type Limits = { readonly min: number; readonly max: number };
 type NormalizedReverb = Readonly<Required<ReverbSpec>>;
 type NormalizedEcho = Readonly<EchoSpec>;
+
+const SIMPLE_MASTERING_FILTER_CHAIN =
+  "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
 
 export function compileFilterChain(spec: DspSpec): string {
   const filters: string[] = [];
@@ -15,6 +18,7 @@ export function compileFilterChain(spec: DspSpec): string {
   appendEcho(filters, spec.echo);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
+  appendMastering(filters, spec.mastering);
 
   return filters.length > 0 ? filters.join(",") : "anull";
 }
@@ -53,6 +57,23 @@ function appendLowpass(filters: string[], cutoffHz?: number, hfDamping?: number)
 function appendStereoWidth(filters: string[], width?: number): void {
   if (width === undefined || width === 1.0) return;
   filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
+}
+
+function appendMastering(filters: string[], mastering?: MasteringSpec): void {
+  if (!isMasteringEnabled(mastering)) return;
+
+  const algorithm = mastering?.algorithm ?? "simple";
+  if (algorithm !== "simple") return;
+
+  filters.push(buildSimpleMasteringFilterChain());
+}
+
+function isMasteringEnabled(mastering?: MasteringSpec): boolean {
+  return mastering?.enabled === true;
+}
+
+function buildSimpleMasteringFilterChain(): string {
+  return SIMPLE_MASTERING_FILTER_CHAIN;
 }
 
 function buildTempoFilter(tempo: number): string {

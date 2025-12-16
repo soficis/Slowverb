@@ -29,6 +29,7 @@ abstract final class Presets {
       'reverbAmount': 0.7,
       'echoAmount': 0.2,
       'eqWarmth': 0.4,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -43,6 +44,7 @@ abstract final class Presets {
       'reverbAmount': 0.4, // 40% reverbance from screenshot
       'echoAmount': 0.15,
       'eqWarmth': 0.5, // Balanced warmth
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -57,6 +59,7 @@ abstract final class Presets {
       'reverbAmount': 0.5, // 50% reverbance
       'echoAmount': 0.2,
       'eqWarmth': 0.5, // 50% tone balance
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -71,6 +74,7 @@ abstract final class Presets {
       'reverbAmount': 0.8,
       'echoAmount': 0.4,
       'eqWarmth': 0.7,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -85,6 +89,7 @@ abstract final class Presets {
       'reverbAmount': 0.3,
       'echoAmount': 0.1,
       'eqWarmth': 0.2,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -99,6 +104,7 @@ abstract final class Presets {
       'reverbAmount': 0.6,
       'echoAmount': 0.8,
       'eqWarmth': 0.5,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -113,6 +119,7 @@ abstract final class Presets {
       'reverbAmount': 0.5,
       'echoAmount': 0.3,
       'eqWarmth': 0.8,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -127,6 +134,7 @@ abstract final class Presets {
       'reverbAmount': 0.9,
       'echoAmount': 0.6,
       'eqWarmth': 0.3,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -141,6 +149,7 @@ abstract final class Presets {
       'reverbAmount': 0.4,
       'echoAmount': 0.2,
       'eqWarmth': 0.9,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -155,6 +164,7 @@ abstract final class Presets {
       'reverbAmount': 0.2,
       'echoAmount': 0.1,
       'eqWarmth': 0.1,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -169,6 +179,7 @@ abstract final class Presets {
       'reverbAmount': 0.85,
       'echoAmount': 0.5,
       'eqWarmth': 0.6,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -183,6 +194,7 @@ abstract final class Presets {
       'reverbAmount': 0.6,
       'echoAmount': 0.4,
       'eqWarmth': 0.4,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -197,6 +209,7 @@ abstract final class Presets {
       'reverbAmount': 0.7,
       'echoAmount': 0.6,
       'eqWarmth': 0.5,
+      'masteringEnabled': 0.0,
     },
   );
 
@@ -211,6 +224,7 @@ abstract final class Presets {
       'reverbAmount': 0.0,
       'echoAmount': 0.0,
       'eqWarmth': 0.5,
+      'masteringEnabled': 0.0,
     },
   );
 
