@@ -90,19 +90,26 @@ Export your finished audio in one of four formats:
 | **WAV**  | Uncompressed (Lossless)   | Professional use, no quality loss. |
 | **FLAC** | Compressed (Lossless)     | Archiving, high-quality storage.   |
 
-### 🎛️ Mastering Toggle
+### 🎛️ Mastering & Quality
 
-Slowverb includes an optional **mastering** feature that adds final peak safety and polish to your audio:
+Slowverb features a mastering engine powered by **PhaseLimiter**. This ensures your slowed + reverb tracks have consistent loudness and punch without clipping.
 
-- **Persistent**: The mastering setting is saved across sessions, songs, and preset changes.
-- **Automatic Naming**: Exported files with mastering enabled automatically have `_mastered` appended to their filename (e.g., `song_mastered.mp3`).
+When Mastering is enabled, you can choose from three quality levels:
+
+| Level      | Engine              | Description                                      | Render Time |
+|------------|---------------------|--------------------------------------------------|-------------|
+| **Simple** | Soft Clipper        | Basic peak limiting. Prevents red-lining.       | Instant     |
+| **Lite**   | PhaseLimiter (Lite) | Single-band lookahead limiting. Transparent.     | Fast        |
+| **Pro**    | PhaseLimiter (Pro)  | Multi-stage auto-mastering with Phase optimization. | Slow        |
+
+> **Note**: The "Pro" setting uses a complex DSP chain ported from the original C++ PhaseLimiter library. It provides the highest quality but takes significantly longer to render.
 
 To enable mastering:
 
 1. Open the editor screen.
-2. Toggle the "Mastering" switch in the effects panel.
-3. Regenerate your preview to hear the difference.
-4. Export your mastered file.
+2. Toggle the "Mastering" switch in the unified bubble.
+3. Adjust the **Quality** slider to your preference.
+4. Regenerate your preview to hear the difference.
 
 ---
 
@@ -341,9 +348,11 @@ This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 
 Slowverb uses [FFmpeg](https://ffmpeg.org) compiled to WebAssembly via `@ffmpeg/ffmpeg`. FFmpeg is licensed under [LGPL 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html). No modifications were made to the FFmpeg source code.
 
-### PhaseLimiter Integration (Experimental)
+### PhaseLimiter Integration
 
-Slowverb is adding a PhaseLimiter-style mastering path (decode PCM → master → encode) as an optional higher-quality mastering mode. The final target is the MIT-licensed [PhaseLimiter](https://github.com/ai-mastering/phaselimiter) engine.
+Slowverb features a custom WebAssembly port of the **PhaseLimiter** engine (originally by [Shin Fukuse](https://github.com/ai-mastering/phaselimiter)). This powers the **Lite** and **Pro** mastering qualities, providing transparent peak limiting and loudness maximization directly in the browser.
+
+The integration replaces the original Intel IPP dependencies with standard C++ and custom FFT implementations to ensure cross-platform compatibility.
 
 ```
 PhaseLimiter - MIT License
