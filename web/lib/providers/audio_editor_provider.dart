@@ -292,6 +292,75 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     }
   }
 
+  /// Regenerate preview with current settings.
+  /// Stops playback if playing, marks preview as dirty, and generates fresh preview.
+  ///
+  /// If [resumeAtPosition] is true, seeks to the previous playback position after regeneration.
+  Future<void> regenerate({bool resumeAtPosition = false}) async {
+    print(
+      '[AudioEditor] Regenerate called (resumeAtPosition=$resumeAtPosition).',
+    );
+    if (state.fileId == null) {
+      print('[AudioEditor] No file loaded.');
+      return;
+    }
+
+    // Capture current position before stopping
+    final previousPosition = resumeAtPosition ? state.playbackPosition : 0.0;
+    print('[AudioEditor] Previous position: $previousPosition');
+
+    // Stop playback if currently playing
+    if (state.isPlaying) {
+      final playback = _ref.read(audioPlaybackProvider.notifier);
+      await playback.stop();
+      state = state.copyWith(isPlaying: false);
+    }
+
+    // Mark preview as dirty to force regeneration
+    state = state.copyWith(isPreviewDirty: true, isLoading: true, error: null);
+
+    try {
+      print('[AudioEditor] Generating fresh preview...');
+      final previewUri = await generatePreview();
+      if (previewUri != null) {
+        print('[AudioEditor] Preview regenerated successfully: $previewUri');
+        state = state.copyWith(
+          currentPreviewUri: previewUri,
+          isPreviewDirty: false,
+        );
+
+        // Automatically start playback of new preview
+        print('[AudioEditor] Playing regenerated preview...');
+        final playback = _ref.read(audioPlaybackProvider.notifier);
+        await playback.playPreview(previewUri);
+        state = state.copyWith(isPlaying: true, isLoading: false);
+
+        // Seek to previous position if requested
+        if (resumeAtPosition && previousPosition > 0.0) {
+          print(
+            '[AudioEditor] Seeking to previous position: $previousPosition',
+          );
+          seek(previousPosition);
+        }
+
+        print('[AudioEditor] Regenerated playback started.');
+      } else {
+        print('[AudioEditor] Regeneration failed - preview URI is null.');
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Failed to regenerate audio preview',
+        );
+      }
+    } catch (e, stack) {
+      print('[AudioEditor] Regeneration failed with error: $e\n$stack');
+      state = state.copyWith(
+        isLoading: false,
+        isPlaying: false,
+        error: 'Regeneration failed: $e',
+      );
+    }
+  }
+
   /// Stop playback
   Future<void> stop() async {
     final playback = _ref.read(audioPlaybackProvider.notifier);

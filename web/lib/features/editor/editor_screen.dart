@@ -10,6 +10,7 @@ import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/editor/layouts/mobile_editor_layout.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
+import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
@@ -71,7 +72,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     // Adapted logic: construct project-like properties from state
     final hasProject = state.fileId != null || state.audioFileName != null;
     final projectName = state.projectName ?? state.audioFileName ?? 'Untitled';
-    final duration = state.audioDuration ?? Duration.zero;
+
+    // Use playback duration (processed audio) when available, otherwise use original metadata duration
+    final playbackDuration = ref.watch(playbackDurationProvider).value;
+    final duration = playbackDuration ?? state.audioDuration ?? Duration.zero;
     // Calculate position from normalized playbackPosition
     final position = Duration(
       milliseconds: (state.playbackPosition * duration.inMilliseconds).toInt(),
@@ -82,6 +86,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     final selectedPresetId = state.selectedPreset.id;
     final parameters = state.currentParameters;
     final masteringEnabled = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
+    final hasGeneratedPreview = state.currentPreviewUri != null;
 
     if (state.error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -242,7 +247,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                           isGeneratingPreview:
                                               isGeneratingPreview,
                                           masteringEnabled: masteringEnabled,
+                                          hasGeneratedPreview:
+                                              hasGeneratedPreview,
                                           onPlayPause: notifier.togglePlayback,
+                                          onRegenerate: (resumeAt) =>
+                                              notifier.regenerate(
+                                                resumeAtPosition: resumeAt,
+                                              ),
                                           onSeek: (pos) => notifier.seek(
                                             duration.inMilliseconds > 0
                                                 ? pos / duration.inMilliseconds
@@ -311,9 +322,16 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               isPlaying: isPlaying,
                                               isGeneratingPreview:
                                                   isGeneratingPreview,
-                                              masteringEnabled: masteringEnabled,
+                                              masteringEnabled:
+                                                  masteringEnabled,
+                                              hasGeneratedPreview:
+                                                  hasGeneratedPreview,
                                               onPlayPause:
                                                   notifier.togglePlayback,
+                                              onRegenerate: (resumeAt) =>
+                                                  notifier.regenerate(
+                                                    resumeAtPosition: resumeAt,
+                                                  ),
                                               onSeek: (pos) => notifier.seek(
                                                 duration.inMilliseconds > 0
                                                     ? pos /
@@ -385,9 +403,16 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                               isPlaying: isPlaying,
                                               isGeneratingPreview:
                                                   isGeneratingPreview,
-                                              masteringEnabled: masteringEnabled,
+                                              masteringEnabled:
+                                                  masteringEnabled,
+                                              hasGeneratedPreview:
+                                                  hasGeneratedPreview,
                                               onPlayPause:
                                                   notifier.togglePlayback,
+                                              onRegenerate: (resumeAt) =>
+                                                  notifier.regenerate(
+                                                    resumeAtPosition: resumeAt,
+                                                  ),
                                               onSeek: (pos) => notifier.seek(
                                                 duration.inMilliseconds > 0
                                                     ? pos /
@@ -1026,7 +1051,11 @@ class _EditorTitleBar extends StatelessWidget {
           ],
 
           if (masteringEnabled) ...[
-            Icon(Icons.auto_awesome, color: Colors.white.withValues(alpha: 0.85), size: 18),
+            Icon(
+              Icons.auto_awesome,
+              color: Colors.white.withValues(alpha: 0.85),
+              size: 18,
+            ),
             if (!isNarrow) ...[
               const SizedBox(width: 6),
               Text(
@@ -1064,7 +1093,9 @@ class _WaveformTransportCard extends StatelessWidget {
   final bool isPlaying;
   final bool isGeneratingPreview;
   final bool masteringEnabled;
+  final bool hasGeneratedPreview;
   final VoidCallback onPlayPause;
+  final void Function(bool resumeAtPosition) onRegenerate;
   final ValueChanged<int> onSeek;
   final VoidCallback onSeekBackward;
   final VoidCallback onSeekForward;
@@ -1076,7 +1107,9 @@ class _WaveformTransportCard extends StatelessWidget {
     required this.isPlaying,
     required this.isGeneratingPreview,
     required this.masteringEnabled,
+    required this.hasGeneratedPreview,
     required this.onPlayPause,
+    required this.onRegenerate,
     required this.onSeek,
     required this.onSeekBackward,
     required this.onSeekForward,
@@ -1100,24 +1133,38 @@ class _WaveformTransportCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(projectName, style: Theme.of(context).textTheme.titleLarge),
+                child: Text(
+                  projectName,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
               if (masteringEnabled)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+                    borderRadius: BorderRadius.circular(
+                      SlowverbTokens.radiusPill,
+                    ),
                     border: Border.all(color: Colors.white24),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: Colors.white,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Mastering On',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelMedium?.copyWith(color: Colors.white),
                       ),
                     ],
                   ),
@@ -1152,18 +1199,120 @@ class _WaveformTransportCard extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Center(
-              child: PlaybackControls(
-                isPlaying: isPlaying,
-                onPlayPause: onPlayPause,
-                onSeekBackward: onSeekBackward,
-                onSeekForward: onSeekForward,
-                onLoop: () {},
-                isProcessing: isGeneratingPreview,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  PlaybackControls(
+                    isPlaying: isPlaying,
+                    onPlayPause: onPlayPause,
+                    onSeekBackward: onSeekBackward,
+                    onSeekForward: onSeekForward,
+                    onLoop: () {},
+                    isProcessing: isGeneratingPreview,
+                  ),
+                  if (hasGeneratedPreview) ...[
+                    const SizedBox(width: 16),
+                    _RegenerateButton(
+                      onRegenerate: onRegenerate,
+                      isProcessing: isGeneratingPreview,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Button to regenerate the audio preview with current settings.
+/// Only visible after initial preview has been generated.
+/// Includes a checkbox to resume playback at previous position.
+class _RegenerateButton extends StatefulWidget {
+  final void Function(bool resumeAtPosition) onRegenerate;
+  final bool isProcessing;
+
+  const _RegenerateButton({
+    required this.onRegenerate,
+    required this.isProcessing,
+  });
+
+  @override
+  State<_RegenerateButton> createState() => _RegenerateButtonState();
+}
+
+class _RegenerateButtonState extends State<_RegenerateButton> {
+  bool _resumeAtPosition = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Tooltip(
+          message: 'Regenerate with current settings',
+          child: ElevatedButton.icon(
+            onPressed: widget.isProcessing
+                ? null
+                : () => widget.onRegenerate(_resumeAtPosition),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: SlowverbColors.neonCyan.withValues(alpha: 0.2),
+              foregroundColor: SlowverbColors.neonCyan,
+              padding: const EdgeInsets.symmetric(
+                horizontal: SlowverbTokens.spacingMd,
+                vertical: SlowverbTokens.spacingSm,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(SlowverbTokens.radiusPill),
+                side: BorderSide(
+                  color: SlowverbColors.neonCyan.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+            icon: widget.isProcessing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: SlowverbColors.neonCyan,
+                    ),
+                  )
+                : const Icon(Icons.refresh, size: 18),
+            label: Text(widget.isProcessing ? 'Generating...' : 'Regenerate'),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: Checkbox(
+                value: _resumeAtPosition,
+                onChanged: widget.isProcessing
+                    ? null
+                    : (value) {
+                        setState(() => _resumeAtPosition = value ?? false);
+                      },
+                activeColor: SlowverbColors.neonCyan,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Resume at position',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1415,10 +1564,15 @@ class _EffectColumn extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: SlowverbColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+                          borderRadius: BorderRadius.circular(
+                            SlowverbTokens.radiusMd,
+                          ),
                           border: Border.all(color: Colors.white10),
                         ),
                         child: Row(
@@ -1429,23 +1583,30 @@ class _EffectColumn extends ConsumerWidget {
                                 children: [
                                   Text(
                                     'Mastering',
-                                    style: Theme.of(context).textTheme.titleSmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     'Adds final peak safety + polish to previews and exports.',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: SlowverbColors.textSecondary,
-                                    ),
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: SlowverbColors.textSecondary,
+                                        ),
                                   ),
                                 ],
                               ),
                             ),
                             Switch.adaptive(
                               value: masteringOn,
-                              onChanged: (v) => onUpdateParam('masteringEnabled', v ? 1.0 : 0.0),
+                              onChanged: (v) => onUpdateParam(
+                                'masteringEnabled',
+                                v ? 1.0 : 0.0,
+                              ),
                               activeThumbColor: SlowverbColors.hotPink,
-                              activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                              activeTrackColor: SlowverbColors.hotPink
+                                  .withValues(alpha: 0.35),
                             ),
                           ],
                         ),
@@ -1524,7 +1685,10 @@ class _EffectColumn extends ConsumerWidget {
               ),
               const SizedBox(height: SlowverbTokens.spacingMd),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: SlowverbColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
@@ -1543,18 +1707,20 @@ class _EffectColumn extends ConsumerWidget {
                           const SizedBox(height: 2),
                           Text(
                             'Adds final peak safety + polish to previews and exports.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: SlowverbColors.textSecondary,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: SlowverbColors.textSecondary),
                           ),
                         ],
                       ),
                     ),
                     Switch.adaptive(
                       value: masteringOn,
-                      onChanged: (v) => onUpdateParam('masteringEnabled', v ? 1.0 : 0.0),
+                      onChanged: (v) =>
+                          onUpdateParam('masteringEnabled', v ? 1.0 : 0.0),
                       activeThumbColor: SlowverbColors.hotPink,
-                      activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                      activeTrackColor: SlowverbColors.hotPink.withValues(
+                        alpha: 0.35,
+                      ),
                     ),
                   ],
                 ),
