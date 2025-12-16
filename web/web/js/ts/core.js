@@ -225,6 +225,7 @@ var SlowverbEngine = class {
     return {
       fileId: request.source.fileId,
       filterGraph,
+      mastering: request.dspSpec?.mastering,
       format: request.format ?? "mp3",
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,

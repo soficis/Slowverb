@@ -124,6 +124,7 @@ class EffectConfig {
   final double echoAmount; // 0.0 - 1.0
   final double eqWarmth; // 0.0 - 1.0
   final double masteringEnabled; // 0.0 or 1.0
+  final double masteringAlgorithm; // 0.0=simple, 1.0=phaselimiter
   final double? preDelayMs; // 0 - 200
   final double? hfDamping; // 0.0 - 1.0
   final double? roomScale; // 0.0 - 1.0
@@ -137,6 +138,7 @@ class EffectConfig {
     this.echoAmount = 0.0,
     this.eqWarmth = 0.0,
     this.masteringEnabled = 0.0,
+    this.masteringAlgorithm = 0.0,
     this.preDelayMs,
     this.hfDamping,
     this.roomScale,
@@ -153,6 +155,7 @@ class EffectConfig {
       echoAmount: params['echoAmount'] ?? 0.0,
       eqWarmth: params['eqWarmth'] ?? 0.0,
       masteringEnabled: params['masteringEnabled'] ?? 0.0,
+      masteringAlgorithm: params['masteringAlgorithm'] ?? 0.0,
       preDelayMs: params['preDelayMs'],
       hfDamping: params['hfDamping'],
       roomScale: params['roomScale'],

@@ -3,7 +3,12 @@ const STATIC_CACHE_NAME = "slowverb-static-v2";
 const WASM_CACHE_NAME = "slowverb-wasm-v1";
 
 // WASM files get separate cache for easier maintenance
-const WASM_FILES = ["/js/ffmpeg-core.js", "/js/ffmpeg-core.wasm"];
+const WASM_FILES = [
+  "/js/ffmpeg-core.js",
+  "/js/ffmpeg-core.wasm",
+  "/js/phaselimiter.js",
+  "/js/phaselimiter.wasm",
+];
 
 // Static assets (app code, UI assets)
 const STATIC_ASSETS = [
@@ -17,6 +22,7 @@ const STATIC_ASSETS = [
   "/js/slowverb_bridge.js",
   "/js/ts/core.js",
   "/js/ts/worker.js",
+  "/js/phase_limiter_worker.js",
   "/icons/Icon-192.png",
   "/icons/Icon-512.png",
 ];

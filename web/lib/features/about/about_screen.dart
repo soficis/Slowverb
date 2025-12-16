@@ -109,6 +109,58 @@ class AboutScreen extends StatelessWidget {
 
                   _buildSection(
                     context,
+                    icon: Icons.auto_awesome,
+                    title: 'Mastering',
+                    contentWidget: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Professional mastering powered by PhaseLimiter',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: SlowverbColors.textSecondary,
+                                height: 1.6,
+                              ),
+                        ),
+                        InkWell(
+                          onTap: () async {
+                            final uri = Uri.parse(
+                              'https://github.com/ai-mastering/phaselimiter',
+                            );
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          },
+                          child: Text(
+                            'https://github.com/ai-mastering/phaselimiter',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: SlowverbColors.accentCyan,
+                                  decoration: TextDecoration.underline,
+                                  height: 1.6,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'PhaseLimiter is MIT licensed. This implementation is released under GPLv3.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: SlowverbColors.textSecondary,
+                                height: 1.6,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
                     icon: Icons.copyright,
                     title: 'License',
                     content:
@@ -170,6 +222,40 @@ class AboutScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  const SizedBox(height: 12),
+
+                  // My First Rodeo Link
+                  Center(
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        final uri = Uri.parse('https://nihilist.rodeo');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: SlowverbColors.accentPink,
+                        side: const BorderSide(
+                          color: SlowverbColors.accentPink,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                      ),
+                      child: const Text(
+                        'My First Rodeo',
+                        style: TextStyle(
+                          fontFamily: 'Indie Flower',
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -183,7 +269,8 @@ class AboutScreen extends StatelessWidget {
     BuildContext context, {
     required IconData icon,
     required String title,
-    required String content,
+    String? content,
+    Widget? contentWidget,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,13 +291,15 @@ class AboutScreen extends StatelessWidget {
         const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.only(left: 32),
-          child: Text(
-            content,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: SlowverbColors.textSecondary,
-              height: 1.6,
-            ),
-          ),
+          child:
+              contentWidget ??
+              Text(
+                content ?? '',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: SlowverbColors.textSecondary,
+                  height: 1.6,
+                ),
+              ),
         ),
       ],
     );

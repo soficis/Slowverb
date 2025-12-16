@@ -9,6 +9,7 @@ import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
 import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/project_repository_provider.dart';
+import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -29,6 +30,8 @@ class AudioEditorState {
   final Object? fileHandle;
   final Uri? currentPreviewUri;
   final bool isPreviewDirty;
+  final bool
+  previewMasteringApplied; // True if current preview was rendered with mastering
 
   const AudioEditorState({
     this.audioFileName,
@@ -46,6 +49,7 @@ class AudioEditorState {
     this.fileHandle,
     this.currentPreviewUri,
     this.isPreviewDirty = true,
+    this.previewMasteringApplied = false,
   });
 
   Duration? get audioDuration => metadata?.duration;
@@ -66,6 +70,7 @@ class AudioEditorState {
     Object? fileHandle,
     Uri? currentPreviewUri,
     bool? isPreviewDirty,
+    bool? previewMasteringApplied,
   }) {
     return AudioEditorState(
       audioFileName: audioFileName ?? this.audioFileName,
@@ -83,6 +88,8 @@ class AudioEditorState {
       fileHandle: fileHandle ?? this.fileHandle,
       currentPreviewUri: currentPreviewUri ?? this.currentPreviewUri,
       isPreviewDirty: isPreviewDirty ?? this.isPreviewDirty,
+      previewMasteringApplied:
+          previewMasteringApplied ?? this.previewMasteringApplied,
     );
   }
 }
@@ -97,10 +104,24 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     : super(
         AudioEditorState(
           selectedPreset: Presets.slowedReverb,
-          currentParameters: Map.from(Presets.slowedReverb.parameters),
+          currentParameters: () {
+            final params = Map<String, double>.from(
+              Presets.slowedReverb.parameters,
+            );
+            // Initialize mastering from persistent settings
+            final masteringSettings = _ref.read(masteringSettingsProvider);
+            params['masteringEnabled'] = masteringSettings.masteringEnabled
+                ? 1.0
+                : 0.0;
+            params['masteringAlgorithm'] = masteringSettings.phaselimiterEnabled
+                ? 1.0
+                : 0.0;
+            return params;
+          }(),
         ),
       ) {
     _initPlaybackListener();
+    _initMasteringListener();
   }
 
   void _initPlaybackListener() {
@@ -123,6 +144,20 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       if (playerState.processingState == ProcessingState.completed) {
         state = state.copyWith(isPlaying: false, playbackPosition: 0.0);
       }
+    });
+  }
+
+  /// Listen for mastering settings changes and sync parameters map
+  void _initMasteringListener() {
+    // Listen to mastering settings changes and update parameters map
+    _ref.listen<MasteringSettings>(masteringSettingsProvider, (_, next) {
+      final newParams = Map<String, double>.from(state.currentParameters);
+      newParams['masteringEnabled'] = next.masteringEnabled ? 1.0 : 0.0;
+      newParams['masteringAlgorithm'] = next.phaselimiterEnabled ? 1.0 : 0.0;
+      state = state.copyWith(
+        currentParameters: newParams,
+        isPreviewDirty: true,
+      );
     });
   }
 
@@ -192,9 +227,17 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
   /// Apply preset
   void applyPreset(EffectPreset preset) {
+    // Preserve mastering setting when applying presets - mastering is now managed separately
+    final newParams = Map<String, double>.from(preset.parameters);
+    // Copy mastering state from current parameters to preserve it
+    newParams['masteringEnabled'] =
+        state.currentParameters['masteringEnabled'] ?? 0.0;
+    newParams['masteringAlgorithm'] =
+        state.currentParameters['masteringAlgorithm'] ?? 0.0;
+
     state = state.copyWith(
       selectedPreset: preset,
-      currentParameters: Map.from(preset.parameters),
+      currentParameters: newParams,
       isPreviewDirty: true,
     );
     unawaited(_persistProjectSnapshot());
@@ -266,9 +309,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       final previewUri = await generatePreview();
       if (previewUri != null) {
         print('[AudioEditor] Preview generated successfully: $previewUri');
+        // Track whether this preview was rendered with mastering
+        final currentMasteringEnabled =
+            (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
         state = state.copyWith(
           currentPreviewUri: previewUri,
           isPreviewDirty: false,
+          previewMasteringApplied: currentMasteringEnabled,
         );
 
         print('[AudioEditor] Playing preview URI...');
@@ -324,9 +371,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       final previewUri = await generatePreview();
       if (previewUri != null) {
         print('[AudioEditor] Preview regenerated successfully: $previewUri');
+        // Track whether this preview was rendered with mastering
+        final currentMasteringEnabled =
+            (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
         state = state.copyWith(
           currentPreviewUri: previewUri,
           isPreviewDirty: false,
+          previewMasteringApplied: currentMasteringEnabled,
         );
 
         // Automatically start playback of new preview

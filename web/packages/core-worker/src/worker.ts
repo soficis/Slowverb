@@ -34,6 +34,9 @@ const DEFAULT_WORKER_URL: string | undefined = undefined;
 let ffmpeg: any | null = null;
 let isReady = false;
 let activeJobId: string | undefined;
+let activeStage: string | undefined;
+let activeProgressOffset = 0;
+let activeProgressScale = 1;
 const loadedFiles = new Set<string>();
 let logCapture: { active: boolean; lines: string[]; limit: number } | null = null;
 
@@ -134,7 +137,8 @@ async function createCore(payload?: InitPayload): Promise<any> {
   core.setProgress(({ progress }: { progress: number }) => {
     if (!activeJobId) return;
     const value = typeof progress === "number" ? progress : 0;
-    postEvent({ type: "PROGRESS", jobId: activeJobId, value });
+    const scaled = activeProgressOffset + value * activeProgressScale;
+    postEvent({ type: "PROGRESS", jobId: activeJobId, value: scaled, stage: activeStage });
   });
 
   return core;
@@ -216,29 +220,253 @@ async function handleRender(
 
   const { payload, jobId, type } = request;
   const isPreview = type === "RENDER_PREVIEW";
-  const { args, outputFile } = buildRenderPlan(payload, jobId, isPreview);
+  const shouldUsePhaseLimiter = isPhaseLimiterEnabled(payload);
+  const filesToCleanup = new Set<string>([payload.fileId]);
 
   activeJobId = jobId;
   try {
-    log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
-    try {
-      ffmpeg.exec(...args);
-    } catch (error) {
-      const fallbackGraph = stripSimpleMasteringFromFilterGraph(payload.filterGraph);
-      if (!fallbackGraph) throw error;
+    if (!shouldUsePhaseLimiter) {
+      const { args, outputFile } = buildRenderPlan(payload, jobId, isPreview);
+      filesToCleanup.add(outputFile);
+      log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
+      try {
+        withProgressStage("processing", 0, 1, () => ffmpeg.exec(...args));
+      } catch (error) {
+        const fallbackGraph = stripSimpleMasteringFromFilterGraph(payload.filterGraph);
+        if (!fallbackGraph) throw error;
 
-      log("warn", "render:retry-without-mastering", { jobId, fileId: payload.fileId });
-      const fallbackPlan = buildRenderPlan({ ...payload, filterGraph: fallbackGraph }, jobId, isPreview);
-      ffmpeg.exec(...fallbackPlan.args);
+        log("warn", "render:retry-without-mastering", { jobId, fileId: payload.fileId });
+        const fallbackPlan = buildRenderPlan({ ...payload, filterGraph: fallbackGraph }, jobId, isPreview);
+        filesToCleanup.add(fallbackPlan.outputFile);
+        withProgressStage("processing", 0, 1, () => ffmpeg.exec(...fallbackPlan.args));
+      }
+      const buffer = await readOutput(outputFile);
+      log("info", "render:ok", { jobId, outputFile });
+      postRenderResult(request, buffer);
+      return;
     }
-    const buffer = await readOutput(outputFile);
-    log("info", "render:ok", { jobId, outputFile });
-    postRenderResult(request, buffer);
+
+    log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
+    const result = await renderWithPhaseLimiter(payload, jobId, isPreview);
+    filesToCleanup.add(result.outputFile);
+    for (const temp of result.tempFiles) filesToCleanup.add(temp);
+    log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
+    postRenderResult(request, result.buffer);
   } finally {
     activeJobId = undefined;
+    activeStage = undefined;
+    activeProgressOffset = 0;
+    activeProgressScale = 1;
     log("debug", "render:cleanup", { jobId });
-    cleanupFiles(payload.fileId, outputFile);
+    cleanupFiles(...filesToCleanup);
   }
+}
+
+function isPhaseLimiterEnabled(payload: RenderPayload): boolean {
+  const mastering = payload.mastering;
+  if (!mastering) return false;
+  return mastering.enabled === true && mastering.algorithm === "phaselimiter";
+}
+
+function withProgressStage(stage: string, offset: number, scale: number, run: () => void): void {
+  const prevStage = activeStage;
+  const prevOffset = activeProgressOffset;
+  const prevScale = activeProgressScale;
+
+  activeStage = stage;
+  activeProgressOffset = offset;
+  activeProgressScale = scale;
+  try {
+    run();
+  } finally {
+    activeStage = prevStage;
+    activeProgressOffset = prevOffset;
+    activeProgressScale = prevScale;
+  }
+}
+
+async function renderWithPhaseLimiter(
+  payload: RenderPayload,
+  jobId: string,
+  isPreview: boolean
+): Promise<{ buffer: ArrayBuffer; outputFile: string; tempFiles: string[] }> {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+
+  const sampleRate = 44100;
+  const decodeFile = `${payload.fileId}-${jobId}-decode.f32`;
+  const masteredFile = `${payload.fileId}-${jobId}-mastered.f32`;
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+
+  try {
+    const decodeArgs = buildDecodePlan(payload, decodeFile, sampleRate, isPreview);
+    postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
+    withProgressStage("decoding", 0, 0.2, () => ffmpeg.exec(...decodeArgs));
+
+    const { left, right } = readAndSplitF32Stereo(decodeFile);
+
+    postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId);
+
+    writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
+
+    const encodeArgs = buildEncodePlan(masteredFile, outputFile, payload, sampleRate);
+    postEvent({ type: "PROGRESS", jobId, value: 0.8, stage: "encoding" });
+    withProgressStage("encoding", 0.8, 0.2, () => ffmpeg.exec(...encodeArgs));
+
+    const buffer = await readOutput(outputFile);
+    return { buffer, outputFile, tempFiles: [decodeFile, masteredFile] };
+  } catch (error) {
+    log("warn", "render:phaselimiter-failed", {
+      jobId,
+      fileId: payload.fileId,
+      error: (error as Error)?.message ?? String(error),
+    });
+
+    // Fallback: render with simple mastering via FFmpeg filter chain.
+    const filterGraph = appendSimpleMasteringToFilterGraph(payload.filterGraph);
+    const fallbackPayload: RenderPayload = {
+      ...payload,
+      filterGraph,
+      mastering: { enabled: true, algorithm: "simple" },
+    };
+    const plan = buildRenderPlan(fallbackPayload, jobId, isPreview);
+    withProgressStage("processing", 0, 1, () => ffmpeg.exec(...plan.args));
+    const buffer = await readOutput(plan.outputFile);
+    return { buffer, outputFile: plan.outputFile, tempFiles: [decodeFile, masteredFile] };
+  }
+}
+
+function buildDecodePlan(payload: RenderPayload, outputFile: string, sampleRate: number, isPreview: boolean): string[] {
+  const args: string[] = [];
+  addTrimArgs(args, payload, isPreview);
+  args.push("-i", payload.fileId);
+  if (payload.filterGraph && payload.filterGraph !== "anull") {
+    args.push("-af", payload.filterGraph);
+  }
+  args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
+  return args;
+}
+
+function buildEncodePlan(inputFile: string, outputFile: string, payload: RenderPayload, sampleRate: number): string[] {
+  const args: string[] = [];
+  args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", inputFile);
+  addCodecArgs(args, payload);
+  args.push("-y", outputFile);
+  return args;
+}
+
+function readAndSplitF32Stereo(path: string): { left: Float32Array; right: Float32Array } {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const bytes = ffmpeg.FS.readFile(path);
+  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
+
+  const pcm = bytes.slice().buffer;
+  const interleaved = new Float32Array(pcm);
+  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+
+  const frames = interleaved.length / 2;
+  const left = new Float32Array(frames);
+  const right = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    left[i] = interleaved[i * 2];
+    right[i] = interleaved[i * 2 + 1];
+  }
+
+  return { left, right };
+}
+
+function writeInterleavedF32Stereo(path: string, left: Float32Array, right: Float32Array): void {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  if (left.length !== right.length) throw new Error("Channel length mismatch");
+
+  const frames = left.length;
+  const interleaved = new Float32Array(frames * 2);
+  for (let i = 0; i < frames; i++) {
+    interleaved[i * 2] = left[i];
+    interleaved[i * 2 + 1] = right[i];
+  }
+  ffmpeg.FS.writeFile(path, new Uint8Array(interleaved.buffer));
+}
+
+function appendSimpleMasteringToFilterGraph(filterGraph?: string): string {
+  if (!filterGraph || filterGraph === "anull") return SIMPLE_MASTERING_FILTER_CHAIN;
+  if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return filterGraph;
+  return `${filterGraph},${SIMPLE_MASTERING_FILTER_CHAIN}`;
+}
+
+async function processWithPhaseLimiter(
+  leftChannel: Float32Array,
+  rightChannel: Float32Array,
+  sampleRate: number,
+  jobId: string
+): Promise<{ left: Float32Array; right: Float32Array }> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("/js/phase_limiter_worker.js");
+
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data ?? {};
+      const type = data.type;
+      if (type === "progress") {
+        const percent = typeof data.percent === "number" ? data.percent : 0;
+        const scaled = 0.2 + clamp01(percent) * 0.6;
+        postEvent({ type: "PROGRESS", jobId, value: scaled, stage: "mastering" });
+        return;
+      }
+      if (type === "complete") {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        worker.terminate();
+
+        const left = data.leftChannel;
+        const right = data.rightChannel;
+        if (!(left instanceof Float32Array) || !(right instanceof Float32Array)) {
+          reject(new Error("Invalid PhaseLimiter worker result"));
+          return;
+        }
+        resolve({ left, right });
+        return;
+      }
+      if (type === "error") {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        worker.terminate();
+        reject(new Error(data.error ?? "PhaseLimiter worker error"));
+      }
+    };
+
+    const onError = (event: ErrorEvent) => {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.terminate();
+      reject(new Error(event.message || "PhaseLimiter worker crashed"));
+    };
+
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+
+    try {
+      worker.postMessage(
+        {
+          leftChannel,
+          rightChannel,
+          sampleRate,
+          config: { targetLufs: -14.0, bassPreservation: 0.5 },
+        },
+        [leftChannel.buffer, rightChannel.buffer]
+      );
+    } catch (error) {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.terminate();
+      reject(error);
+    }
+  });
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
 }
 
 async function handleWaveform(request: Extract<WorkerRequest, { type: "WAVEFORM" }>): Promise<void> {

@@ -558,6 +558,14 @@ class WasmAudioEngine implements AudioEngine {
       'normalize': false,
     };
 
+    if (config.masteringEnabled > 0.5) {
+      final algorithm = config.masteringAlgorithm > 0.5 ? 'phaselimiter' : 'simple';
+      spec['mastering'] = <String, Object?>{
+        'enabled': true,
+        'algorithm': algorithm,
+      };
+    }
+
     if (config.reverbAmount > 0.0) {
       spec['reverb'] = <String, Object?>{
         'decay': config.reverbAmount,

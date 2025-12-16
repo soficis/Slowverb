@@ -6,6 +6,8 @@ import 'package:slowverb_web/app/router.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
+import 'package:slowverb_web/providers/settings_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Mobile-optimized layout with floating controls and bottom sheet effects.
 ///
@@ -13,13 +15,14 @@ import 'package:slowverb_web/providers/audio_editor_provider.dart';
 /// - Minimal top bar with back and export buttons
 /// - Floating mini transport bar at bottom
 /// - Expandable bottom sheet for effect controls
-class MobileEditorLayout extends StatefulWidget {
+class MobileEditorLayout extends ConsumerStatefulWidget {
   final String projectName;
   final String presetName;
   final AudioEditorNotifier notifier;
   final String projectId;
   final VoidCallback onBack;
   final bool masteringEnabled;
+  final bool previewMasteringApplied;
 
   // Flattened state props
   final Duration position;
@@ -37,6 +40,7 @@ class MobileEditorLayout extends StatefulWidget {
     required this.projectId,
     required this.onBack,
     required this.masteringEnabled,
+    required this.previewMasteringApplied,
     required this.position,
     required this.duration,
     required this.isPlaying,
@@ -46,10 +50,10 @@ class MobileEditorLayout extends StatefulWidget {
   });
 
   @override
-  State<MobileEditorLayout> createState() => _MobileEditorLayoutState();
+  ConsumerState<MobileEditorLayout> createState() => _MobileEditorLayoutState();
 }
 
-class _MobileEditorLayoutState extends State<MobileEditorLayout> {
+class _MobileEditorLayoutState extends ConsumerState<MobileEditorLayout> {
   bool _showEffectsSheet = false;
 
   @override
@@ -317,7 +321,7 @@ class _MiniTransportBar extends StatelessWidget {
 }
 
 /// Bottom sheet for effect controls on mobile.
-class _MobileEffectsSheet extends StatelessWidget {
+class _MobileEffectsSheet extends ConsumerWidget {
   final String selectedPresetId;
   final Map<String, double> parameters;
   final AudioEditorNotifier notifier;
@@ -340,9 +344,12 @@ class _MobileEffectsSheet extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final presetId = selectedPresetId;
-    final masteringOn = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
+    final masteringSettings = ref.watch(masteringSettingsProvider);
+    final masteringOn = masteringSettings.masteringEnabled;
+    final masteringAlgorithm = parameters['masteringAlgorithm'] ?? 0.0;
+    final professionalMasteringOn = masteringOn && masteringAlgorithm > 0.5;
 
     return Container(
       height: 320,
@@ -429,14 +436,59 @@ class _MobileEffectsSheet extends StatelessWidget {
                 ),
                 Switch.adaptive(
                   value: masteringOn,
-                  onChanged: (v) =>
-                      notifier.updateParameter('masteringEnabled', v ? 1.0 : 0.0),
+                  onChanged: (v) {
+                    ref
+                        .read(masteringSettingsProvider.notifier)
+                        .setMasteringEnabled(v);
+                  },
                   activeThumbColor: SlowverbColors.hotPink,
-                  activeTrackColor: SlowverbColors.hotPink.withValues(alpha: 0.35),
+                  activeTrackColor: SlowverbColors.hotPink.withValues(
+                    alpha: 0.35,
+                  ),
                 ),
               ],
             ),
           ),
+
+          if (masteringOn)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: SlowverbTokens.spacingMd,
+                vertical: SlowverbTokens.spacingSm,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PhaseLimiter Mastering',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Apply an automated mastering algorithm. (Slower, but higher quality)',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: SlowverbColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: professionalMasteringOn,
+                    onChanged: (v) => notifier.updateParameter(
+                      'masteringAlgorithm',
+                      v ? 1.0 : 0.0,
+                    ),
+                    activeThumbColor: SlowverbColors.hotPink,
+                    activeTrackColor: SlowverbColors.hotPink.withValues(
+                      alpha: 0.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Parameter sliders (scrollable)
           Expanded(

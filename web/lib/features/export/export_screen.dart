@@ -8,6 +8,7 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:web/web.dart' as web;
 
 /// Export screen for rendering and downloading final audio
@@ -25,6 +26,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   int _flacCompressionLevel = 8;
   bool _isExporting = false;
   double _exportProgress = 0.0;
+  String _exportStage = 'processing';
   RenderJobId? _activeJobId;
   StreamSubscription<RenderProgress>? _progressSub;
   String? _downloadUrl;
@@ -370,7 +372,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         const SizedBox(height: 8),
 
         Text(
-          'Processing your audio with FFmpeg...',
+          _formatExportStage(_exportStage),
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: SlowverbColors.textSecondary),
@@ -407,6 +409,19 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         TextButton(onPressed: _cancelExport, child: const Text('CANCEL')),
       ],
     );
+  }
+
+  String _formatExportStage(String stage) {
+    switch (stage) {
+      case 'decoding':
+        return 'Decoding audio...';
+      case 'mastering':
+        return 'Mastering audio...';
+      case 'encoding':
+        return 'Encoding export...';
+      default:
+        return 'Processing your audio...';
+    }
   }
 
   Widget _buildDownloadReadyCard() {
@@ -478,6 +493,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     setState(() {
       _isExporting = true;
       _exportProgress = 0.0;
+      _exportStage = 'processing';
       _errorMessage = null;
     });
 
@@ -501,7 +517,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           .listen(
             (progress) {
               if (!mounted) return;
-              setState(() => _exportProgress = progress.progress);
+              setState(() {
+                _exportProgress = progress.progress;
+                _exportStage = progress.stage;
+              });
             },
             onError: (error, stack) {
               if (!mounted) return;
@@ -510,6 +529,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                 _isExporting = false;
                 _errorMessage = 'Export failed: $error';
                 _activeJobId = null;
+                _exportStage = 'processing';
               });
             },
             onDone: () async {
@@ -527,6 +547,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     _errorMessage =
                         result.errorMessage ?? 'Export did not produce a file.';
                     _activeJobId = null;
+                    _exportStage = 'processing';
                   });
                   return;
                 }
@@ -543,6 +564,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   _isExporting = false;
                   _errorMessage = 'Failed to finalize export: $e';
                   _activeJobId = null;
+                  _exportStage = 'processing';
                 });
               }
             },
@@ -553,6 +575,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         _isExporting = false;
         _errorMessage = 'Failed to start export: $e';
         _activeJobId = null;
+        _exportStage = 'processing';
       });
     }
   }
@@ -571,6 +594,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       _exportProgress = 0.0;
       _activeJobId = null;
       _progressSub = null;
+      _exportStage = 'processing';
     });
   }
 
@@ -656,10 +680,21 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   String _deriveDownloadName(String? originalName, String format) {
+    // Check if mastering is enabled
+    final masteringSettings = ref.read(masteringSettingsProvider);
+    final masteringEnabled = masteringSettings.masteringEnabled;
+
+    String base;
     if (originalName == null || !originalName.contains('.')) {
-      return 'slowverb-export.$format';
+      base = 'slowverb-export';
+    } else {
+      base = originalName.split('.').first;
     }
-    final base = originalName.split('.').first;
+
+    // Append _mastered if mastering is enabled
+    if (masteringEnabled) {
+      return '${base}_mastered.$format';
+    }
     return '$base.$format';
   }
 

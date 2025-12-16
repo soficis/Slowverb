@@ -67,3 +67,82 @@ final experimentalFeaturesProvider =
     StateNotifierProvider<ExperimentalFeaturesNotifier, ExperimentalFeatures>(
       (ref) => ExperimentalFeaturesNotifier(),
     );
+
+/// Mastering settings configuration
+class MasteringSettings {
+  final bool masteringEnabled;
+  final bool phaselimiterEnabled;
+
+  const MasteringSettings({
+    this.masteringEnabled = false,
+    this.phaselimiterEnabled = false,
+  });
+
+  MasteringSettings copyWith({
+    bool? masteringEnabled,
+    bool? phaselimiterEnabled,
+  }) {
+    return MasteringSettings(
+      masteringEnabled: masteringEnabled ?? this.masteringEnabled,
+      phaselimiterEnabled: phaselimiterEnabled ?? this.phaselimiterEnabled,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'masteringEnabled': masteringEnabled,
+    'phaselimiterEnabled': phaselimiterEnabled,
+  };
+
+  factory MasteringSettings.fromJson(Map<String, dynamic> json) {
+    return MasteringSettings(
+      masteringEnabled: json['masteringEnabled'] as bool? ?? false,
+      phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? false,
+    );
+  }
+}
+
+/// Notifier for managing mastering settings with persistence
+class MasteringSettingsNotifier extends StateNotifier<MasteringSettings> {
+  static const _storageKey = 'slowverb.mastering_settings';
+
+  MasteringSettingsNotifier() : super(const MasteringSettings()) {
+    _loadFromStorage();
+  }
+
+  void _loadFromStorage() {
+    try {
+      final stored = web.window.localStorage.getItem(_storageKey);
+      if (stored != null && stored.isNotEmpty) {
+        final json = jsonDecode(stored) as Map<String, dynamic>;
+        state = MasteringSettings.fromJson(json);
+      }
+    } catch (_) {
+      // Ignore malformed data
+    }
+  }
+
+  void _saveToStorage() {
+    web.window.localStorage.setItem(_storageKey, jsonEncode(state.toJson()));
+  }
+
+  void setMasteringEnabled(bool enabled) {
+    state = state.copyWith(masteringEnabled: enabled);
+    _saveToStorage();
+  }
+
+  void setPhaselimiterEnabled(bool enabled) {
+    state = state.copyWith(phaselimiterEnabled: enabled);
+    _saveToStorage();
+  }
+
+  void reset() {
+    state = const MasteringSettings();
+    _saveToStorage();
+  }
+}
+
+/// Provider for mastering settings
+final masteringSettingsProvider =
+    StateNotifierProvider<MasteringSettingsNotifier, MasteringSettings>(
+      (ref) => MasteringSettingsNotifier(),
+    );

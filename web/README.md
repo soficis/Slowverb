@@ -17,6 +17,7 @@ This document provides in-depth technical details for developers working on or c
 1. [Quick Start](#quick-start)
 2. [Technology Stack](#technology-stack)
 3. [Audio Engine Deep Dive](#audio-engine-deep-dive)
+4. [PhaseLimiter Integration](#phaselimiter-integration)
 4. [State Management](#state-management)
 5. [Screens and Navigation](#screens-and-navigation)
 6. [Visualizers (GPU Shaders)](#visualizers-gpu-shaders)
@@ -133,6 +134,96 @@ Map<String, Object?> _toDspSpec(EffectConfig config) {
 ```
 
 The worker translates this spec into FFmpeg filter arguments.
+
+---
+
+## PhaseLimiter Integration
+
+Professional mastering is implemented as an alternate pipeline that runs a WebAssembly build of the PhaseLimiter engine in a dedicated worker. It is triggered when `mastering.algorithm === "phaselimiter"` in the DSP spec.
+
+### Architecture
+
+```
+Upload → FFmpeg Worker (decode) → Float32 PCM → PhaseLimiter Worker (2‑pass) → PCM → FFmpeg Worker (encode) → Download
+```
+
+- Two‑pass algorithm (analysis then processing) requires full‑buffer PCM, not streaming.
+- Single‑threaded WASM (TBB disabled) for maximum browser compatibility.
+- Uses Transferable buffers to avoid copies between main thread and workers.
+
+### Key files and paths
+
+- Dart UI/engine
+  - `lib/engine/wasm_audio_engine.dart` – emits mastering config and algorithm
+  - `lib/features/editor/…` – UI toggle; desktop + mobile layouts
+  - `lib/features/export/export_screen.dart` – shows decoding/mastering/encoding stage text
+  - `lib/services/phase_limiter_service.dart` – worker wrapper (progress + Transferables)
+- TypeScript core
+  - `packages/shared/src/protocol.ts` – protocol includes `mastering` + `algorithm`
+  - `packages/core/src/engine.ts` – routes mastering to the right path
+  - `packages/core-worker/src/worker.ts` – switches pipeline (simple | phaselimiter)
+- Worker + WASM
+  - `web/js/phase_limiter_worker.js` – dedicated worker that loads `phaselimiter.js`
+  - `web/js/phaselimiter.{js,wasm}` – generated artifacts (see wasm build below)
+  - Test harness: `web/phaselimiter_test.html`
+
+### Building the WASM module
+
+Artifacts are generated from the adapter in `wasm/phaselimiter` and copied to `web/web/js/`.
+
+On Windows (PowerShell):
+
+```powershell
+cd ..\wasm\phaselimiter
+./build.ps1
+```
+
+On macOS/Linux (bash):
+
+```bash
+cd ../wasm/phaselimiter
+./build.sh
+```
+
+Outputs:
+
+- `web/web/js/phaselimiter.js`
+- `web/web/js/phaselimiter.wasm`
+
+See `wasm/phaselimiter/README.md` for prerequisites and troubleshooting.
+
+### Running the browser harness
+
+```bash
+cd web
+flutter run -d chrome --web-port=8080
+# Open http://localhost:8080/phaselimiter_test.html
+```
+
+### Developer workflow
+
+1. Adjust UI/engine (`lib/engine/wasm_audio_engine.dart`) to emit `mastering: { enabled, algorithm }`.
+2. Ensure TS protocol and core worker consume `mastering.algorithm` and switch pipelines.
+3. Build TS bundles:
+
+```bash
+cd web
+npm run build         # or: npm run build:ts
+```
+
+4. Build WASM artifacts if the adapter changes (see above).
+5. Verify end‑to‑end in the app and with the harness page.
+
+### Progress & stages
+
+- Worker posts `{ stage: 'decoding' | 'mastering' | 'encoding', percent }` updates.
+- Export UI renders stage text and percentage via existing progress stream.
+
+### Constraints & tips
+
+- Memory: a 3–5 minute stereo 44.1kHz float track can reach ~350–400MB total transient usage across buffers; favor Transferables.
+- Mobile: consider gating long files (e.g., >5 minutes) to avoid OOM (see `PhaseLimiterService`).
+- Performance: single‑threaded MVP targets ~20–40s for a 3‑min song; ensure clear progress UI.
 
 ---
 
@@ -344,6 +435,16 @@ Before deploying to production:
 ## License
 
 This project is licensed under the **GNU General Public License v3.0** (GPLv3).
+
+### PhaseLimiter Attribution
+
+Slowverb’s professional mastering path integrates the MIT‑licensed PhaseLimiter engine:
+
+```
+PhaseLimiter - MIT License
+Copyright (c) 2023 Shin Fukuse
+https://github.com/ai-mastering/phaselimiter
+```
 
 ---
 

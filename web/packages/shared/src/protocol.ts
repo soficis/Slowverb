@@ -1,3 +1,5 @@
+import type { MasteringSpec } from "./dsp.js";
+
 export type WorkerRequestType =
   | "INIT"
   | "LOAD_SOURCE"
@@ -30,6 +32,7 @@ export interface ProbePayload {
 export interface RenderPayload {
   readonly fileId: string;
   readonly filterGraph?: string;
+  readonly mastering?: MasteringSpec;
   readonly format: ExportFormat;
   readonly bitrateKbps?: number;
   readonly startSec?: number;

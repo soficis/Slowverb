@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>PhaseLimiter WASM Test</title>
+  </head>
+  <body>
+    <h1>PhaseLimiter WASM Test</h1>
+    <button id="test">Run Test</button>
+    <pre id="output"></pre>
+
+    <script src="js/phaselimiter.js"></script>
+    <script>
+      document.getElementById("test").addEventListener("click", async () => {
+        const output = document.getElementById("output");
+        output.textContent = "Loading WASM...\n";
+
+        const Module = await createPhaseLimiterModule();
+        output.textContent += "WASM loaded\n";
+
+        const sampleRate = 44100;
+        const duration = 1;
+        const sampleCount = sampleRate * duration;
+        const frequency = 440;
+
+        const testData = new Float32Array(sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+          testData[i] = Math.sin((2 * Math.PI * frequency * i) / sampleRate);
+        }
+
+        const leftPtr = Module._malloc(sampleCount * 4);
+        const rightPtr = Module._malloc(sampleCount * 4);
+        Module.HEAPF32.set(testData, leftPtr >> 2);
+        Module.HEAPF32.set(testData, rightPtr >> 2);
+
+        const progressCb = Module.addFunction((percent) => {
+          console.log(`Progress: ${Math.round(percent * 100)}%`);
+        }, "vf");
+
+        const errorCode = Module.ccall(
+          "run_phase_limiter",
+          "number",
+          ["number", "number", "number", "number", "number", "number", "number"],
+          [leftPtr, rightPtr, sampleCount, sampleRate, -14.0, 0.5, progressCb]
+        );
+
+        if (errorCode === 0) {
+          output.textContent += "Processing succeeded!\n";
+          const result = new Float32Array(Module.HEAPF32.buffer, leftPtr, 10);
+          output.textContent += `First 10 samples: ${Array.from(result)
+            .map((v) => v.toFixed(3))
+            .join(", ")}\n`;
+        } else {
+          output.textContent += `Error code: ${errorCode}\n`;
+        }
+
+        Module._free(leftPtr);
+        Module._free(rightPtr);
+        Module.removeFunction(progressCb);
+      });
+    </script>
+  </body>
+</html>
+

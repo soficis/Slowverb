@@ -107,3 +107,13 @@ test("mastering enabled is last stage after stereo width", () => {
   assert.ok(chain.endsWith("alimiter=limit=0.95"));
   assert.ok(chain.indexOf("extrastereo=") < chain.indexOf("highpass=f=20"));
 });
+
+test("PhaseLimiter mastering does not append FFmpeg mastering filters", () => {
+  const chain = compileFilterChain({
+    specVersion: "1.0.0",
+    mastering: { enabled: true, algorithm: "phaselimiter" },
+  });
+
+  assert.equal(chain, "anull");
+  assert.ok(!chain.includes("alimiter="));
+});
