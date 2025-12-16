@@ -92,11 +92,9 @@ Export your finished audio in one of four formats:
 
 ### 🎛️ Mastering Toggle
 
-Slowverb includes an optional **professional mastering** feature that adds final peak safety and polish to your audio:
+Slowverb includes an optional **mastering** feature that adds final peak safety and polish to your audio:
 
 - **Persistent**: The mastering setting is saved across sessions, songs, and preset changes.
-- **Smart Indicators**: The "Mastering On" icon only appears when your current preview was rendered with mastering applied.
-  - The icon grays out if mastering was applied to the preview but then toggled off, giving you a visual cue about the preview state.
 - **Automatic Naming**: Exported files with mastering enabled automatically have `_mastered` appended to their filename (e.g., `song_mastered.mp3`).
 
 To enable mastering:
@@ -104,7 +102,7 @@ To enable mastering:
 1. Open the editor screen.
 2. Toggle the "Mastering" switch in the effects panel.
 3. Regenerate your preview to hear the difference.
-4. Export your mastered file with the automatic filename suffix.
+4. Export your mastered file.
 
 ---
 
@@ -258,33 +256,6 @@ Slowverb is built with a modern, modular architecture:
 
 ---
 
-## PhaseLimiter Mastering (PhaseLimiter)
-
-Slowverb now includes an optional, higher‑quality mastering pipeline powered by a WebAssembly build of the MIT‑licensed PhaseLimiter engine. This path performs a two‑pass analysis + processing workflow for professional loudness and limiting.
-
-### What it does
-
-- Decode to float PCM → PhaseLimiter (2‑pass mastering) → Encode
-- Accurate progress reporting across stages: decoding → mastering → encoding
-- Two algorithms selectable from the UI:
-  - Simple (fast, legacy path)
-  - PhaseLimiter (slower, higher quality; single‑threaded WASM)
-
-### How it’s wired
-
-- UI toggle and algorithm mapping live in Flutter (see web/lib/features/editor/* and web/lib/engine/wasm_audio_engine.dart)
-- Main worker switches mastering mode based on `mastering.algorithm` (simple | phaselimiter)
-- Dedicated PhaseLimiter worker loads `web/web/js/phaselimiter.{js,wasm}` and runs the `run_phase_limiter` entrypoint with transferable Float32 buffers
-
-### Build outputs
-
-- WASM artifacts are generated into: `web/web/js/`
-  - `phaselimiter.js`
-  - `phaselimiter.wasm`
-- A browser harness is available at: `web/web/phaselimiter_test.html`
-
----
-
 ## Developer Setup
 
 ### Prerequisites
@@ -370,9 +341,9 @@ This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 
 Slowverb uses [FFmpeg](https://ffmpeg.org) compiled to WebAssembly via `@ffmpeg/ffmpeg`. FFmpeg is licensed under [LGPL 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html). No modifications were made to the FFmpeg source code.
 
-### PhaseLimiter Attribution
+### PhaseLimiter Integration (Experimental)
 
-Slowverb’s professional mastering path integrates the MIT‑licensed PhaseLimiter engine.
+Slowverb is adding a PhaseLimiter-style mastering path (decode PCM → master → encode) as an optional higher-quality mastering mode. The final target is the MIT-licensed [PhaseLimiter](https://github.com/ai-mastering/phaselimiter) engine.
 
 ```
 PhaseLimiter - MIT License
