@@ -348,8 +348,6 @@ class _MobileEffectsSheet extends ConsumerWidget {
     final presetId = selectedPresetId;
     final masteringSettings = ref.watch(masteringSettingsProvider);
     final masteringOn = masteringSettings.masteringEnabled;
-    final masteringAlgorithm = parameters['masteringAlgorithm'] ?? 0.0;
-    final professionalMasteringOn = masteringOn && masteringAlgorithm > 0.5;
 
     return Container(
       height: 320,
@@ -414,81 +412,88 @@ class _MobileEffectsSheet extends ConsumerWidget {
               horizontal: SlowverbTokens.spacingMd,
               vertical: SlowverbTokens.spacingSm,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: SlowverbColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'Mastering',
-                        style: Theme.of(context).textTheme.titleSmall,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mastering',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Adds final peak safety + polish.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: SlowverbColors.textSecondary,
+                                  ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Adds final peak safety + polish.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: SlowverbColors.textSecondary,
+                      Switch.adaptive(
+                        value: masteringOn,
+                        onChanged: (v) {
+                          ref
+                              .read(masteringSettingsProvider.notifier)
+                              .setMasteringEnabled(v);
+                        },
+                        activeThumbColor: SlowverbColors.hotPink,
+                        activeTrackColor: SlowverbColors.hotPink.withValues(
+                          alpha: 0.35,
                         ),
                       ),
                     ],
                   ),
-                ),
-                Switch.adaptive(
-                  value: masteringOn,
-                  onChanged: (v) {
-                    ref
-                        .read(masteringSettingsProvider.notifier)
-                        .setMasteringEnabled(v);
-                  },
-                  activeThumbColor: SlowverbColors.hotPink,
-                  activeTrackColor: SlowverbColors.hotPink.withValues(
-                    alpha: 0.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          if (masteringOn)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: SlowverbTokens.spacingMd,
-                vertical: SlowverbTokens.spacingSm,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PhaseLimiter Mastering',
-                          style: Theme.of(context).textTheme.titleSmall,
+                  if (masteringOn) ...[
+                    const SizedBox(height: 8),
+                    const Divider(height: 1, color: Colors.white10),
+                    const SizedBox(height: 8),
+                    _CompactSlider(
+                      label: 'Quality',
+                      value: (parameters['masteringAlgorithm'] ?? 0.0).clamp(
+                        0.0,
+                        2.0,
+                      ),
+                      min: 0.0,
+                      max: 2.0,
+                      divisions: 2,
+                      formatValue: (v) {
+                        if (v < 0.5) return 'Simple';
+                        if (v < 1.5) return 'Lite';
+                        return 'Pro';
+                      },
+                      onChanged: (v) =>
+                          notifier.updateParameter('masteringAlgorithm', v),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Higher quality = longer rendering times.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: SlowverbColors.textSecondary.withValues(
+                          alpha: 0.7,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Apply an automated mastering algorithm. (Slower, but higher quality)',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: SlowverbColors.textSecondary),
-                        ),
-                      ],
+                        fontStyle: FontStyle.italic,
+                        fontSize: 10,
+                      ),
                     ),
-                  ),
-                  Switch.adaptive(
-                    value: professionalMasteringOn,
-                    onChanged: (v) => notifier.updateParameter(
-                      'masteringAlgorithm',
-                      v ? 1.0 : 0.0,
-                    ),
-                    activeThumbColor: SlowverbColors.hotPink,
-                    activeTrackColor: SlowverbColors.hotPink.withValues(
-                      alpha: 0.35,
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
+          ),
 
           // Parameter sliders (scrollable)
           Expanded(
@@ -528,6 +533,7 @@ class _CompactSlider extends StatelessWidget {
   final double value;
   final double min;
   final double max;
+  final int? divisions;
   final String Function(double) formatValue;
   final ValueChanged<double> onChanged;
 
@@ -536,6 +542,7 @@ class _CompactSlider extends StatelessWidget {
     required this.value,
     required this.min,
     required this.max,
+    this.divisions,
     required this.formatValue,
     required this.onChanged,
   });
@@ -566,6 +573,7 @@ class _CompactSlider extends StatelessWidget {
                 value: value.clamp(min, max),
                 min: min,
                 max: max,
+                divisions: divisions,
                 onChanged: onChanged,
                 activeColor: SlowverbColors.neonCyan,
                 inactiveColor: SlowverbColors.surfaceVariant,

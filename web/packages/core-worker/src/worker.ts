@@ -265,7 +265,7 @@ async function handleRender(
 function isPhaseLimiterEnabled(payload: RenderPayload): boolean {
   const mastering = payload.mastering;
   if (!mastering) return false;
-  return mastering.enabled === true && mastering.algorithm === "phaselimiter";
+  return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
 }
 
 function withProgressStage(stage: string, offset: number, scale: number, run: () => void): void {
@@ -305,7 +305,8 @@ async function renderWithPhaseLimiter(
     const { left, right } = readAndSplitF32Stereo(decodeFile);
 
     postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
-    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId);
+    const algorithm = payload.mastering!.algorithm as string;
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm);
 
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
 
@@ -398,10 +399,14 @@ async function processWithPhaseLimiter(
   leftChannel: Float32Array,
   rightChannel: Float32Array,
   sampleRate: number,
-  jobId: string
+  jobId: string,
+  algorithm: string
 ): Promise<{ left: Float32Array; right: Float32Array }> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker("/js/phase_limiter_worker.js");
+    const isPro = algorithm === "phaselimiter_pro";
+    const workerScript = isPro ? "/js/phase_limiter_pro_worker.js" : "/js/phase_limiter_worker.js";
+    const config = isPro ? { mode: 3 } : { targetLufs: -14.0, bassPreservation: 0.5 };
+    const worker = new Worker(workerScript);
 
     const onMessage = (event: MessageEvent) => {
       const data = event.data ?? {};
@@ -450,7 +455,7 @@ async function processWithPhaseLimiter(
           leftChannel,
           rightChannel,
           sampleRate,
-          config: { targetLufs: -14.0, bassPreservation: 0.5 },
+          config,
         },
         [leftChannel.buffer, rightChannel.buffer]
       );

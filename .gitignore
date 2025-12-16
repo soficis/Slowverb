@@ -17,7 +17,6 @@ build/
 .pub/
 pubspec.lock
 *.iml
-
 # IDE
 .idea/
 .vscode/

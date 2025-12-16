@@ -1375,8 +1375,6 @@ class _EffectColumn extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final masteringOn = (parameters['masteringEnabled'] ?? 0.0) > 0.5;
-    final masteringAlgorithm = parameters['masteringAlgorithm'] ?? 0.0;
-    final professionalMasteringOn = masteringOn && masteringAlgorithm > 0.5;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1617,100 +1615,132 @@ class _EffectColumn extends ConsumerWidget {
                           ),
                           border: Border.all(color: Colors.white10),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Mastering',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Adds final peak safety + polish.',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  SlowverbColors.textSecondary,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch.adaptive(
+                                  value: masteringOn,
+                                  onChanged: (v) {
+                                    onUpdateParam(
+                                      'masteringEnabled',
+                                      v ? 1.0 : 0.0,
+                                    );
+                                    if (!v) {
+                                      onUpdateParam('masteringAlgorithm', 0.0);
+                                    }
+                                  },
+                                  activeThumbColor: SlowverbColors.hotPink,
+                                  activeTrackColor: SlowverbColors.hotPink
+                                      .withValues(alpha: 0.35),
+                                ),
+                              ],
+                            ),
+                            if (masteringOn) ...[
+                              const SizedBox(height: 12),
+                              const Divider(height: 1, color: Colors.white10),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'Mastering',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Adds final peak safety + polish to previews and exports.',
-                                    style: Theme.of(context).textTheme.bodySmall
+                                    'Quality',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
                                         ?.copyWith(
                                           color: SlowverbColors.textSecondary,
                                         ),
                                   ),
+                                  Text(
+                                    (parameters['masteringAlgorithm'] ?? 0.0) <
+                                            0.5
+                                        ? 'Simple'
+                                        : (parameters['masteringAlgorithm'] ??
+                                                  0.0) <
+                                              1.5
+                                        ? 'Lite'
+                                        : 'Pro',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: SlowverbColors.neonCyan,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
                                 ],
                               ),
-                            ),
-                            Switch.adaptive(
-                              value: masteringOn,
-                              onChanged: (v) {
-                                onUpdateParam(
-                                  'masteringEnabled',
-                                  v ? 1.0 : 0.0,
-                                );
-                                if (!v) {
-                                  onUpdateParam('masteringAlgorithm', 0.0);
-                                }
-                              },
-                              activeThumbColor: SlowverbColors.hotPink,
-                              activeTrackColor: SlowverbColors.hotPink
-                                  .withValues(alpha: 0.35),
-                            ),
+                              const SizedBox(height: 8),
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 4,
+                                  activeTrackColor: SlowverbColors.neonCyan,
+                                  inactiveTrackColor:
+                                      SlowverbColors.surfaceVariant,
+                                  thumbColor: Colors.white,
+                                  overlayColor: SlowverbColors.neonCyan
+                                      .withValues(alpha: 0.2),
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 8,
+                                  ),
+                                  overlayShape: const RoundSliderOverlayShape(
+                                    overlayRadius: 16,
+                                  ),
+                                ),
+                                child: Slider(
+                                  value:
+                                      (parameters['masteringAlgorithm'] ?? 0.0)
+                                          .clamp(0.0, 2.0),
+                                  min: 0.0,
+                                  max: 2.0,
+                                  divisions: 2,
+                                  onChanged: (v) =>
+                                      onUpdateParam('masteringAlgorithm', v),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Higher quality will result in longer rendering times.',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: SlowverbColors.textSecondary
+                                          .withValues(alpha: 0.7),
+                                      fontStyle: FontStyle.italic,
+                                      fontSize: 11,
+                                    ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                      if (masteringOn) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: SlowverbColors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(
-                              SlowverbTokens.radiusMd,
-                            ),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'PhaseLimiter Mastering',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleSmall,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Apply an automated mastering algorithm. (Slower, but higher quality)',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: SlowverbColors.textSecondary,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch.adaptive(
-                                value: professionalMasteringOn,
-                                onChanged: (v) => onUpdateParam(
-                                  'masteringAlgorithm',
-                                  v ? 1.0 : 0.0,
-                                ),
-                                activeThumbColor: SlowverbColors.hotPink,
-                                activeTrackColor: SlowverbColors.hotPink
-                                    .withValues(alpha: 0.35),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 8),
                       ..._kParameterDefinitions.map(
                         (param) => Padding(
@@ -1794,89 +1824,114 @@ class _EffectColumn extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(SlowverbTokens.radiusMd),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Mastering',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Adds final peak safety + polish to previews and exports.',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: SlowverbColors.textSecondary,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: masteringOn,
+                          onChanged: (v) {
+                            onUpdateParam('masteringEnabled', v ? 1.0 : 0.0);
+                            if (!v) {
+                              onUpdateParam('masteringAlgorithm', 0.0);
+                            }
+                          },
+                          activeThumbColor: SlowverbColors.hotPink,
+                          activeTrackColor: SlowverbColors.hotPink.withValues(
+                            alpha: 0.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (masteringOn) ...[
+                      const SizedBox(height: 12),
+                      const Divider(height: 1, color: Colors.white10),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Mastering',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Adds final peak safety + polish to previews and exports.',
-                            style: Theme.of(context).textTheme.bodySmall
+                            'Quality',
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: SlowverbColors.textSecondary),
+                          ),
+                          Text(
+                            (parameters['masteringAlgorithm'] ?? 0.0) < 0.5
+                                ? 'Simple'
+                                : (parameters['masteringAlgorithm'] ?? 0.0) <
+                                      1.5
+                                ? 'Lite'
+                                : 'Pro',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: SlowverbColors.neonCyan,
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ],
                       ),
-                    ),
-                    Switch.adaptive(
-                      value: masteringOn,
-                      onChanged: (v) {
-                        onUpdateParam('masteringEnabled', v ? 1.0 : 0.0);
-                        if (!v) {
-                          onUpdateParam('masteringAlgorithm', 0.0);
-                        }
-                      },
-                      activeThumbColor: SlowverbColors.hotPink,
-                      activeTrackColor: SlowverbColors.hotPink.withValues(
-                        alpha: 0.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (masteringOn) ...[
-                const SizedBox(height: SlowverbTokens.spacingSm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: SlowverbColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(
-                      SlowverbTokens.radiusMd,
-                    ),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'PhaseLimiter Mastering',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Apply an automated mastering algorithm. (Slower, but higher quality)',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: SlowverbColors.textSecondary,
-                                  ),
-                            ),
-                          ],
+                      const SizedBox(height: 8),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 4,
+                          activeTrackColor: SlowverbColors.neonCyan,
+                          inactiveTrackColor: SlowverbColors.surfaceVariant,
+                          thumbColor: Colors.white,
+                          overlayColor: SlowverbColors.neonCyan.withValues(
+                            alpha: 0.2,
+                          ),
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 8,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 16,
+                          ),
+                        ),
+                        child: Slider(
+                          value: (parameters['masteringAlgorithm'] ?? 0.0)
+                              .clamp(0.0, 2.0),
+                          min: 0.0,
+                          max: 2.0,
+                          divisions: 2,
+                          onChanged: (v) =>
+                              onUpdateParam('masteringAlgorithm', v),
                         ),
                       ),
-                      Switch.adaptive(
-                        value: professionalMasteringOn,
-                        onChanged: (v) =>
-                            onUpdateParam('masteringAlgorithm', v ? 1.0 : 0.0),
-                        activeThumbColor: SlowverbColors.hotPink,
-                        activeTrackColor: SlowverbColors.hotPink.withValues(
-                          alpha: 0.35,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Higher quality will result in longer rendering times.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: SlowverbColors.textSecondary.withValues(
+                            alpha: 0.7,
+                          ),
+                          fontStyle: FontStyle.italic,
+                          fontSize: 11,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
               const SizedBox(height: SlowverbTokens.spacingMd),
               // All effect parameters
               ..._kParameterDefinitions.map(

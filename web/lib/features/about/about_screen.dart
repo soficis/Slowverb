@@ -75,7 +75,7 @@ class AboutScreen extends StatelessWidget {
                     title: 'Supported Formats',
                     content:
                         'Input: MP3, WAV, AAC, M4A, OGG, FLAC\n'
-                        'Output: MP3 (128-320 kbps), WAV (lossless), FLAC (lossless)',
+                        'Output: MP3 (128-320 kbps), WAV (lossless), FLAC (lossless), AAC',
                   ),
 
                   const SizedBox(height: 24),
@@ -89,20 +89,8 @@ class AboutScreen extends StatelessWidget {
                         '• Custom parameter control (tempo, pitch, reverb, echo, warmth)\n'
                         '• Interactive waveform visualization\n'
                         '• Real-time audio preview\n'
+                        '• PhaseLimiter mastering for loudness & clarity\n'
                         '• High-quality FLAC export',
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.code,
-                    title: 'Built With',
-                    content:
-                        '• Flutter Web for the UI\n'
-                        '• FFmpeg.wasm for audio processing\n'
-                        '• Web Workers for background processing\n'
-                        '• Material Design 3 with custom theme',
                   ),
 
                   const SizedBox(height: 24),
@@ -171,29 +159,6 @@ class AboutScreen extends StatelessWidget {
 
                   const SizedBox(height: 32),
 
-                  // Version
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: SlowverbColors.backgroundLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Version 1.0.0-beta',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: SlowverbColors.textSecondary,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
                   // GitHub Link
                   Center(
                     child: OutlinedButton.icon(
@@ -223,11 +188,11 @@ class AboutScreen extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 24),
 
                   // My First Rodeo Link
                   Center(
-                    child: OutlinedButton(
+                    child: ElevatedButton(
                       onPressed: () async {
                         final uri = Uri.parse('https://nihilist.rodeo');
                         if (await canLaunchUrl(uri)) {
@@ -237,21 +202,48 @@ class AboutScreen extends StatelessWidget {
                           );
                         }
                       },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: SlowverbColors.accentPink,
-                        side: const BorderSide(
-                          color: SlowverbColors.accentPink,
-                        ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: SlowverbColors.accentPink,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                          horizontal: 40,
+                          vertical: 20,
+                        ),
+                        textStyle: const TextStyle(
+                          fontFamily: 'Indie Flower',
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        elevation: 8,
+                        shadowColor: SlowverbColors.accentPink.withValues(
+                          alpha: 0.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(32),
                         ),
                       ),
-                      child: const Text(
-                        'My First Rodeo',
-                        style: TextStyle(
-                          fontFamily: 'Indie Flower',
-                          fontSize: 18,
+                      child: const Text('My First Rodeo'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Version
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SlowverbColors.backgroundLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Version 1.0.0-beta',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: SlowverbColors.textSecondary,
+                          fontFamily: 'monospace',
                         ),
                       ),
                     ),

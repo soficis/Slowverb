@@ -13,6 +13,7 @@
 migrate_working_dir/
 tests/
 web\packages\shared\test\filter-compiler.test.mjs
+web\phaselimiter_test.html
 # IntelliJ related
 *.iml
 *.ipr

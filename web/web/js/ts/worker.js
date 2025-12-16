@@ -4817,7 +4817,7 @@ async function handleRender(request) {
 function isPhaseLimiterEnabled(payload) {
   const mastering = payload.mastering;
   if (!mastering) return false;
-  return mastering.enabled === true && mastering.algorithm === "phaselimiter";
+  return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
 }
 function withProgressStage(stage, offset, scale, run) {
   const prevStage = activeStage;
@@ -4846,7 +4846,8 @@ async function renderWithPhaseLimiter(payload, jobId, isPreview) {
     withProgressStage("decoding", 0, 0.2, () => ffmpeg.exec(...decodeArgs));
     const { left, right } = readAndSplitF32Stereo(decodeFile);
     postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
-    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId);
+    const algorithm = payload.mastering.algorithm;
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm);
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
     const encodeArgs = buildEncodePlan(masteredFile, outputFile, payload, sampleRate);
     postEvent({ type: "PROGRESS", jobId, value: 0.8, stage: "encoding" });
@@ -4918,9 +4919,12 @@ function appendSimpleMasteringToFilterGraph(filterGraph) {
   if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return filterGraph;
   return `${filterGraph},${SIMPLE_MASTERING_FILTER_CHAIN}`;
 }
-async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId) {
+async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId, algorithm) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker("/js/phase_limiter_worker.js");
+    const isPro = algorithm === "phaselimiter_pro";
+    const workerScript = isPro ? "/js/phase_limiter_pro_worker.js" : "/js/phase_limiter_worker.js";
+    const config = isPro ? { mode: 3 } : { targetLufs: -14, bassPreservation: 0.5 };
+    const worker = new Worker(workerScript);
     const onMessage = (event) => {
       const data = event.data ?? {};
       const type = data.type;
@@ -4964,7 +4968,7 @@ async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jo
           leftChannel,
           rightChannel,
           sampleRate,
-          config: { targetLufs: -14, bassPreservation: 0.5 }
+          config
         },
         [leftChannel.buffer, rightChannel.buffer]
       );

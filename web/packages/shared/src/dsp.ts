@@ -3,7 +3,7 @@ export type PitchSemitones = number;
 export type NormalizedUnit = number;
 export type SpecVersion = "1.0.0";
 
-export type MasteringAlgorithm = "simple" | "phaselimiter";
+export type MasteringAlgorithm = "simple" | "phaselimiter" | "phaselimiter_pro";
 
 export interface MasteringSpec {
   readonly enabled?: boolean;

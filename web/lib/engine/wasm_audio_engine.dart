@@ -559,7 +559,12 @@ class WasmAudioEngine implements AudioEngine {
     };
 
     if (config.masteringEnabled > 0.5) {
-      final algorithm = config.masteringAlgorithm > 0.5 ? 'phaselimiter' : 'simple';
+      String algorithm = 'simple';
+      if (config.masteringAlgorithm > 1.5) {
+        algorithm = 'phaselimiter_pro';
+      } else if (config.masteringAlgorithm > 0.5) {
+        algorithm = 'phaselimiter';
+      }
       spec['mastering'] = <String, Object?>{
         'enabled': true,
         'algorithm': algorithm,
