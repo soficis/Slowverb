@@ -131,8 +131,9 @@ Here's a simplified breakdown of what happens when you use Slowverb:
 1. **Import**: You select an audio file using the browser's file picker.
 2. **Load**: The file is loaded into memory (not uploaded anywhere).
 3. **Process**: FFmpeg.wasm applies audio filters (tempo, pitch, reverb, etc.) in a background Web Worker.
-4. **Preview**: A short preview is generated so you can hear the result.
-5. **Export**: The full audio is rendered and downloaded to your computer.
+4. **Master (Optional)**: If enabled, the audio is passed to the PhaseLimiter engine (Lite or Pro) for loudness maximization.
+5. **Preview**: A short preview is generated so you can hear the result.
+6. **Export**: The full audio is rendered and downloaded to your computer.
 
 ---
 
@@ -248,7 +249,10 @@ Slowverb is built with a modern, modular architecture:
 ### Audio Engine
 
 - **FFmpeg.wasm**: A WebAssembly port of FFmpeg (`@ffmpeg/ffmpeg`). Handles all DSP (Digital Signal Processing) tasks.
-- **Web Workers**: FFmpeg runs in a background thread (`audio_worker.js`) to keep the UI responsive.
+- **PhaseLimiter WASM**: Custom C++ port of the PhaseLimiter engine for professional mastering.
+- **Web Workers**:
+  - `audio_worker.js`: Handles FFmpeg processing.
+  - `phase_limiter_pro_worker.js`: Handles "Pro" mode mastering (intensive).
 - **Filter Chain**: The Dart code constructs an FFmpeg filter chain string based on your settings (e.g., `atempo=0.85,asetrate=44100*0.9,aecho=...`).
 
 ### Audio Playback
@@ -285,8 +289,28 @@ cd web
 flutter pub get
 
 # 4. Run the development server
+# 4. Run the development server
 flutter run -d chrome
 ```
+
+### WASM Build Setup (Optional)
+
+To modify or rebuild the PhaseLimiter C++ engine:
+
+1. **Install Emscripten**: Follow the [Emscripten SDK instructions](https://emscripten.org/docs/getting_started/downloads.html).
+2. **Build WASM Modules**:
+
+```bash
+cd wasm/phaselimiter
+
+# Windows
+./build.ps1
+
+# Linux/macOS
+./build.sh
+```
+
+This will compile `adapter_pro.cpp` and copy the resulting `phaselimiter_pro.js` and `phaselimiter_pro.wasm` to `web/web/js/`.
 
 ### Production Build
 
@@ -303,6 +327,11 @@ The output will be in `web/build/web/`. You can deploy this folder to any static
 
 ```
 Slowverb/
+├── wasm/                         # C++ Source for WASM Modules
+│   └── phaselimiter/             # PhaseLimiter (Pro) Source
+│       ├── stubs/                # IPP/TBB/FFTW Stubs
+│       ├── adapter_pro.cpp       # JS <-> C++ Bridge
+│       └── CMakeLists.txt        # Build Configuration
 ├── web/                          # Flutter Web Application
 │   ├── lib/
 │   │   ├── app/                  # App configuration, routing, colors
@@ -327,6 +356,7 @@ Slowverb/
 │   │   ├── manifest.json         # PWA manifest
 │   │   └── js/
 │   │       ├── audio_worker.js   # Web Worker (FFmpeg processing)
+│   │       ├── phase_limiter_pro_worker.js # Web Worker (Pro Mastering)
 │   │       └── slowverb_bridge.js # Dart ↔ JS interop
 │   ├── shaders/                  # GLSL fragment shaders for visualizers
 │   │   ├── pipes_3d.frag

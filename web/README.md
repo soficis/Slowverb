@@ -77,7 +77,10 @@ flutter build web --wasm --release
 
 ### Overview
 
-The audio engine is implemented in `lib/engine/wasm_audio_engine.dart`. It communicates with a **Web Worker** (`web/js/audio_worker.js`) that runs FFmpeg.wasm in a background thread.
+The audio engine is implemented in `lib/engine/wasm_audio_engine.dart`. It communicates with two **Web Workers**:
+
+- `web/js/audio_worker.js`: FFmpeg processing (decoding, filtering, encoding).
+- `web/js/phase_limiter_pro_worker.js`: PhaseLimiter Pro engine (mastering).
 
 ### Message Flow
 
@@ -139,7 +142,7 @@ The worker translates this spec into FFmpeg filter arguments.
 
 ## PhaseLimiter Integration
 
-Professional mastering is implemented as an alternate pipeline that runs a WebAssembly build of the PhaseLimiter engine in a dedicated worker. It is triggered when `mastering.algorithm === "phaselimiter"` in the DSP spec.
+Professional mastering is implemented as an alternate pipeline that runs a WebAssembly build of the PhaseLimiter engine in a dedicated worker. It is triggered when `mastering.algorithm === "phaselimiter_pro"` (or legacy `phaselimiter`) in the DSP spec.
 
 ### Architecture
 
@@ -163,8 +166,8 @@ Upload → FFmpeg Worker (decode) → Float32 PCM → PhaseLimiter Worker (2‑p
   - `packages/core/src/engine.ts` – routes mastering to the right path
   - `packages/core-worker/src/worker.ts` – switches pipeline (simple | phaselimiter)
 - Worker + WASM
-  - `web/js/phase_limiter_worker.js` – dedicated worker that loads `phaselimiter.js`
-  - `web/js/phaselimiter.{js,wasm}` – generated artifacts (see wasm build below)
+  - `web/js/phase_limiter_pro_worker.js` – dedicated worker that loads `phaselimiter_pro.js`
+  - `web/js/phaselimiter_pro.{js,wasm}` – generated artifacts (from `phaselimiter_pro` CMake target)
   - Test harness: `web/phaselimiter_test.html`
 
 ### Building the WASM module
@@ -187,8 +190,8 @@ cd ../wasm/phaselimiter
 
 Outputs:
 
-- `web/web/js/phaselimiter.js`
-- `web/web/js/phaselimiter.wasm`
+- `web/web/js/phaselimiter_pro.js`
+- `web/web/js/phaselimiter_pro.wasm`
 
 See `wasm/phaselimiter/README.md` for prerequisites and troubleshooting.
 
