@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:go_router/go_router.dart';
 import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/router.dart';
@@ -112,9 +113,11 @@ class _ImportScreenState extends State<ImportScreen> {
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
+              constraints: const BoxConstraints(
+                maxWidth: 900,
+              ), // Increased max width
               child: Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(32.0), // Increased padding
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -126,9 +129,11 @@ class _ImportScreenState extends State<ImportScreen> {
                         'SLOWVERB',
                         style: Theme.of(context).textTheme.displayLarge
                             ?.copyWith(
+                              fontSize: 72, // Force larger font size
                               color: Colors.white,
-                              fontWeight: FontWeight.w200,
-                              letterSpacing: 8.0,
+                              fontWeight:
+                                  FontWeight.w100, // Thinner for aesthetic
+                              letterSpacing: 12.0, // Wider spacing
                             ),
                       ),
                     ),
@@ -144,116 +149,199 @@ class _ImportScreenState extends State<ImportScreen> {
                     const SizedBox(height: 64),
 
                     // Drop zone
-                    MouseRegion(
-                      onEnter: (_) => setState(() => _isHovering = true),
-                      onExit: (_) => setState(() => _isHovering = false),
-                      child: GestureDetector(
-                        onTap: _isLoading ? null : _pickFile,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          height: 300,
-                          decoration: BoxDecoration(
-                            color: _isHovering
-                                ? SlowverbColors.surfaceVariant
-                                : SlowverbColors.surface,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
+                    DropTarget(
+                      onDragDone: (details) async {
+                        if (details.files.isEmpty) return;
+                        final file = details.files.first;
+
+                        // Check extension
+                        final ext = file.name.split('.').last.toLowerCase();
+                        if (!_supportedExtensions.contains(ext)) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Unsupported file format: .$ext'),
+                                backgroundColor: SlowverbColors.error,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+
+                        setState(() => _isLoading = true);
+
+                        try {
+                          final bytes = await file.readAsBytes();
+                          if (mounted) {
+                            setState(() => _isLoading = false);
+                            final fileData = AudioFileData(
+                              filename: file.name,
+                              bytes: bytes,
+                            );
+
+                            context.push(
+                              AppRoutes.editor,
+                              extra: EditorScreenArgs(fileData: fileData),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => _isLoading = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error reading file: $e'),
+                                backgroundColor: SlowverbColors.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      onDragEntered: (_) => setState(() => _isHovering = true),
+                      onDragExited: (_) => setState(() => _isHovering = false),
+                      child: MouseRegion(
+                        onEnter: (_) => setState(() => _isHovering = true),
+                        onExit: (_) => setState(() => _isHovering = false),
+                        child: GestureDetector(
+                          onTap: _isLoading ? null : _pickFile,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            height: 300,
+                            decoration: BoxDecoration(
                               color: _isHovering
-                                  ? SlowverbColors.primaryPurple
-                                  : SlowverbColors.backgroundLight,
-                              width: 2,
+                                  ? SlowverbColors.surfaceVariant
+                                  : SlowverbColors.surface,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: _isHovering
+                                    ? SlowverbColors.primaryPurple
+                                    : SlowverbColors.backgroundLight,
+                                width: 2,
+                              ),
+                              boxShadow: _isHovering
+                                  ? [
+                                      BoxShadow(
+                                        color: SlowverbColors.primaryPurple
+                                            .withValues(alpha: 0.3),
+                                        blurRadius: 20,
+                                        spreadRadius: 2,
+                                      ),
+                                    ]
+                                  : null,
                             ),
-                            boxShadow: _isHovering
-                                ? [
-                                    BoxShadow(
-                                      color: SlowverbColors.primaryPurple
-                                          .withValues(alpha: 0.3),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
+                            child: _isLoading
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      color: SlowverbColors.primaryPurple,
                                     ),
-                                  ]
-                                : null,
-                          ),
-                          child: _isLoading
-                              ? const Center(
-                                  child: CircularProgressIndicator(
-                                    color: SlowverbColors.primaryPurple,
-                                  ),
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.audio_file_outlined,
-                                      size: 64,
-                                      color: _isHovering
-                                          ? SlowverbColors.primaryPurple
-                                          : SlowverbColors.textSecondary,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      'Drop audio file here',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .headlineMedium
-                                          ?.copyWith(
-                                            color: _isHovering
-                                                ? SlowverbColors.textPrimary
-                                                : SlowverbColors.textSecondary,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'or click to browse',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium,
-                                    ),
-                                    const SizedBox(height: 32),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      alignment: WrapAlignment.center,
-                                      children: _supportedExtensions
-                                          .map(
-                                            (ext) => Chip(
-                                              label: Text(
-                                                ext.toUpperCase(),
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                              backgroundColor: SlowverbColors
-                                                  .backgroundLight,
-                                              side: BorderSide.none,
-                                              visualDensity:
-                                                  VisualDensity.compact,
+                                  )
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.audio_file_outlined,
+                                        size: 64,
+                                        color: _isHovering
+                                            ? SlowverbColors.primaryPurple
+                                            : SlowverbColors.textSecondary,
+                                      ),
+                                      const SizedBox(height: 24),
+                                      Text(
+                                        'Drop audio file here',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineMedium
+                                            ?.copyWith(
+                                              color: _isHovering
+                                                  ? SlowverbColors.textPrimary
+                                                  : SlowverbColors
+                                                        .textSecondary,
                                             ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ],
-                                ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'or click to browse',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
+                                      ),
+                                      const SizedBox(height: 32),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        alignment: WrapAlignment.center,
+                                        children: _supportedExtensions
+                                            .map(
+                                              (ext) => Chip(
+                                                label: Text(
+                                                  ext.toUpperCase(),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                                backgroundColor: SlowverbColors
+                                                    .backgroundLight,
+                                                side: BorderSide.none,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                    ],
+                                  ),
+                          ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        TextButton.icon(
+                        ElevatedButton.icon(
                           onPressed: () => context.push(AppRoutes.library),
-                          icon: const Icon(Icons.library_music),
-                          label: const Text('Open Library'),
+                          icon: const Icon(Icons.library_music, size: 24),
+                          label: const Text(
+                            'OPEN LIBRARY',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 16),
-                        TextButton.icon(
+                        const SizedBox(width: 24),
+                        ElevatedButton.icon(
                           onPressed: () => context.push(AppRoutes.batchExport),
-                          icon: const Icon(Icons.folder_open),
-                          label: const Text('Batch Export'),
+                          icon: const Icon(Icons.folder_open, size: 24),
+                          label: const Text(
+                            'BATCH EXPORT',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ],
                     ),

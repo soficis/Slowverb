@@ -1,4 +1,4 @@
-# Slowverb Web - Technical Documentation
+<h1 align="center"><b>Slowverb Web - Technical Documentation</b></h1>
 
 <p align="center">
   <strong><a href="https://slowverb.vercel.app/">🚀 Live App → https://slowverb.vercel.app/</a></strong>

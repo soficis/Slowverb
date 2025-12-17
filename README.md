@@ -1,4 +1,4 @@
-# Slowverb 🎵
+<h1 align="center"><b>Slowverb 🎵</b></h1>
 
 <p align="center">
   <strong><a href="https://slowverb.vercel.app/">🚀 Try Slowverb Live → https://slowverb.vercel.app/</a></strong>
@@ -151,13 +151,14 @@ Here's a simplified breakdown of what happens when you use Slowverb:
 
 ## Effect Presets
 
-Slowverb includes **12 curated presets** to get you started quickly:
+Slowverb includes **13 curated presets** to get you started quickly:
 
 | Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
 |--------------------|---------|----------|--------|-------|--------|-----------------------------------|
 | **Slowed + Reverb**| 0.95x   | -2 semi  | 70%    | 20%   | 40%    | Classic dreamy vaporwave.         |
 | **Slowed + Reverb 2**| 0.74x | -4.5 semi| 40%    | 15%   | 50%    | Precise -25.926% slowdown.        |
 | **Slowed + Reverb 3**| 0.81x | -3.2 semi| 50%    | 20%   | 50%    | -19% speed with balanced reverb.  |
+| **Slow Chill**     | 0.94x   | -3.5 semi| 85%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
 | **Vaporwave Chill**| 0.78x   | -3 semi  | 80%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
 | **Nightcore**      | 1.25x   | +4 semi  | 30%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
 | **Echo Slow**      | 0.65x   | -4 semi  | 60%    | 80%   | 50%    | Ultra slow with cascading echoes. |

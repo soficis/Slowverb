@@ -74,3 +74,7 @@ lints_utf8.txt
 export_crash_test.dart
 web/test
 web/test-results
+web/outdated.txt
+web/npm_outdated.txt
+web/outdated_utf8.txt
+web/batch_errors.txt

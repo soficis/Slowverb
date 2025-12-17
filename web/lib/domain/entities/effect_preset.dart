@@ -66,6 +66,22 @@ abstract final class Presets {
     },
   );
 
+  /// Slow Chill - Smooth slowed sound with warm reverb
+  static const slowChill = EffectPreset(
+    id: 'slow_chill',
+    name: 'Slow Chill',
+    description: 'Smooth slowed sound with warm reverb',
+    parameters: {
+      'tempo': 0.94, // 94% from screenshot
+      'pitch': -3.5, // -3.5 semitones from screenshot
+      'reverbAmount': 0.85, // 85% reverb from screenshot
+      'echoAmount': 0.38, // 38% echo from screenshot
+      'eqWarmth': 0.83, // 83% warmth from screenshot
+      'masteringEnabled': 0.0,
+      'masteringAlgorithm': 0.0,
+    },
+  );
+
   /// Warm, chill vaporwave sound
   static const vaporwaveChill = EffectPreset(
     id: 'vaporwave_chill',
@@ -247,6 +263,7 @@ abstract final class Presets {
     slowedReverb,
     slowedReverb2,
     slowedReverb3,
+    slowChill,
     vaporwaveChill,
     nightcore,
     echoSlow,

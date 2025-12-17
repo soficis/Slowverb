@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,11 +9,18 @@ import 'package:slowverb_web/features/batch/widgets/batch_progress_widget.dart';
 import 'package:slowverb_web/providers/batch_export_provider.dart';
 
 /// Screen for batch processing and exporting multiple audio files
-class BatchExportScreen extends ConsumerWidget {
+class BatchExportScreen extends ConsumerStatefulWidget {
   const BatchExportScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BatchExportScreen> createState() => _BatchExportScreenState();
+}
+
+class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
+  bool _isHoveringFiles = false;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(batchExportProvider);
 
     return Scaffold(
@@ -29,15 +38,62 @@ class BatchExportScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 700),
-            margin: const EdgeInsets.all(24),
-            child: _buildContent(context, ref, state),
+      body: DropTarget(
+        onDragDone: (details) async {
+          setState(() => _isHoveringFiles = false);
+
+          if (details.files.isEmpty) return;
+
+          final files = <({String fileName, Uint8List bytes})>[];
+          for (final file in details.files) {
+            // Basic extension check
+            final ext = file.name.split('.').last.toLowerCase();
+            if ([
+              'mp3',
+              'wav',
+              'flac',
+              'aac',
+              'm4a',
+              'ogg',
+              'aiff',
+              'aif',
+            ].contains(ext)) {
+              final bytes = await file.readAsBytes();
+              files.add((fileName: file.name, bytes: bytes));
+            }
+          }
+
+          if (files.isNotEmpty) {
+            await ref.read(batchExportProvider.notifier).addFiles(files);
+          }
+        },
+        onDragEntered: (_) => setState(() => _isHoveringFiles = true),
+        onDragExited: (_) => setState(() => _isHoveringFiles = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            gradient: SlowverbColors.backgroundGradient,
+            border: _isHoveringFiles
+                ? Border.all(color: SlowverbColors.primaryPurple, width: 4)
+                : null,
+            boxShadow: _isHoveringFiles
+                ? [
+                    BoxShadow(
+                      color: SlowverbColors.primaryPurple.withValues(
+                        alpha: 0.5,
+                      ),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 700),
+              margin: const EdgeInsets.all(24),
+              child: _buildContent(context, ref, state),
+            ),
           ),
         ),
       ),
@@ -196,29 +252,67 @@ class BatchExportScreen extends ConsumerWidget {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return OutlinedButton.icon(
-      onPressed: () => _pickFiles(ref),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        side: BorderSide(
-          color: SlowverbColors.primaryPurple.withValues(alpha: 0.5),
-          width: 2,
+    return DropTarget(
+      onDragDone: (details) async {
+        if (details.files.isEmpty) return;
+
+        final files = <({String fileName, Uint8List bytes})>[];
+        for (final file in details.files) {
+          // Basic extension check
+          final ext = file.name.split('.').last.toLowerCase();
+          if ([
+            'mp3',
+            'wav',
+            'flac',
+            'aac',
+            'm4a',
+            'ogg',
+            'aiff',
+            'aif',
+          ].contains(ext)) {
+            final bytes = await file.readAsBytes();
+            files.add((fileName: file.name, bytes: bytes));
+          }
+        }
+
+        if (files.isNotEmpty) {
+          await ref.read(batchExportProvider.notifier).addFiles(files);
+        }
+      },
+      child: OutlinedButton.icon(
+        onPressed: () => _pickFiles(ref),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            vertical: 32,
+          ), // Larger touch target
+          side: BorderSide(
+            color: SlowverbColors.primaryPurple.withValues(alpha: 0.5),
+            width: 2,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      icon: const Icon(Icons.add, size: 28),
-      label: Column(
-        children: [
-          const Text(
-            '+ ADD AUDIO FILES',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Select multiple MP3, WAV, or FLAC files',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+        icon: const Icon(Icons.add, size: 32), // Larger icon
+        label: Column(
+          children: [
+            const Text(
+              '+ ADD AUDIO FILES',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Drop files here or click to browse',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
