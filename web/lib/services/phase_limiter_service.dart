@@ -8,10 +8,12 @@ import 'package:web/web.dart' as web;
 class PhaseLimiterConfig {
   final double targetLufs;
   final double bassPreservation;
+  final int mode;
 
   const PhaseLimiterConfig({
     this.targetLufs = -14.0,
     this.bassPreservation = 0.5,
+    this.mode = 3, // Default to Standard Level 3 (Level 5 Pro is opt-in)
   });
 }
 
@@ -35,7 +37,16 @@ class PhaseLimiterService {
   Stream<double> get progressStream => _progressController.stream;
 
   Future<void> initialize() async {
-    _worker ??= web.Worker('/js/phase_limiter_worker.js'.toJS);
+    if (_worker != null) return;
+
+    // Add cache buster to ensure the latest worker script is loaded
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    _worker = web.Worker('/js/phase_limiter_pro_worker.js?v=$timestamp'.toJS);
+
+    _worker?.onerror = ((web.ErrorEvent event) {
+      // ignore: avoid_print
+      print('[PhaseLimiterService] Worker error: ${event.message}');
+    }).toJS;
   }
 
   Future<({Float32List left, Float32List right})> process({
@@ -88,7 +99,8 @@ class PhaseLimiterService {
           return;
 
         case 'error':
-          final message = data.getProperty<JSString?>('error'.toJS)?.toDart ??
+          final message =
+              data.getProperty<JSString?>('error'.toJS)?.toDart ??
               'PhaseLimiter worker error';
           completer.completeError(PhaseLimiterException(message));
           worker.removeEventListener('message', handler);
@@ -100,18 +112,25 @@ class PhaseLimiterService {
 
     final leftJs = leftChannel.toJS;
     final rightJs = rightChannel.toJS;
-    final leftBuffer = (leftJs as JSObject).getProperty<JSArrayBuffer>('buffer'.toJS);
-    final rightBuffer = (rightJs as JSObject).getProperty<JSArrayBuffer>('buffer'.toJS);
+    final leftBuffer = (leftJs as JSObject).getProperty<JSArrayBuffer>(
+      'buffer'.toJS,
+    );
+    final rightBuffer = (rightJs as JSObject).getProperty<JSArrayBuffer>(
+      'buffer'.toJS,
+    );
 
-    final message = <String, Object?>{
-      'leftChannel': leftJs,
-      'rightChannel': rightJs,
-      'sampleRate': sampleRate,
-      'config': <String, Object?>{
-        'targetLufs': config.targetLufs,
-        'bassPreservation': config.bassPreservation,
-      },
-    }.jsify() as JSObject;
+    final message =
+        <String, Object?>{
+              'leftChannel': leftJs,
+              'rightChannel': rightJs,
+              'sampleRate': sampleRate,
+              'config': <String, Object?>{
+                'targetLufs': config.targetLufs,
+                'bassPreservation': config.bassPreservation,
+                'mode': config.mode,
+              },
+            }.jsify()
+            as JSObject;
 
     try {
       worker.postMessage(message, [leftBuffer, rightBuffer].toJS);

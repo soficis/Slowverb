@@ -114,7 +114,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
                 ? 1.0
                 : 0.0;
             params['masteringAlgorithm'] = masteringSettings.phaselimiterEnabled
-                ? 1.0
+                ? (masteringSettings.mode >= 5 ? 2.0 : 1.0)
                 : 0.0;
             return params;
           }(),
@@ -153,7 +153,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     _ref.listen<MasteringSettings>(masteringSettingsProvider, (_, next) {
       final newParams = Map<String, double>.from(state.currentParameters);
       newParams['masteringEnabled'] = next.masteringEnabled ? 1.0 : 0.0;
-      newParams['masteringAlgorithm'] = next.phaselimiterEnabled ? 1.0 : 0.0;
+      newParams['masteringAlgorithm'] = next.phaselimiterEnabled
+          ? (next.mode >= 5 ? 2.0 : 1.0)
+          : 0.0;
       state = state.copyWith(
         currentParameters: newParams,
         isPreviewDirty: true,

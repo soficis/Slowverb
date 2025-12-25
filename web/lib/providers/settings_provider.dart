@@ -72,31 +72,37 @@ final experimentalFeaturesProvider =
 class MasteringSettings {
   final bool masteringEnabled;
   final bool phaselimiterEnabled;
+  final int mode;
 
   const MasteringSettings({
     this.masteringEnabled = false,
     this.phaselimiterEnabled = false,
+    this.mode = 5, // Level 5 (HNSW Pro)
   });
 
   MasteringSettings copyWith({
     bool? masteringEnabled,
     bool? phaselimiterEnabled,
+    int? mode,
   }) {
     return MasteringSettings(
       masteringEnabled: masteringEnabled ?? this.masteringEnabled,
       phaselimiterEnabled: phaselimiterEnabled ?? this.phaselimiterEnabled,
+      mode: mode ?? this.mode,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'masteringEnabled': masteringEnabled,
     'phaselimiterEnabled': phaselimiterEnabled,
+    'mode': mode,
   };
 
   factory MasteringSettings.fromJson(Map<String, dynamic> json) {
     return MasteringSettings(
       masteringEnabled: json['masteringEnabled'] as bool? ?? false,
       phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? false,
+      mode: json['mode'] as int? ?? 5, // Level 5 (HNSW Pro)
     );
   }
 }
@@ -132,6 +138,11 @@ class MasteringSettingsNotifier extends StateNotifier<MasteringSettings> {
 
   void setPhaselimiterEnabled(bool enabled) {
     state = state.copyWith(phaselimiterEnabled: enabled);
+    _saveToStorage();
+  }
+
+  void setMode(int mode) {
+    state = state.copyWith(mode: mode);
     _saveToStorage();
   }
 

@@ -194,6 +194,24 @@ var SlowverbEngine = class {
       runner.terminate();
     }
   }
+  async decodeToFloatPCM(source, callbacks) {
+    const runner = this.createRunner(callbacks);
+    try {
+      await this.prepareSource(runner, source);
+      return await runner.decodePCM({ fileId: source.fileId });
+    } finally {
+      runner.terminate();
+    }
+  }
+  async encodeFromFloatPCM(payload, callbacks) {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.encodePCM(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
   async runRender(type, request, callbacks) {
     const runner = this.createRunner(callbacks);
     const jobId = request.jobId ?? createJobId();
@@ -305,6 +323,15 @@ var WorkerRunner = class {
   async waveform(payload, jobId) {
     const requestId = this.nextRequestId();
     return this.sendWithLog({ type: "WAVEFORM", requestId, jobId, payload });
+  }
+  async decodePCM(payload) {
+    const requestId = this.nextRequestId();
+    return this.sendWithLog({ type: "DECODE_PCM", requestId, payload });
+  }
+  async encodePCM(payload) {
+    const requestId = this.nextRequestId();
+    const transfer = [payload.left.buffer, payload.right.buffer];
+    return this.sendWithLog({ type: "ENCODE_PCM", requestId, payload }, { transfer });
   }
   async cancel(jobId) {
     const payload = { jobId };

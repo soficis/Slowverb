@@ -14,6 +14,10 @@ import type {
   WorkerLogLevel,
   WorkerRequest,
   WorkerResultPayload,
+  DecodePcmPayload,
+  EncodePcmPayload,
+  DecodePcmResultPayload,
+  EncodePcmResultPayload,
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
 
@@ -101,6 +105,29 @@ export class SlowverbEngine {
       }
 
       return await runner.probe({ fileId: source.fileId });
+    } finally {
+      runner.terminate();
+    }
+  }
+
+  async decodeToFloatPCM(source: SourceData, callbacks?: RenderCallbacks): Promise<DecodePcmResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await this.prepareSource(runner, source);
+      return await runner.decodePCM({ fileId: source.fileId });
+    } finally {
+      runner.terminate();
+    }
+  }
+
+  async encodeFromFloatPCM(
+    payload: EncodePcmPayload,
+    callbacks?: RenderCallbacks
+  ): Promise<EncodePcmResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.encodePCM(payload);
     } finally {
       runner.terminate();
     }
@@ -248,6 +275,17 @@ class WorkerRunner {
   async waveform(payload: WaveformPayload, jobId: string): Promise<WorkerResultPayload> {
     const requestId = this.nextRequestId();
     return this.sendWithLog<WorkerResultPayload>({ type: "WAVEFORM", requestId, jobId, payload });
+  }
+
+  async decodePCM(payload: DecodePcmPayload): Promise<DecodePcmResultPayload> {
+    const requestId = this.nextRequestId();
+    return this.sendWithLog<DecodePcmResultPayload>({ type: "DECODE_PCM", requestId, payload });
+  }
+
+  async encodePCM(payload: EncodePcmPayload): Promise<EncodePcmResultPayload> {
+    const requestId = this.nextRequestId();
+    const transfer = [payload.left.buffer, payload.right.buffer];
+    return this.sendWithLog<EncodePcmResultPayload>({ type: "ENCODE_PCM", requestId, payload }, { transfer });
   }
 
   async cancel(jobId: string): Promise<void> {

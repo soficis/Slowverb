@@ -4604,7 +4604,7 @@ function log(level, message, data) {
 
 // src/worker.ts
 var ctx = self;
-console.info("[slowverb-worker] started", {
+console.info("[slowverb-worker] v1.1.2-debug starting", {
   hasProcess: typeof globalThis.process !== "undefined"
 });
 ctx.addEventListener("error", (event) => {
@@ -4655,6 +4655,10 @@ async function handleRequest(request) {
       return handleCancel(request);
     case "PING":
       return handlePing(request);
+    case "DECODE_PCM":
+      return runWithEngine(() => handleDecodePCM(request), request.requestId);
+    case "ENCODE_PCM":
+      return runWithEngine(() => handleEncodePCM(request), request.requestId);
   }
 }
 async function handlePing(request) {
@@ -4996,6 +5000,48 @@ async function handleWaveform(request) {
     postResult(request.requestId, waveform, [waveform.samples.buffer]);
   } finally {
     activeJobId = void 0;
+  }
+}
+async function handleDecodePCM(request) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const { fileId } = request.payload;
+  const sampleRate = 44100;
+  const tempFile = `${fileId}-decode.f32`;
+  try {
+    const args = ["-i", fileId, "-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", tempFile];
+    await ffmpeg.exec(...args);
+    const { left, right } = readAndSplitF32Stereo(tempFile);
+    postResult(request.requestId, { type: "DECODE_PCM_RESULT", left, right, sampleRate }, [
+      left.buffer,
+      right.buffer
+    ]);
+  } finally {
+    cleanupFiles(tempFile);
+  }
+}
+async function handleEncodePCM(request) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const { left, right, sampleRate, format } = request.payload;
+  console.log(`[slowverb-worker] handleEncodePCM: start mapping ${left.length} samples`);
+  const mid = Math.floor(left.length / 2);
+  console.log(`[slowverb-worker] handleEncodePCM: sample check (mid) L=${left[mid]} R=${right[mid]}`);
+  const inputFile = `raw-input.f32`;
+  const outputFile = `output.${format}`;
+  try {
+    writeInterleavedF32Stereo(inputFile, left, right);
+    const args = ["-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", inputFile];
+    const dummyPayload = {
+      fileId: "dummy",
+      format,
+      bitrateKbps: request.payload.bitrateKbps
+    };
+    addCodecArgs(args, dummyPayload);
+    args.push("-y", outputFile);
+    await ffmpeg.exec(...args);
+    const buffer = await readOutput(outputFile);
+    postResult(request.requestId, { fileId: "encoded", format, buffer }, [buffer]);
+  } finally {
+    cleanupFiles(inputFile, outputFile);
   }
 }
 function buildRenderPlan(payload, jobId, isPreview) {

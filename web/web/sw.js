@@ -1,6 +1,6 @@
 // Separate cache names for better versioning control
-const STATIC_CACHE_NAME = "slowverb-static-v2";
-const WASM_CACHE_NAME = "slowverb-wasm-v1";
+const STATIC_CACHE_NAME = "slowverb-static-v4";
+const WASM_CACHE_NAME = "slowverb-wasm-v2";
 
 // WASM files get separate cache for easier maintenance
 const WASM_FILES = [
@@ -8,6 +8,9 @@ const WASM_FILES = [
   "/js/ffmpeg-core.wasm",
   "/js/phaselimiter.js",
   "/js/phaselimiter.wasm",
+  "/js/phaselimiter_pro.js",
+  "/js/phaselimiter_pro.wasm",
+  "/js/phaselimiter_pro.data",
 ];
 
 // Static assets (app code, UI assets)
@@ -71,7 +74,7 @@ self.addEventListener("fetch", (event) => {
       caches.open(WASM_CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(event.request);
         const fetchPromise = fetch(event.request).then((response) => {
-          if (response && response.ok) {
+          if (response && response.status === 200) {
             cache.put(event.request, response.clone());
           }
           return response;

@@ -87,6 +87,23 @@ abstract class AudioEngine {
 
   /// Resume a paused batch operation
   Future<void> resumeBatch();
+
+  /// Decodes an audio file to raw Float32 PCM data (stereo).
+  ///
+  /// Returns left and right channels and the sample rate.
+  Future<({Float32List left, Float32List right, int sampleRate})>
+  decodeToFloatPCM(String fileId);
+
+  /// Encodes raw Float32 PCM data back to an audio file.
+  ///
+  /// Takes interleaved or separate channels and returns the encoded bytes.
+  Future<Uint8List> encodeFromFloatPCM({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required String format,
+    int? bitrateKbps,
+  });
 }
 
 /// Metadata extracted from an audio file

@@ -4,11 +4,14 @@
 web/packages/**/dist/
 node_modules/
 web/node_modules/
+build/
 *.exe
 *.dll
 *.so
 *.dylib
-build/
+*.wasm
+*.js.map
+*.js.mem
 .flutter_sdk
 # Flutter/Dart
 .dart_tool/
@@ -57,6 +60,12 @@ tests/
 #web/test-results/
 # Documentation
 docs/
+# Specific large binaries to ignore in docs/
+docs/*.zip
+docs/*.tar
+docs/*.tar.xz
+docs/emsdk/
+
 # Temporary files
 *.tmp
 *.temp
@@ -78,3 +87,65 @@ web/outdated.txt
 web/npm_outdated.txt
 web/outdated_utf8.txt
 web/batch_errors.txt
+
+# Scattered scripts and temp files
+check_table.js
+emcc_paths.txt
+extract_mapping.js
+lints.txt
+lints_utf8.txt
+run_with_logging.bat
+export_crash_test.dart
+wasm/phaselimiter/extract_sources.py
+wasm/phaselimiter/extract_sources_v2.py
+wasm/phaselimiter/run_conversion.ps1
+wasm/phaselimiter/verify_src.ps1
+
+# WASM build artifacts and logs
+wasm/phaselimiter/build_*.txt
+wasm/phaselimiter/build_*.log
+wasm/phaselimiter/conv_*.txt
+wasm/phaselimiter/test*.wasm
+wasm/phaselimiter/test*.js
+wasm/phaselimiter/test_sizes*
+wasm/phaselimiter/src_original/**/bin/
+wasm/phaselimiter/src_original/**/obj/
+wasm/phaselimiter/src_original/**/.vs/
+wasm/phaselimiter/src_original/**/x64/
+wasm/phaselimiter/src_original/**/Debug/
+wasm/phaselimiter/src_original/**/Release/
+
+# Aggressive dependency clean-up (Ignore non-build files in src_original)
+wasm/phaselimiter/src_original/**/doc/
+wasm/phaselimiter/src_original/**/docs/
+wasm/phaselimiter/src_original/**/test/
+wasm/phaselimiter/src_original/**/tests/
+wasm/phaselimiter/src_original/**/example/
+wasm/phaselimiter/src_original/**/examples/
+wasm/phaselimiter/src_original/**/bench/
+wasm/phaselimiter/src_original/**/benchmarks/
+wasm/phaselimiter/src_original/**/ci/
+wasm/phaselimiter/src_original/**/scripts/
+wasm/phaselimiter/src_original/**/tools/
+wasm/phaselimiter/src_original/**/samples/
+wasm/phaselimiter/src_original/**/debug/
+wasm/phaselimiter/src_original/**/demos/
+wasm/phaselimiter/src_original/**/blas/
+wasm/phaselimiter/src_original/**/lapack/
+wasm/phaselimiter/src_original/**/unsupported/
+wasm/phaselimiter/src_original/**/*.pdf
+wasm/phaselimiter/src_original/**/*.html
+wasm/phaselimiter/src_original/**/*.htm
+wasm/phaselimiter/src_original/**/*.png
+wasm/phaselimiter/src_original/**/*.css
+wasm/phaselimiter/src_original/**/*.jam
+wasm/phaselimiter/src_original/**/CMakeLists.txt
+wasm/phaselimiter/src_original/**/Makefile
+wasm/phaselimiter/src_original/**/configure
+wasm/phaselimiter/src_original/**/Jamroot
+wasm/phaselimiter/src_original/**/.github/
+wasm/phaselimiter/src_original/**/.gitlab/
+wasm/phaselimiter/src_original/**/.clang-format
+
+# User specific (requested to be ignored)
+.gitignore

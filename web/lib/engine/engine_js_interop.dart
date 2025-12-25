@@ -24,6 +24,8 @@ extension type SlowverbBridgeJS._(JSObject _) implements JSObject {
   external JSPromise<JSObject> renderFull(JSObject payload);
   external JSPromise<JSObject> waveform(JSObject payload);
   external JSPromise<JSObject> cancel(JSString jobId);
+  external JSPromise<JSObject> decodeToFloatPCM(JSObject source);
+  external JSPromise<JSObject> encodeFromFloatPCM(JSObject payload);
   external void setProgressHandler(JSFunction? callback);
   external void setLogHandler(JSFunction? callback);
 }
@@ -48,6 +50,14 @@ class BridgeInterop {
 
   static Future<void> cancel(String jobId) {
     return slowverbBridgeJS.cancel(jobId.toJS).toDart.ignore();
+  }
+
+  static Future<JSObject> decodeToFloatPCM(JSObject payload) {
+    return slowverbBridgeJS.decodeToFloatPCM(payload).toDart;
+  }
+
+  static Future<JSObject> encodeFromFloatPCM(JSObject payload) {
+    return slowverbBridgeJS.encodeFromFloatPCM(payload).toDart;
   }
 
   static void setProgressHandler(JSFunction? handler) {

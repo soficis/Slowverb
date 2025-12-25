@@ -87,6 +87,58 @@ class WasmAudioEngine implements AudioEngine {
   }
 
   @override
+  Future<({Float32List left, Float32List right, int sampleRate})>
+  decodeToFloatPCM(String fileId) async {
+    _ensureInitialized();
+    final payload = BridgeInterop.toJsObject({
+      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
+    });
+
+    final response = await BridgeInterop.decodeToFloatPCM(payload);
+    final type = _getProperty<String>(response, 'type');
+    if (type != 'decode-pcm-ok') {
+      throw StateError('Decode PCM failed: $type');
+    }
+
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final left = payloadObj.getProperty<JSFloat32Array>('left'.toJS).toDart;
+    final right = payloadObj.getProperty<JSFloat32Array>('right'.toJS).toDart;
+    final sampleRate = payloadObj
+        .getProperty<JSNumber>('sampleRate'.toJS)
+        .toDartInt;
+
+    return (left: left, right: right, sampleRate: sampleRate);
+  }
+
+  @override
+  Future<Uint8List> encodeFromFloatPCM({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required String format,
+    int? bitrateKbps,
+  }) async {
+    _ensureInitialized();
+    final payload = BridgeInterop.toJsObject({
+      'left': left.toJS,
+      'right': right.toJS,
+      'sampleRate': sampleRate,
+      'format': format,
+      if (bitrateKbps != null) 'bitrateKbps': bitrateKbps,
+    });
+
+    final response = await BridgeInterop.encodeFromFloatPCM(payload);
+    final type = _getProperty<String>(response, 'type');
+    if (type != 'encode-pcm-ok') {
+      throw StateError('Encode PCM failed: $type');
+    }
+
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
+    return BridgeInterop.bufferToUint8List(buffer);
+  }
+
+  @override
   Future<Float32List> getWaveform(
     String fileId, {
     int targetSamples = 1000,
@@ -315,106 +367,88 @@ class WasmAudioEngine implements AudioEngine {
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
     required ExportOptions options,
-  }) async* {
-    _ensureInitialized();
+  }) {
+    final controller = StreamController<BatchRenderProgress>.broadcast();
 
-    // Enforce batch size limit for web (50 files max)
-    if (files.length > 50) {
-      throw ArgumentError(
-        'Batch size limit exceeded. Maximum 50 files allowed on web.',
-      );
-    }
-
-    if (files.isEmpty) {
-      yield BatchRenderProgress.completed(
-        totalFiles: 0,
-        completedFiles: 0,
-        failedFiles: 0,
-        completedFileNames: [],
-        errors: {},
-      );
-      return;
-    }
-
+    // Reset status flags
     _batchCancelled = false;
     _batchPaused = false;
 
-    // Track progress
+    // Start processing in the background
+    _runParallelBatch(files, defaultPreset, options, controller);
+
+    return controller.stream;
+  }
+
+  Future<void> _runParallelBatch(
+    List<BatchInputFile> files,
+    EffectPreset defaultPreset,
+    ExportOptions options,
+    StreamController<BatchRenderProgress> controller,
+  ) async {
+    final startTime = DateTime.now();
     int completedCount = 0;
     int failedCount = 0;
-    final completedFileNames = <String>[];
-    final errors = <String, String>{};
-    final startTime = DateTime.now();
+    final List<String> completedFileNames = [];
+    final Map<String, String> errors = {};
 
-    // Yield initial progress
-    yield BatchRenderProgress.initial(files.length);
+    controller.add(BatchRenderProgress.initial(files.length));
 
-    // Process files sequentially (concurrency = 1 for web)
-    for (int index = 0; index < files.length; index++) {
-      // Check for cancellation
-      if (_batchCancelled) break;
+    const int concurrency = 2; // Fixed concurrency for stability
+    int nextIndex = 0;
+    final activeJobs = <int, Future<void>>{};
 
-      // Wait while paused
-      while (_batchPaused && !_batchCancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_batchCancelled) break;
-
+    Future<void> processFile(int index) async {
       final file = files[index];
       final preset = file.presetOverride ?? defaultPreset;
 
       try {
-        // Load the file
         await loadSource(
           fileId: file.fileId,
           filename: file.fileName,
           bytes: file.bytes,
         );
 
-        // Create effect config from preset
         final config = EffectConfig.fromParams(preset.id, preset.parameters);
-
-        // Start render
         final jobId = await startRender(
           fileId: file.fileId,
           config: config,
           options: options,
         );
 
-        // Watch progress and yield updates
         await for (final progress in watchProgress(jobId)) {
           if (_batchCancelled) {
             await cancelRender(jobId);
             break;
           }
 
-          // Yield batch progress
-          yield BatchRenderProgress(
-            totalFiles: files.length,
-            completedFiles: completedCount,
-            failedFiles: failedCount,
-            currentFileIndex: index,
-            currentFileName: file.fileName,
-            currentFileProgress: progress.progress,
-            overallProgress:
-                (completedCount + progress.progress) / files.length,
-            estimatedTimeRemaining: _estimateTimeRemaining(
-              startTime,
-              completedCount,
-              files.length,
+          // Report progress for this specific file
+          controller.add(
+            BatchRenderProgress(
+              totalFiles: files.length,
+              completedFiles: completedCount,
+              failedFiles: failedCount,
+              currentFileIndex: index,
+              currentFileName: file.fileName,
+              currentFileProgress: progress.progress,
+              overallProgress:
+                  (completedCount + (progress.progress / concurrency)) /
+                  files.length, // Rough estimate
+              estimatedTimeRemaining: _estimateTimeRemaining(
+                startTime,
+                completedCount,
+                files.length,
+              ),
+              completedFileNames: completedFileNames,
+              errors: errors,
             ),
-            completedFileNames: completedFileNames,
-            errors: errors,
           );
         }
 
-        if (_batchCancelled) break;
+        if (_batchCancelled) return;
 
-        // Get result
         final result = await getResult(jobId);
-
         if (result.success && result.outputBytes != null) {
-          // Auto-download to free memory (web platform requirement)
           _triggerDownload(result.outputBytes!, file.fileName, options.format);
           completedCount++;
           completedFileNames.add(file.fileName);
@@ -423,39 +457,52 @@ class WasmAudioEngine implements AudioEngine {
           errors[file.fileName] = result.errorMessage ?? 'Unknown error';
         }
 
-        // Cleanup to free memory
         await cleanup(fileId: file.fileId);
-      } catch (e, stackTrace) {
-        // Robust error recovery: log, cleanup, delay, continue
+      } catch (e) {
         debugPrint('[Batch] Error processing ${file.fileName}: $e');
-        debugPrint('[Batch] Stack trace: $stackTrace');
-
         failedCount++;
         errors[file.fileName] = e.toString();
-
-        // Force cleanup before proceeding to next file
         try {
           await cleanup(fileId: file.fileId);
-        } catch (cleanupError) {
-          debugPrint('[Batch] Cleanup error: $cleanupError');
-        }
-
-        // Small delay to ensure worker state is clean
-        await Future.delayed(const Duration(milliseconds: 100));
-
-        // Continue with next file
-        continue;
+        } catch (_) {}
       }
     }
 
-    // Yield final progress
-    yield BatchRenderProgress.completed(
-      totalFiles: files.length,
-      completedFiles: completedCount,
-      failedFiles: failedCount,
-      completedFileNames: completedFileNames,
-      errors: errors,
+    while (nextIndex < files.length || activeJobs.isNotEmpty) {
+      if (_batchCancelled) break;
+
+      // Handle pausing
+      while (_batchPaused && !_batchCancelled) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      // Start new tasks if we have capacity
+      while (nextIndex < files.length && activeJobs.length < concurrency) {
+        final index = nextIndex++;
+        final job = processFile(index);
+        activeJobs[index] = job;
+        // ignore: unawaited_future
+        job.whenComplete(() => activeJobs.remove(index));
+      }
+
+      if (activeJobs.isEmpty) break;
+
+      // Wait for at least one job to finish before checking again
+      await Future.any(activeJobs.values);
+    }
+
+    // Finished
+    controller.add(
+      BatchRenderProgress.completed(
+        totalFiles: files.length,
+        completedFiles: completedCount,
+        failedFiles: failedCount,
+        completedFileNames: completedFileNames,
+        errors: errors,
+      ),
     );
+
+    await controller.close();
   }
 
   @override

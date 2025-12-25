@@ -45,3 +45,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Web build logs and reports
+*.log
+analysis_errors.txt
+batch_errors.txt
+npm_outdated.txt
+outdated.txt
+outdated_utf8.txt
+verbose_build.log
+.flutter-plugins-dependencies
+web.iml

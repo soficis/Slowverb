@@ -1686,8 +1686,8 @@ class _EffectColumn extends ConsumerWidget {
                                         : (parameters['masteringAlgorithm'] ??
                                                   0.0) <
                                               1.5
-                                        ? 'Lite'
-                                        : 'Pro',
+                                        ? 'Level 3'
+                                        : 'Level 5',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
@@ -1880,8 +1880,8 @@ class _EffectColumn extends ConsumerWidget {
                                 ? 'Simple'
                                 : (parameters['masteringAlgorithm'] ?? 0.0) <
                                       1.5
-                                ? 'Lite'
-                                : 'Pro',
+                                ? 'Level 3'
+                                : 'Level 5',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: SlowverbColors.neonCyan,

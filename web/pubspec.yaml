@@ -36,7 +36,7 @@ dependencies:
 
   # UI Components
   flutter_animate: ^4.5.0
-  google_fonts: ^6.2.1
+  google_fonts: ^6.3.3
   web: ^1.1.1
   url_launcher: ^6.3.2
   provider: ^6.1.5+1

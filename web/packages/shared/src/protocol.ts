@@ -8,7 +8,9 @@ export type WorkerRequestType =
   | "RENDER_FULL"
   | "WAVEFORM"
   | "CANCEL"
-  | "PING";
+  | "PING"
+  | "DECODE_PCM"
+  | "ENCODE_PCM";
 
 export type ExportFormat = "mp3" | "wav" | "flac" | "aac";
 
@@ -48,6 +50,18 @@ export interface CancelPayload {
   readonly jobId: string;
 }
 
+export interface DecodePcmPayload {
+  readonly fileId: string;
+}
+
+export interface EncodePcmPayload {
+  readonly left: Float32Array;
+  readonly right: Float32Array;
+  readonly sampleRate: number;
+  readonly format: ExportFormat;
+  readonly bitrateKbps?: number;
+}
+
 export type WorkerRequest =
   | { type: "INIT"; requestId: string; payload: InitPayload }
   | { type: "LOAD_SOURCE"; requestId: string; payload: LoadSourcePayload }
@@ -56,7 +70,9 @@ export type WorkerRequest =
   | { type: "RENDER_FULL"; requestId: string; jobId: string; payload: RenderPayload }
   | { type: "WAVEFORM"; requestId: string; jobId: string; payload: WaveformPayload }
   | { type: "CANCEL"; requestId: string; jobId: string; payload: CancelPayload }
-  | { type: "PING"; requestId: string };
+  | { type: "PING"; requestId: string }
+  | { type: "DECODE_PCM"; requestId: string; payload: DecodePcmPayload }
+  | { type: "ENCODE_PCM"; requestId: string; payload: EncodePcmPayload };
 
 export interface LoadSourceResultPayload {
   readonly fileId: string;
@@ -85,12 +101,24 @@ export interface PingResultPayload {
   readonly pong: boolean;
 }
 
+export interface DecodePcmResultPayload {
+  readonly left: Float32Array;
+  readonly right: Float32Array;
+  readonly sampleRate: number;
+}
+
+export interface EncodePcmResultPayload {
+  readonly buffer: ArrayBuffer;
+}
+
 export type WorkerResultPayload =
   | LoadSourceResultPayload
   | ProbeResultPayload
   | RenderResultPayload
   | WaveformResultPayload
-  | PingResultPayload;
+  | PingResultPayload
+  | DecodePcmResultPayload
+  | EncodePcmResultPayload;
 
 export type WorkerLogLevel = "info" | "warn" | "error" | "debug";
 

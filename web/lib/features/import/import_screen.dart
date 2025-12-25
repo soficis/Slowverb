@@ -304,16 +304,16 @@ class _ImportScreenState extends State<ImportScreen> {
                           onPressed: () => context.push(AppRoutes.library),
                           icon: const Icon(Icons.library_music, size: 24),
                           label: const Text(
-                            'OPEN LIBRARY',
+                            'LIBRARY',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.2,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
+                              horizontal: 24,
                               vertical: 20,
                             ),
                             shape: RoundedRectangleBorder(
@@ -321,21 +321,44 @@ class _ImportScreenState extends State<ImportScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 24),
+                        const SizedBox(width: 16),
                         ElevatedButton.icon(
                           onPressed: () => context.push(AppRoutes.batchExport),
                           icon: const Icon(Icons.folder_open, size: 24),
                           label: const Text(
-                            'BATCH EXPORT',
+                            'BATCH',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.2,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
+                              horizontal: 24,
+                              vertical: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => context.push(AppRoutes.mastering),
+                          icon: const Icon(Icons.equalizer, size: 24),
+                          label: const Text(
+                            'MASTERING',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: SlowverbColors.primaryPurple,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
                               vertical: 20,
                             ),
                             shape: RoundedRectangleBorder(

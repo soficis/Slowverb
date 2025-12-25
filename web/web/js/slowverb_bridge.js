@@ -72,6 +72,24 @@ async function cancel(jobId) {
   return { type: "cancel-ok", jobId };
 }
 
+async function decodeToFloatPCM(source) {
+  const sourcePayload = source?.source ?? source;
+  const normalized = normalizeSource(sourcePayload);
+  const result = await engine.decodeToFloatPCM(normalized, buildCallbacks(normalized.fileId));
+  return { type: "decode-pcm-ok", payload: result };
+}
+
+async function encodeFromFloatPCM(params) {
+  const result = await engine.encodeFromFloatPCM({
+    left: params.left,
+    right: params.right,
+    sampleRate: params.sampleRate,
+    format: params.format ?? "mp3",
+    bitrateKbps: params.bitrateKbps,
+  }, buildCallbacks("encode"));
+  return { type: "encode-pcm-ok", payload: { buffer: result.buffer } };
+}
+
 function buildCallbacks(jobId) {
   return {
     onProgress: (value, stage) => emitProgress(jobId, value, stage),
@@ -160,6 +178,8 @@ window.SlowverbBridge = {
   renderFull,
   waveform,
   cancel,
+  decodeToFloatPCM,
+  encodeFromFloatPCM,
   setProgressHandler,
   setLogHandler,
   getMemoryUsage,
