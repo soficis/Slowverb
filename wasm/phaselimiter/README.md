@@ -35,15 +35,13 @@ void RunMany(Files files) {
 
 ### 2. The WASM Port (`adapter.cpp`)
 
-The WASM port mimics this 2-pass workflow using a zero-dependency approach suitable for immediate browser execution:
+The standard WASM port (`adapter.cpp`) mimics the 2-pass workflow using a zero-dependency approach:
 
 ```cpp
 // adapter.cpp
 int run_phase_limiter(...) {
   // Pass 1: Analysis (RMS instead of R128)
-  float inputDb = std::max(calculateRmsDb(left), calculateRmsDb(right));
-  float gainDb = targetLufs - inputDb; 
-  float gain = pow(10, gainDb / 20.0);
+  float gainDb = targetLufs - calculateRmsDb(input); 
 
   // Pass 2: Apply Spectral Balancing & Limiting
   applySpectralGain(left, sampleRate, gain, bassPreservation);
@@ -53,10 +51,33 @@ int run_phase_limiter(...) {
 
 #### Spectral Balancing
 
-Instead of complex multi-band FFT processing, we use a computationally cheap 1-pole Lowpass filter to split frequencies at 200Hz:
+- **Low Frequencies (<200Hz)**: Gain is scaled by `bassPreservation`.
+- **High Frequencies (>200Hz)**: Full gain is applied.
 
-- **Low Frequencies (<200Hz)**: Gain is scaled by `bassPreservation` (0.0 = full boost, 1.0 = no boost).
-- **High Frequencies (>200Hz)**: Full gain is applied to bring volume up to target.
+### 3. Pro Mode Optimization (`adapter_pro.cpp` / Level 5)
+
+The Pro mode (`AutoMastering5`) uses a sophisticated multi-band heuristic optimization engine to find the ideal DSP parameters for a given track.
+
+#### The Optimization Loop
+
+PhaseLimiter Level 5 treats mastering as a mathematical optimization problem:
+
+1. **Objective Function**: $Eval = Distance(Audio, Reference) + \alpha \cdot MSE + \beta \cdot Penalty$.
+    - **Distance**: How close the audio's spectral balance and dynamics are to a professional reference model (`SoundQuality2Calculator`).
+    - **MSE**: Ensures the processed audio doesn't deviate *too* drastically from the original's intent.
+    - **Penalty**: Disincentivizes extreme compressor settings that might cause artifacts.
+2. **Parameters**: The engine optimizes 8 parameters per frequency band (Threshold, Wet Gain, Dry Gain, Ratio for both Mid and Side channels).
+3. **Search Algorithms**: Supports several heuristic solvers:
+    - **Differential Evolution (DE)**: Population-based global search.
+    - **Particle Swarm Optimization (PSO)**: Swarm-based search.
+    - **Nelder-Mead (NM)**: Simplex-based local optimization.
+4. **Early Termination**: If no improvement is found within a certain number of evaluations (patience), the search stops early to save time.
+
+#### Multi-Band Implementation
+
+- **Filter Bank**: Uses FIR bandpass filters (via `CalculateBandPassFir`) to split the audio into highly specific frequency regions.
+- **Parallel Processing**: Optimization is followed by a parallelized application of the best parameters to each band using `tbb::parallel_for` (or standard loops in single-threaded WASM).
+- **Fallback Mechanism**: If Level 5 optimization fails or throws an exception, the system automatically falls back to Level 3 to ensure the user always gets a mastered file.
 
 #### Hard Limiter
 

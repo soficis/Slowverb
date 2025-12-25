@@ -18,14 +18,14 @@ This document provides in-depth technical details for developers working on or c
 2. [Technology Stack](#technology-stack)
 3. [Audio Engine Deep Dive](#audio-engine-deep-dive)
 4. [PhaseLimiter Integration](#phaselimiter-integration)
-4. [State Management](#state-management)
-5. [Screens and Navigation](#screens-and-navigation)
-6. [Visualizers (GPU Shaders)](#visualizers-gpu-shaders)
-7. [IndexedDB Persistence](#indexeddb-persistence)
-8. [Build and Deployment](#build-and-deployment)
-9. [Performance Considerations](#performance-considerations)
-10. [Debugging Tips](#debugging-tips)
-11. [Release Checklist](#release-checklist)
+5. [State Management](#state-management)
+6. [Screens and Navigation](#screens-and-navigation)
+7. [Visualizers (GPU Shaders)](#visualizers-gpu-shaders)
+8. [IndexedDB Persistence](#indexeddb-persistence)
+9. [Build and Deployment](#build-and-deployment)
+10. [Performance Considerations](#performance-considerations)
+11. [Debugging Tips](#debugging-tips)
+12. [Release Checklist](#release-checklist)
 
 ---
 
@@ -142,33 +142,44 @@ The worker translates this spec into FFmpeg filter arguments.
 
 ## PhaseLimiter Integration
 
-Professional mastering is implemented as an alternate pipeline that runs a WebAssembly build of the PhaseLimiter engine in a dedicated worker. It is triggered when `mastering.algorithm === "phaselimiter_pro"` (or legacy `phaselimiter`) in the DSP spec.
+Slowverb features a dedicated **PhaseLimiter AI** interface (`/mastering`) designed for high-quality, local batch mastering. It allows users to process multiple tracks simultaneously without uploading data to a server.
+
+### Interface Features
+
+- **Batch Processing**: Supporting up to 50 concurrent files via drag-and-drop or file selection.
+- **Dynamic Configuration**:
+  - **Target LUFS**: Range from -24.0 to -6.0. Includes presets for Podcast (-16), Streaming (-14), and Club (-11).
+  - **Bass Preservation**: Fine-tune how the engine handles low frequencies during maximization.
+- **Quality Modes**:
+  - **Standard (L3)**: High-speed, single-band lookahead limiting.
+  - **Pro (L5)**: Multi-band optimization (AI mode) for the most transparent results.
+- **Batch Export**: Option to bundle all processed files into a single `.zip` archive.
+- **Real-time Stages**: Visual feedback through four stages: `Decoding` -> `Mastering` -> `Encoding` -> `Zipping`.
 
 ### Architecture
 
 ```
-Upload → FFmpeg Worker (decode) → Float32 PCM → PhaseLimiter Worker (2‑pass) → PCM → FFmpeg Worker (encode) → Download
+Upload → FFmpeg Worker (decode) → Float32 PCM → PhaseLimiter Worker (Level 5 Optimization) → PCM → FFmpeg Worker (encode) → Download/Zip
 ```
 
-- Two‑pass algorithm (analysis then processing) requires full‑buffer PCM, not streaming.
-- Single‑threaded WASM (TBB disabled) for maximum browser compatibility.
-- Uses Transferable buffers to avoid copies between main thread and workers.
+- Two‑pass algorithm: Analysis stage followed by DSP processing.
+- Level 5 mode uses heuristic optimization (PSO/DE) to find the best spectral balance.
+- Single‑threaded WASM build for maximum browser compatibility.
+- Uses Transferable buffers for efficient large‑file handling.
 
-### Key files and paths
+### Key Files and Paths
 
-- Dart UI/engine
-  - `lib/engine/wasm_audio_engine.dart` – emits mastering config and algorithm
-  - `lib/features/editor/…` – UI toggle; desktop + mobile layouts
-  - `lib/features/export/export_screen.dart` – shows decoding/mastering/encoding stage text
-  - `lib/services/phase_limiter_service.dart` – worker wrapper (progress + Transferables)
-- TypeScript core
-  - `packages/shared/src/protocol.ts` – protocol includes `mastering` + `algorithm`
-  - `packages/core/src/engine.ts` – routes mastering to the right path
-  - `packages/core-worker/src/worker.ts` – switches pipeline (simple | phaselimiter)
-- Worker + WASM
-  - `web/js/phase_limiter_pro_worker.js` – dedicated worker that loads `phaselimiter_pro.js`
-  - `web/js/phaselimiter_pro.{js,wasm}` – generated artifacts (from `phaselimiter_pro` CMake target)
-  - Test harness: `web/phaselimiter_test.html`
+- Dart UI/Engine
+  - `lib/features/mastering/mastering_screen.dart` – Main standalone UI.
+  - `lib/features/mastering/widgets/mastering_controls.dart` – Reusable settings widget.
+  - `lib/providers/mastering_provider.dart` – State management for batch mastering.
+  - `lib/services/phase_limiter_service.dart` – Worker wrapper and PCM handling.
+- Web Worker
+  - `web/js/phase_limiter_pro_worker.js` – Loads the C++ WASM module.
+  - `web/js/phaselimiter_pro.wasm` – The optimized C++ engine.
+- Optimization Core (C++)
+  - `wasm/phaselimiter/src_original/src/phase_limiter/auto_mastering5.cpp` – Heuristic optimization implementation.
+  - `wasm/phaselimiter/adapter_pro.cpp` – Emscripten bridge.
 
 ### Building the WASM module
 
@@ -214,8 +225,8 @@ cd web
 npm run build         # or: npm run build:ts
 ```
 
-4. Build WASM artifacts if the adapter changes (see above).
-5. Verify end‑to‑end in the app and with the harness page.
+1. Build WASM artifacts if the adapter changes (see above).
+2. Verify end‑to‑end in the app and with the harness page.
 
 ### Progress & stages
 

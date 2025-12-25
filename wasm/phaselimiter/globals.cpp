@@ -20,9 +20,10 @@ DEFINE_string(sound_quality2_cache, "./sound_quality2_cache",
 DEFINE_string(
     mastering5_optimization_algorithm, "de",
     "de / nm / pso / de_prmm / pso_dv (de recommended for TBB parallelism)");
-DEFINE_int32(mastering5_optimization_max_eval_count, 10000,
-             "Mastering5 optimization max eval count (reduced from 40k for "
-             "performance).");
+DEFINE_int32(mastering5_optimization_max_eval_count, 4000,
+             "Mastering5 optimization max eval count.");
+DEFINE_int32(mastering5_early_termination_patience, 500,
+             "Stop optimization if no improvement for this many evaluations.");
 DEFINE_double(mastering5_mastering_level, 0.5, "Mastering5 mastering level.");
 DEFINE_string(mastering5_mastering_reference_file, "",
               "Mastering reference json path.");

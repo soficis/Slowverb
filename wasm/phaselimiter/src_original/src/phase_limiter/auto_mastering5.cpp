@@ -23,6 +23,7 @@
 DECLARE_string(sound_quality2_cache);
 DECLARE_string(mastering5_optimization_algorithm);
 DECLARE_int32(mastering5_optimization_max_eval_count);
+DECLARE_int32(mastering5_early_termination_patience);
 DECLARE_double(mastering5_mastering_level);
 DECLARE_string(mastering5_mastering_reference_file);
 
@@ -181,6 +182,24 @@ void AutoMastering5(std::vector<float> *_wave, const int sample_rate,
       // 使ったほうが実用的なので使う
       band_loudnesses.resize(bakuage::CeilInt(samples, shift) / shift);
       tbb::parallel_for<int>(0, band_loudnesses.size(), [&](int pos_idx) {
+        // Local variables for this iteration
+        const int pos = pos_idx * shift;
+        const int end = samples;
+
+        // Get DFT from thread-local pool
+        auto &pool = bakuage::ThreadLocalDftPool<
+            bakuage::RealDft<float>>::GetThreadInstance();
+        auto dft = pool.Get(width);
+
+        // Allocate per-iteration buffers
+        bakuage::AlignedPodVector<float> fft_input(width);
+        std::vector<bakuage::AlignedPodVector<std::complex<float>>> fft_outputs(
+            channels);
+        for (int ch = 0; ch < channels; ch++) {
+          fft_outputs[ch].resize(spec_len);
+        }
+        bakuage::AlignedPodVector<float> band_loudness(2 * band_count);
+
         // FFT
         for (int ch = 0; ch < channels; ch++) {
           for (int i = 0; i < width; i++) {
@@ -390,13 +409,23 @@ void AutoMastering5(std::vector<float> *_wave, const int sample_rate,
     std::mutex eval_mtx;
     float min_eval = 1e100;
     int eval_count = 0;
+    int evals_since_improvement = 0; // For early termination
+    bool should_terminate_early = false;
     EffectParams best_params(8 * band_count,
                              arma::fill::zeros); // Track best parameters
     const auto calc_eval = [calc_mean_cov, &calculator, &original_mean,
                             &min_eval, &eval_count, &eval_mtx,
                             &progress_callback, &lower_bounds, &upper_bounds,
                             &mastering_reference, &best_params,
+                            &evals_since_improvement, &should_terminate_early,
                             band_count](const EffectParams &params) -> double {
+      // Check for early termination
+      {
+        std::lock_guard<std::mutex> lock(eval_mtx);
+        if (should_terminate_early) {
+          return min_eval; // Return current best to avoid further computation
+        }
+      }
       if (params.size() != 8 * band_count) {
         std::cerr << "CRITICAL ERROR: params.size() (" << params.size()
                   << ") != 8 * band_count (" << 8 * band_count << ")"
@@ -467,9 +496,22 @@ void AutoMastering5(std::vector<float> *_wave, const int sample_rate,
         }
         if (min_eval > eval) {
           min_eval = eval;
-          best_params = params; // Capture best parameters
+          best_params = params;        // Capture best parameters
+          evals_since_improvement = 0; // Reset patience counter
           std::cerr << "NEW BEST " << eval_count << "\t" << min_eval << "\t"
                     << main_eval << "\t" << mse << "\t" << msp << std::endl;
+        } else {
+          evals_since_improvement++;
+          // Check early termination patience
+          if (evals_since_improvement >=
+              FLAGS_mastering5_early_termination_patience) {
+            if (!should_terminate_early) {
+              std::cerr << "Early termination: no improvement for "
+                        << evals_since_improvement << " evaluations"
+                        << std::endl;
+              should_terminate_early = true;
+            }
+          }
         }
       }
       return eval;
