@@ -884,23 +884,46 @@ class _MobileEffectsSheet extends StatelessWidget {
                 horizontal: SlowverbTokens.spacingMd,
                 vertical: SlowverbTokens.spacingSm,
               ),
-              children: effectParameterDefinitions.map((param) {
-                final value = parameters[param.id] ?? param.defaultValue;
-                return _CompactSlider(
-                  label: param.label,
-                  value: value,
-                  min: param.min,
-                  max: param.max,
-                  formatValue: (v) {
-                    if (param.id == 'tempo') return '${(v * 100).toInt()}%';
-                    if (param.id == 'pitch') {
-                      return '${v.toStringAsFixed(1)} st';
-                    }
-                    return '${(v * 100).toInt()}%';
-                  },
-                  onChanged: (v) => notifier.updateParameter(param.id, v),
-                );
-              }).toList(),
+              children: [
+                ...effectParameterDefinitions.map((param) {
+                  final value = parameters[param.id] ?? param.defaultValue;
+                  return _CompactSlider(
+                    label: param.label,
+                    value: value,
+                    min: param.min,
+                    max: param.max,
+                    formatValue: (v) => _formatEffectValue(param.id, v),
+                    onChanged: (v) => notifier.updateParameter(param.id, v),
+                  );
+                }),
+                if (advancedReverbParameterDefinitions.isNotEmpty)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      'Advanced Reverb',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: SlowverbColors.textSecondary),
+                    ),
+                    children: advancedReverbParameterDefinitions
+                        .map((param) {
+                          final value =
+                              parameters[param.id] ?? param.defaultValue;
+                          return _CompactSlider(
+                            label: param.label,
+                            value: value,
+                            min: param.min,
+                            max: param.max,
+                            formatValue: (v) =>
+                                _formatEffectValue(param.id, v),
+                            onChanged: (v) =>
+                                notifier.updateParameter(param.id, v),
+                          );
+                        })
+                        .toList(),
+                  ),
+              ],
             ),
           ),
         ],
@@ -1733,15 +1756,51 @@ class _EffectColumn extends ConsumerWidget {
                             value: parameters[param.id] ?? param.defaultValue,
                             min: param.min,
                             max: param.max,
-                            unit: param.id == 'pitch' ? 'st' : '%',
-                            formatValue: param.id == 'pitch'
-                                ? (v) => v.toStringAsFixed(1)
-                                : (v) => '${(v * 100).toInt()}%',
+                            unit: '',
+                            formatValue: (v) => _formatEffectValue(
+                              param.id,
+                              v,
+                            ),
                             onChanged: (value) =>
                                 onUpdateParam(param.id, value),
                           ),
                         ),
                       ),
+                      if (advancedReverbParameterDefinitions.isNotEmpty)
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: Text(
+                            'Advanced Reverb',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: SlowverbColors.textSecondary),
+                          ),
+                          children: advancedReverbParameterDefinitions
+                              .map(
+                                (param) => Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 8),
+                                  child: EffectSlider(
+                                    label: param.label,
+                                    value: parameters[param.id] ??
+                                        param.defaultValue,
+                                    min: param.min,
+                                    max: param.max,
+                                    unit: '',
+                                    formatValue: (v) => _formatEffectValue(
+                                      param.id,
+                                      v,
+                                    ),
+                                    onChanged: (value) => onUpdateParam(
+                                      param.id,
+                                      value,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
                     ],
                   ),
                 ),
@@ -1927,14 +1986,43 @@ class _EffectColumn extends ConsumerWidget {
                     value: parameters[param.id] ?? param.defaultValue,
                     min: param.min,
                     max: param.max,
-                    unit: param.id == 'pitch' ? 'st' : '%',
-                    formatValue: param.id == 'pitch'
-                        ? (v) => v.toStringAsFixed(1)
-                        : (v) => '${(v * 100).toInt()}%',
+                    unit: '',
+                    formatValue: (v) => _formatEffectValue(param.id, v),
                     onChanged: (value) => onUpdateParam(param.id, value),
                   ),
                 ),
               ),
+              if (advancedReverbParameterDefinitions.isNotEmpty)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                    'Advanced Reverb',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: SlowverbColors.textSecondary),
+                  ),
+                  children: advancedReverbParameterDefinitions
+                      .map(
+                        (param) => Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: SlowverbTokens.spacingMd,
+                          ),
+                          child: EffectSlider(
+                            label: param.label,
+                            value: parameters[param.id] ?? param.defaultValue,
+                            min: param.min,
+                            max: param.max,
+                            unit: '',
+                            formatValue: (v) =>
+                                _formatEffectValue(param.id, v),
+                            onChanged: (value) =>
+                                onUpdateParam(param.id, value),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
             ],
           );
         },
@@ -2184,4 +2272,23 @@ void _showSavePresetDialog(
       ],
     ),
   );
+}
+
+String _formatEffectValue(String paramId, double value) {
+  switch (paramId) {
+    case 'tempo':
+      return '${(value * 100).toInt()}%';
+    case 'pitch':
+      return '${value.toStringAsFixed(1)} st';
+    case 'preDelayMs':
+      return '${value.toStringAsFixed(0)} ms';
+    case 'roomScale':
+    case 'reverbMix':
+    case 'hfDamping':
+      return '${(value * 100).toInt()}%';
+    case 'stereoWidth':
+      return '${value.toStringAsFixed(2)}x';
+    default:
+      return '${(value * 100).toInt()}%';
+  }
 }

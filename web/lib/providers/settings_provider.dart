@@ -72,22 +72,30 @@ final experimentalFeaturesProvider =
 class MasteringSettings {
   final bool masteringEnabled;
   final bool phaselimiterEnabled;
+  final double targetLufs;
+  final double bassPreservation;
   final int mode;
 
   const MasteringSettings({
     this.masteringEnabled = false,
     this.phaselimiterEnabled = false,
+    this.targetLufs = -14.0,
+    this.bassPreservation = 0.5,
     this.mode = 5, // Level 5 (HNSW Pro)
   });
 
   MasteringSettings copyWith({
     bool? masteringEnabled,
     bool? phaselimiterEnabled,
+    double? targetLufs,
+    double? bassPreservation,
     int? mode,
   }) {
     return MasteringSettings(
       masteringEnabled: masteringEnabled ?? this.masteringEnabled,
       phaselimiterEnabled: phaselimiterEnabled ?? this.phaselimiterEnabled,
+      targetLufs: targetLufs ?? this.targetLufs,
+      bassPreservation: bassPreservation ?? this.bassPreservation,
       mode: mode ?? this.mode,
     );
   }
@@ -95,6 +103,8 @@ class MasteringSettings {
   Map<String, dynamic> toJson() => {
     'masteringEnabled': masteringEnabled,
     'phaselimiterEnabled': phaselimiterEnabled,
+    'targetLufs': targetLufs,
+    'bassPreservation': bassPreservation,
     'mode': mode,
   };
 
@@ -102,6 +112,8 @@ class MasteringSettings {
     return MasteringSettings(
       masteringEnabled: json['masteringEnabled'] as bool? ?? false,
       phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? false,
+      targetLufs: (json['targetLufs'] as num?)?.toDouble() ?? -14.0,
+      bassPreservation: (json['bassPreservation'] as num?)?.toDouble() ?? 0.5,
       mode: json['mode'] as int? ?? 5, // Level 5 (HNSW Pro)
     );
   }
@@ -138,6 +150,16 @@ class MasteringSettingsNotifier extends StateNotifier<MasteringSettings> {
 
   void setPhaselimiterEnabled(bool enabled) {
     state = state.copyWith(phaselimiterEnabled: enabled);
+    _saveToStorage();
+  }
+
+  void setTargetLufs(double value) {
+    state = state.copyWith(targetLufs: value.clamp(-24.0, -6.0));
+    _saveToStorage();
+  }
+
+  void setBassPreservation(double value) {
+    state = state.copyWith(bassPreservation: value.clamp(0.0, 1.0));
     _saveToStorage();
   }
 

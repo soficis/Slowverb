@@ -27,6 +27,10 @@ abstract final class Presets {
       'tempo': 0.95,
       'pitch': -2.0,
       'reverbAmount': 0.7,
+      'reverbMix': 0.9,
+      'preDelayMs': 80.0,
+      'roomScale': 0.75,
+      'hfDamping': 0.15,
       'echoAmount': 0.2,
       'eqWarmth': 0.4,
       'masteringEnabled': 0.0,
@@ -43,6 +47,10 @@ abstract final class Presets {
       'tempo': 0.74074, // -25.926% = multiply by 0.74074
       'pitch': -4.5, // Matching tempo slow
       'reverbAmount': 0.4, // 40% reverbance from screenshot
+      'reverbMix': 0.85,
+      'preDelayMs': 90.0,
+      'roomScale': 0.8,
+      'hfDamping': 0.2,
       'echoAmount': 0.15,
       'eqWarmth': 0.5, // Balanced warmth
       'masteringEnabled': 0.0,
@@ -59,6 +67,9 @@ abstract final class Presets {
       'tempo': 0.81, // -19% speed from Audacity
       'pitch': -3.2, // Matching tempo slow (~19% = ~3.2 semitones)
       'reverbAmount': 0.5, // 50% reverbance
+      'reverbMix': 0.82,
+      'preDelayMs': 70.0,
+      'roomScale': 0.7,
       'echoAmount': 0.2,
       'eqWarmth': 0.5, // 50% tone balance
       'masteringEnabled': 0.0,
@@ -75,6 +86,11 @@ abstract final class Presets {
       'tempo': 0.94, // 94% from screenshot
       'pitch': -3.5, // -3.5 semitones from screenshot
       'reverbAmount': 0.85, // 85% reverb from screenshot
+      'reverbMix': 0.92,
+      'preDelayMs': 120.0,
+      'roomScale': 0.85,
+      'hfDamping': 0.25,
+      'stereoWidth': 1.2,
       'echoAmount': 0.38, // 38% echo from screenshot
       'eqWarmth': 0.83, // 83% warmth from screenshot
       'masteringEnabled': 0.0,
@@ -91,6 +107,11 @@ abstract final class Presets {
       'tempo': 0.78,
       'pitch': -3.0,
       'reverbAmount': 0.8,
+      'reverbMix': 0.88,
+      'preDelayMs': 110.0,
+      'roomScale': 0.9,
+      'hfDamping': 0.3,
+      'stereoWidth': 1.3,
       'echoAmount': 0.4,
       'eqWarmth': 0.7,
       'masteringEnabled': 0.0,
@@ -155,6 +176,11 @@ abstract final class Presets {
       'tempo': 0.70,
       'pitch': -2.5,
       'reverbAmount': 0.9,
+      'reverbMix': 0.95,
+      'preDelayMs': 140.0,
+      'roomScale': 0.95,
+      'hfDamping': 0.2,
+      'stereoWidth': 1.4,
       'echoAmount': 0.6,
       'eqWarmth': 0.3,
       'masteringEnabled': 0.0,
@@ -203,6 +229,11 @@ abstract final class Presets {
       'tempo': 0.72,
       'pitch': -3.5,
       'reverbAmount': 0.85,
+      'reverbMix': 0.9,
+      'preDelayMs': 120.0,
+      'roomScale': 0.8,
+      'hfDamping': 0.6,
+      'stereoWidth': 1.1,
       'echoAmount': 0.5,
       'eqWarmth': 0.6,
       'masteringEnabled': 0.0,
@@ -219,6 +250,10 @@ abstract final class Presets {
       'tempo': 1.05,
       'pitch': 1.0,
       'reverbAmount': 0.6,
+      'reverbMix': 0.8,
+      'preDelayMs': 70.0,
+      'roomScale': 0.7,
+      'stereoWidth': 1.2,
       'echoAmount': 0.4,
       'eqWarmth': 0.4,
       'masteringEnabled': 0.0,

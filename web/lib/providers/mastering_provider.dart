@@ -8,6 +8,7 @@ import 'package:slowverb_web/services/logger_service.dart';
 import 'package:slowverb_web/services/phase_limiter_service.dart';
 import 'package:slowverb_web/services/worker_pool_service.dart';
 import 'package:slowverb_web/services/zip_export_service.dart';
+import 'package:slowverb_web/providers/settings_provider.dart' as app_settings;
 import 'package:uuid/uuid.dart';
 
 /// State for mastering operations
@@ -109,7 +110,23 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
   static const _log = SlowverbLogger('Mastering');
   bool _isCancelled = false;
 
-  MasteringNotifier(this._ref) : super(const MasteringState());
+  MasteringNotifier(this._ref) : super(const MasteringState()) {
+    _syncSettingsFromPrefs(_ref.read(app_settings.masteringSettingsProvider));
+    _ref.listen<app_settings.MasteringSettings>(
+      app_settings.masteringSettingsProvider,
+      (_, next) => _syncSettingsFromPrefs(next),
+    );
+  }
+
+  void _syncSettingsFromPrefs(app_settings.MasteringSettings prefs) {
+    state = state.copyWith(
+      settings: MasteringSettings.validated(
+        targetLufs: prefs.targetLufs,
+        bassPreservation: prefs.bassPreservation,
+        mode: prefs.mode,
+      ),
+    );
+  }
 
   /// Import a single file
   Future<void> importFile(String fileName, Uint8List bytes) async {
@@ -201,18 +218,24 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
 
   /// Update target LUFS (-24 to -6)
   void setTargetLufs(double value) {
+    final clamped = value.clamp(-24.0, -6.0);
     state = state.copyWith(
-      settings: state.settings.copyWith(targetLufs: value.clamp(-24.0, -6.0)),
+      settings: state.settings.copyWith(targetLufs: clamped),
     );
+    _ref.read(app_settings.masteringSettingsProvider.notifier).setTargetLufs(
+          clamped,
+        );
   }
 
   /// Update bass preservation (0.0 to 1.0)
   void setBassPreservation(double value) {
+    final clamped = value.clamp(0.0, 1.0);
     state = state.copyWith(
-      settings: state.settings.copyWith(
-        bassPreservation: value.clamp(0.0, 1.0),
-      ),
+      settings: state.settings.copyWith(bassPreservation: clamped),
     );
+    _ref
+        .read(app_settings.masteringSettingsProvider.notifier)
+        .setBassPreservation(clamped);
   }
 
   /// Update export format
@@ -224,6 +247,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
   /// Update mastering mode (3=Standard, 5=Pro)
   void setMode(int mode) {
     state = state.copyWith(settings: state.settings.copyWith(mode: mode));
+    _ref.read(app_settings.masteringSettingsProvider.notifier).setMode(mode);
   }
 
   /// Update MP3 bitrate
@@ -271,74 +295,191 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
     );
 
     try {
-      await _phaseLimiter.initialize();
-
       final totalFiles = state.queuedFiles.length;
       final results = <Uint8List>[];
 
-      for (var i = 0; i < totalFiles; i++) {
-        if (_isCancelled) break;
+      if (state.isBatchMode && _canParallelizeBatch(state.queuedFiles)) {
+        await _workerPool.initialize();
+        final decodedTasks = <({
+          MasteringQueueFile file,
+          Float32List left,
+          Float32List right,
+          int sampleRate,
+        })>[];
 
-        final file = state.queuedFiles[i];
-        state = state.copyWith(
-          progress: MasteringProgress(
-            currentFileIndex: i + 1,
-            totalFiles: totalFiles,
-            currentFileName: file.fileName,
-            percent: 0.0,
-            stage: 'Decoding',
-          ),
-        );
+        for (var i = 0; i < totalFiles; i++) {
+          if (_isCancelled) break;
+          final file = state.queuedFiles[i];
+          _updateFileStatus(file.fileId, FileProcessStatus.processing);
+          state = state.copyWith(
+            status: MasteringStatus.analyzing,
+            progress: MasteringProgress(
+              currentFileIndex: i + 1,
+              totalFiles: totalFiles,
+              currentFileName: file.fileName,
+              percent: (i / totalFiles) * 0.15,
+              stage: 'Decoding',
+            ),
+          );
 
-        _updateFileStatus(file.fileId, FileProcessStatus.processing);
+          final decoded = await engine.decodeToFloatPCM(file.fileId);
+          decodedTasks.add((
+            file: file,
+            left: decoded.left,
+            right: decoded.right,
+            sampleRate: decoded.sampleRate,
+          ));
+        }
 
-        // 1. Decode to PCM
-        state = state.copyWith(status: MasteringStatus.analyzing);
-        final decoded = await engine.decodeToFloatPCM(file.fileId);
+        if (!_isCancelled) {
+          final progressMap = List<double>.filled(totalFiles, 0.0);
+          StreamSubscription<({int taskIndex, double progress})>? progressSub;
+          progressSub = _workerPool.progressStream.listen((update) {
+            progressMap[update.taskIndex] = update.progress.clamp(0.0, 1.0);
+            final overall =
+                0.15 + (progressMap.reduce((a, b) => a + b) / totalFiles) * 0.7;
+            final currentFile = state.queuedFiles[update.taskIndex];
+            state = state.copyWith(
+              status: MasteringStatus.mastering,
+              progress: MasteringProgress(
+                currentFileIndex: update.taskIndex + 1,
+                totalFiles: totalFiles,
+                currentFileName: currentFile.fileName,
+                percent: overall.clamp(0.0, 1.0),
+                stage: 'Mastering (parallel)',
+              ),
+            );
+          });
 
-        if (_isCancelled) break;
+          final tasks = decodedTasks
+              .map(
+                (task) => (
+                  left: task.left,
+                  right: task.right,
+                  sampleRate: task.sampleRate,
+                  config: PhaseLimiterConfig(
+                    targetLufs: state.settings.targetLufs,
+                    bassPreservation: state.settings.bassPreservation,
+                    mode: state.settings.mode,
+                  ),
+                ),
+              )
+              .toList();
 
-        // 2. Process with PhaseLimiter
-        state = state.copyWith(
-          status: MasteringStatus.mastering,
-          progress: state.progress?.copyWith(stage: 'Mastering', percent: 0.3),
-        );
+          final masteredResults = await _workerPool.processAll(tasks);
+          await progressSub?.cancel();
 
-        final mastered = await _phaseLimiter.process(
-          leftChannel: decoded.left,
-          rightChannel: decoded.right,
-          sampleRate: decoded.sampleRate,
-          config: PhaseLimiterConfig(
-            targetLufs: state.settings.targetLufs,
-            bassPreservation: state.settings.bassPreservation,
-            mode: state.settings.mode,
-          ),
-        );
+          if (!_isCancelled) {
+            var encodedCount = 0;
+            for (var i = 0; i < masteredResults.length; i++) {
+              if (_isCancelled) break;
+              final result = masteredResults[i];
+              final file = decodedTasks[i].file;
+              if (result.error != null) {
+                _updateFileStatus(file.fileId, FileProcessStatus.failed);
+                continue;
+              }
 
-        if (_isCancelled) break;
+              state = state.copyWith(
+                status: MasteringStatus.encoding,
+                progress: MasteringProgress(
+                  currentFileIndex: i + 1,
+                  totalFiles: totalFiles,
+                  currentFileName: file.fileName,
+                  percent: (0.85 + (encodedCount / totalFiles) * 0.15)
+                      .clamp(0.0, 1.0),
+                  stage: 'Encoding',
+                ),
+              );
 
-        // 3. Encode back to original or chosen format
-        state = state.copyWith(
-          status: MasteringStatus.encoding,
-          progress: state.progress?.copyWith(stage: 'Encoding', percent: 0.7),
-        );
+              final encoded = await engine.encodeFromFloatPCM(
+                left: result.left,
+                right: result.right,
+                sampleRate: decodedTasks[i].sampleRate,
+                format: state.selectedFormat,
+                bitrateKbps: state.selectedFormat == 'mp3'
+                    ? state.mp3Bitrate
+                    : (state.selectedFormat == 'aac'
+                        ? state.aacBitrate
+                        : null),
+              );
 
-        final encoded = await engine.encodeFromFloatPCM(
-          left: mastered.left,
-          right: mastered.right,
-          sampleRate: decoded.sampleRate,
-          format: state.selectedFormat,
-          bitrateKbps: state.selectedFormat == 'mp3'
-              ? state.mp3Bitrate
-              : (state.selectedFormat == 'aac' ? state.aacBitrate : null),
-        );
+              results.add(encoded);
+              encodedCount++;
+              _updateFileStatus(file.fileId, FileProcessStatus.completed);
+              state = state.copyWith(
+                completedResults: List.from(results),
+              );
+            }
+          }
+        }
+      } else {
+        await _phaseLimiter.initialize();
+        for (var i = 0; i < totalFiles; i++) {
+          if (_isCancelled) break;
 
-        results.add(encoded);
-        _updateFileStatus(file.fileId, FileProcessStatus.completed);
-        state = state.copyWith(
-          progress: state.progress?.copyWith(percent: 1.0),
-          completedResults: List.from(results), // Create a new list for state
-        );
+          final file = state.queuedFiles[i];
+          state = state.copyWith(
+            progress: MasteringProgress(
+              currentFileIndex: i + 1,
+              totalFiles: totalFiles,
+              currentFileName: file.fileName,
+              percent: 0.0,
+              stage: 'Decoding',
+            ),
+          );
+
+          _updateFileStatus(file.fileId, FileProcessStatus.processing);
+
+          // 1. Decode to PCM
+          state = state.copyWith(status: MasteringStatus.analyzing);
+          final decoded = await engine.decodeToFloatPCM(file.fileId);
+
+          if (_isCancelled) break;
+
+          // 2. Process with PhaseLimiter
+          state = state.copyWith(
+            status: MasteringStatus.mastering,
+            progress:
+                state.progress?.copyWith(stage: 'Mastering', percent: 0.3),
+          );
+
+          final mastered = await _phaseLimiter.process(
+            leftChannel: decoded.left,
+            rightChannel: decoded.right,
+            sampleRate: decoded.sampleRate,
+            config: PhaseLimiterConfig(
+              targetLufs: state.settings.targetLufs,
+              bassPreservation: state.settings.bassPreservation,
+              mode: state.settings.mode,
+            ),
+          );
+
+          if (_isCancelled) break;
+
+          // 3. Encode back to original or chosen format
+          state = state.copyWith(
+            status: MasteringStatus.encoding,
+            progress: state.progress?.copyWith(stage: 'Encoding', percent: 0.7),
+          );
+
+          final encoded = await engine.encodeFromFloatPCM(
+            left: mastered.left,
+            right: mastered.right,
+            sampleRate: decoded.sampleRate,
+            format: state.selectedFormat,
+            bitrateKbps: state.selectedFormat == 'mp3'
+                ? state.mp3Bitrate
+                : (state.selectedFormat == 'aac' ? state.aacBitrate : null),
+          );
+
+          results.add(encoded);
+          _updateFileStatus(file.fileId, FileProcessStatus.completed);
+          state = state.copyWith(
+            progress: state.progress?.copyWith(percent: 1.0),
+            completedResults: List.from(results), // Create a new list for state
+          );
+        }
       }
 
       if (!_isCancelled) {
@@ -367,6 +508,30 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
         errorMessage: 'Mastering failed: $e',
       );
     }
+  }
+
+  static const int _maxParallelPcmBytes = 250 * 1024 * 1024;
+
+  bool _canParallelizeBatch(List<MasteringQueueFile> files) {
+    if (files.length <= 1) return false;
+    int totalBytes = 0;
+    for (final file in files) {
+      final duration = file.metadata.duration;
+      if (duration == null) {
+        return false;
+      }
+      totalBytes += _estimatePcmBytes(duration, file.metadata.sampleRate);
+      if (totalBytes > _maxParallelPcmBytes) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  int _estimatePcmBytes(Duration duration, int sampleRate) {
+    final seconds = duration.inMilliseconds / 1000.0;
+    final frames = seconds * sampleRate;
+    return (frames * 2 * 4).round();
   }
 
   /// Cancel mastering operation

@@ -4851,7 +4851,7 @@ async function renderWithPhaseLimiter(payload, jobId, isPreview) {
     const { left, right } = readAndSplitF32Stereo(decodeFile);
     postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
     const algorithm = payload.mastering.algorithm;
-    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm);
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm, payload.mastering);
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
     const encodeArgs = buildEncodePlan(masteredFile, outputFile, payload, sampleRate);
     postEvent({ type: "PROGRESS", jobId, value: 0.8, stage: "encoding" });
@@ -4923,11 +4923,15 @@ function appendSimpleMasteringToFilterGraph(filterGraph) {
   if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return filterGraph;
   return `${filterGraph},${SIMPLE_MASTERING_FILTER_CHAIN}`;
 }
-async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId, algorithm) {
+async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId, algorithm, mastering) {
   return new Promise((resolve, reject) => {
     const isPro = algorithm === "phaselimiter_pro";
     const workerScript = isPro ? "/js/phase_limiter_pro_worker.js" : "/js/phase_limiter_worker.js";
-    const config = isPro ? { mode: 3 } : { targetLufs: -14, bassPreservation: 0.5 };
+    const masteringConfig = mastering ?? {};
+    const config = isPro ? { mode: Math.round(masteringConfig.mode ?? 5) } : {
+      targetLufs: typeof masteringConfig.targetLufs === "number" ? masteringConfig.targetLufs : -14,
+      bassPreservation: typeof masteringConfig.bassPreservation === "number" ? masteringConfig.bassPreservation : 0.5
+    };
     const worker = new Worker(workerScript);
     const onMessage = (event) => {
       const data = event.data ?? {};

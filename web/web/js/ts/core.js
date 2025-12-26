@@ -90,7 +90,7 @@ function buildTempoFilter(tempo) {
 }
 function buildPitchFilter(semitones) {
   const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
+  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
 }
 function buildEqWarmthFilter(warmth) {
   const gain = (warmth * 6).toFixed(1);
@@ -98,11 +98,14 @@ function buildEqWarmthFilter(warmth) {
 }
 function buildReverbFilter(reverb) {
   const d1 = reverb.preDelayMs;
-  const d2 = Math.round(d1 * (1 + reverb.roomScale * 0.5));
-  const d3 = Math.round(d2 * 1.3);
+  const scale = 1 + reverb.roomScale;
+  const d2 = Math.round(d1 * (1 + 0.35 * scale));
+  const d3 = Math.round(d1 * (1 + 0.7 * scale));
+  const d4 = Math.round(d1 * (1.4 + 0.6 * scale));
+  const d5 = Math.round(d1 * (1.9 + 0.8 * scale));
   const decay = reverb.decay;
   const mix = reverb.mix;
-  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}:${(decay * 0.9).toFixed(2)}|${(decay * 0.7).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.95).toFixed(2)}|${(decay * 0.82).toFixed(2)}|${(decay * 0.67).toFixed(2)}|${(decay * 0.52).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
 }
 function buildEchoFilter(echo) {
   return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;

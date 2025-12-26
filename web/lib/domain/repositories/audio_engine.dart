@@ -71,8 +71,7 @@ abstract class AudioEngine {
 
   /// Render multiple files with batch processing
   ///
-  /// For web, this ALWAYS uses sequential processing (concurrency = 1)
-  /// to avoid browser memory issues. Files are processed one at a time.
+  /// For web, this uses limited concurrency to balance speed and memory.
   Stream<BatchRenderProgress> renderBatch({
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
@@ -138,10 +137,14 @@ class EffectConfig {
   final double tempo; // 0.5 - 1.5
   final double pitchSemitones; // -12 to +12
   final double reverbAmount; // 0.0 - 1.0
+  final double? reverbMix; // 0.0 - 1.0
   final double echoAmount; // 0.0 - 1.0
   final double eqWarmth; // 0.0 - 1.0
   final double masteringEnabled; // 0.0 or 1.0
   final double masteringAlgorithm; // 0.0=simple, 1.0=phaselimiter
+  final double? masteringTargetLufs; // -24 to -6
+  final double? masteringBassPreservation; // 0.0 - 1.0
+  final double? masteringMode; // 3 or 5
   final double? preDelayMs; // 0 - 200
   final double? hfDamping; // 0.0 - 1.0
   final double? roomScale; // 0.0 - 1.0
@@ -152,10 +155,14 @@ class EffectConfig {
     required this.tempo,
     required this.pitchSemitones,
     required this.reverbAmount,
+    this.reverbMix,
     this.echoAmount = 0.0,
     this.eqWarmth = 0.0,
     this.masteringEnabled = 0.0,
     this.masteringAlgorithm = 0.0,
+    this.masteringTargetLufs,
+    this.masteringBassPreservation,
+    this.masteringMode,
     this.preDelayMs,
     this.hfDamping,
     this.roomScale,
@@ -169,10 +176,14 @@ class EffectConfig {
       tempo: params['tempo'] ?? 1.0,
       pitchSemitones: params['pitch'] ?? 0.0,
       reverbAmount: params['reverbAmount'] ?? 0.0,
+      reverbMix: params['reverbMix'],
       echoAmount: params['echoAmount'] ?? 0.0,
       eqWarmth: params['eqWarmth'] ?? 0.0,
       masteringEnabled: params['masteringEnabled'] ?? 0.0,
       masteringAlgorithm: params['masteringAlgorithm'] ?? 0.0,
+      masteringTargetLufs: params['masteringTargetLufs'],
+      masteringBassPreservation: params['masteringBassPreservation'],
+      masteringMode: params['masteringMode'],
       preDelayMs: params['preDelayMs'],
       hfDamping: params['hfDamping'],
       roomScale: params['roomScale'],

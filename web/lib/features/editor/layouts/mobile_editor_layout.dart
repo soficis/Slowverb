@@ -5,6 +5,7 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/router.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/parameter_definitions.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -327,15 +328,6 @@ class _MobileEffectsSheet extends ConsumerWidget {
   final AudioEditorNotifier notifier;
   final VoidCallback onClose;
 
-  // Parameter definitions (duplicated from editor_screen.dart temporarily)
-  static const _paramDefs = [
-    _ParamDef('tempo', 'Tempo', 0.5, 1.5, 1.0),
-    _ParamDef('pitch', 'Pitch', -12.0, 12.0, 0.0),
-    _ParamDef('reverbAmount', 'Reverb', 0.0, 1.0, 0.0),
-    _ParamDef('echoAmount', 'Echo', 0.0, 1.0, 0.0),
-    _ParamDef('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
-  ];
-
   const _MobileEffectsSheet({
     required this.selectedPresetId,
     required this.parameters,
@@ -502,23 +494,40 @@ class _MobileEffectsSheet extends ConsumerWidget {
                 horizontal: SlowverbTokens.spacingMd,
                 vertical: SlowverbTokens.spacingSm,
               ),
-              children: _paramDefs.map((param) {
-                final value = parameters[param.id] ?? param.defaultValue;
-                return _CompactSlider(
-                  label: param.label,
-                  value: value,
-                  min: param.min,
-                  max: param.max,
-                  formatValue: (v) {
-                    if (param.id == 'tempo') return '${(v * 100).toInt()}%';
-                    if (param.id == 'pitch') {
-                      return '${v.toStringAsFixed(1)} st';
-                    }
-                    return '${(v * 100).toInt()}%';
-                  },
-                  onChanged: (v) => notifier.updateParameter(param.id, v),
-                );
-              }).toList(),
+              children: [
+                ...effectParameterDefinitions.map((param) {
+                  final value = parameters[param.id] ?? param.defaultValue;
+                  return _CompactSlider(
+                    label: param.label,
+                    value: value,
+                    min: param.min,
+                    max: param.max,
+                    formatValue: (v) => _formatEffectValue(param.id, v),
+                    onChanged: (v) => notifier.updateParameter(param.id, v),
+                  );
+                }),
+                if (advancedReverbParameterDefinitions.isNotEmpty)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Advanced Reverb'),
+                    children: advancedReverbParameterDefinitions
+                        .map((param) {
+                          final value =
+                              parameters[param.id] ?? param.defaultValue;
+                          return _CompactSlider(
+                            label: param.label,
+                            value: value,
+                            min: param.min,
+                            max: param.max,
+                            formatValue: (v) =>
+                                _formatEffectValue(param.id, v),
+                            onChanged: (v) =>
+                                notifier.updateParameter(param.id, v),
+                          );
+                        })
+                        .toList(),
+                  ),
+              ],
             ),
           ),
         ],
@@ -596,13 +605,17 @@ class _CompactSlider extends StatelessWidget {
   }
 }
 
-/// Internal parameter definition class.
-class _ParamDef {
-  final String id;
-  final String label;
-  final double min;
-  final double max;
-  final double defaultValue;
-
-  const _ParamDef(this.id, this.label, this.min, this.max, this.defaultValue);
+String _formatEffectValue(String paramId, double value) {
+  switch (paramId) {
+    case 'tempo':
+      return '${(value * 100).toInt()}%';
+    case 'pitch':
+      return '${value.toStringAsFixed(1)} st';
+    case 'preDelayMs':
+      return '${value.toStringAsFixed(0)} ms';
+    case 'stereoWidth':
+      return '${value.toStringAsFixed(2)}x';
+    default:
+      return '${(value * 100).toInt()}%';
+  }
 }

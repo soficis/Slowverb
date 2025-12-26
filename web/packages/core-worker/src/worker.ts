@@ -310,7 +310,7 @@ async function renderWithPhaseLimiter(
 
     postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
     const algorithm = payload.mastering!.algorithm as string;
-    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm);
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm, payload.mastering);
 
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
 
@@ -404,12 +404,22 @@ async function processWithPhaseLimiter(
   rightChannel: Float32Array,
   sampleRate: number,
   jobId: string,
-  algorithm: string
+  algorithm: string,
+  mastering?: RenderPayload["mastering"]
 ): Promise<{ left: Float32Array; right: Float32Array }> {
   return new Promise((resolve, reject) => {
     const isPro = algorithm === "phaselimiter_pro";
     const workerScript = isPro ? "/js/phase_limiter_pro_worker.js" : "/js/phase_limiter_worker.js";
-    const config = isPro ? { mode: 3 } : { targetLufs: -14.0, bassPreservation: 0.5 };
+    const masteringConfig = mastering ?? {};
+    const config = isPro
+      ? { mode: Math.round(masteringConfig.mode ?? 5) }
+      : {
+          targetLufs: typeof masteringConfig.targetLufs === "number" ? masteringConfig.targetLufs : -14.0,
+          bassPreservation:
+            typeof masteringConfig.bassPreservation === "number"
+              ? masteringConfig.bassPreservation
+              : 0.5,
+        };
     const worker = new Worker(workerScript);
 
     const onMessage = (event: MessageEvent) => {

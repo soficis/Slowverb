@@ -394,7 +394,9 @@ class WasmAudioEngine implements AudioEngine {
 
     controller.add(BatchRenderProgress.initial(files.length));
 
-    const int concurrency = 2; // Fixed concurrency for stability
+    const int maxConcurrency = 3;
+    final int concurrency =
+        files.length < maxConcurrency ? files.length : maxConcurrency;
     int nextIndex = 0;
     final activeJobs = <int, Future<void>>{};
 
@@ -615,15 +617,22 @@ class WasmAudioEngine implements AudioEngine {
       spec['mastering'] = <String, Object?>{
         'enabled': true,
         'algorithm': algorithm,
+        if (config.masteringTargetLufs != null)
+          'targetLufs': config.masteringTargetLufs,
+        if (config.masteringBassPreservation != null)
+          'bassPreservation': config.masteringBassPreservation,
+        if (config.masteringMode != null)
+          'mode': config.masteringMode!.round(),
       };
     }
 
     if (config.reverbAmount > 0.0) {
+      final mix = config.reverbMix ?? 0.88;
       spec['reverb'] = <String, Object?>{
         'decay': config.reverbAmount,
-        'preDelayMs': (config.preDelayMs ?? 30).round(),
+        'preDelayMs': (config.preDelayMs ?? 60).round(),
         'roomScale': config.roomScale ?? 0.7,
-        'mix': 1.0,
+        'mix': mix,
       };
     }
 

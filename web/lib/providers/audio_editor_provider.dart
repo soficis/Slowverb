@@ -118,6 +118,10 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
             params['masteringAlgorithm'] = masteringSettings.phaselimiterEnabled
                 ? (masteringSettings.mode >= 5 ? 2.0 : 1.0)
                 : 0.0;
+            params['masteringTargetLufs'] = masteringSettings.targetLufs;
+            params['masteringBassPreservation'] =
+                masteringSettings.bassPreservation;
+            params['masteringMode'] = masteringSettings.mode.toDouble();
             return params;
           }(),
         ),
@@ -158,6 +162,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       newParams['masteringAlgorithm'] = next.phaselimiterEnabled
           ? (next.mode >= 5 ? 2.0 : 1.0)
           : 0.0;
+      newParams['masteringTargetLufs'] = next.targetLufs;
+      newParams['masteringBassPreservation'] = next.bassPreservation;
+      newParams['masteringMode'] = next.mode.toDouble();
       state = state.copyWith(
         currentParameters: newParams,
         isPreviewDirty: true,
@@ -238,6 +245,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         state.currentParameters['masteringEnabled'] ?? 0.0;
     newParams['masteringAlgorithm'] =
         state.currentParameters['masteringAlgorithm'] ?? 0.0;
+    newParams['masteringTargetLufs'] =
+        state.currentParameters['masteringTargetLufs'] ?? -14.0;
+    newParams['masteringBassPreservation'] =
+        state.currentParameters['masteringBassPreservation'] ?? 0.5;
+    newParams['masteringMode'] =
+        state.currentParameters['masteringMode'] ?? 5.0;
 
     state = state.copyWith(
       selectedPreset: preset,
@@ -254,6 +267,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     // 1. Immediate UI update (optimistic update for slider responsiveness)
     final newParams = Map<String, double>.from(state.currentParameters);
     newParams[key] = value;
+    if (key == 'masteringAlgorithm') {
+      newParams['masteringMode'] = value >= 1.5 ? 5.0 : 3.0;
+    }
     state = state.copyWith(currentParameters: newParams, isPreviewDirty: true);
 
     // 2. Debounce expensive preview generation and persistence

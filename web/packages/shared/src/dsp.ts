@@ -8,6 +8,9 @@ export type MasteringAlgorithm = "simple" | "phaselimiter" | "phaselimiter_pro";
 export interface MasteringSpec {
   readonly enabled?: boolean;
   readonly algorithm?: MasteringAlgorithm;
+  readonly targetLufs?: number;
+  readonly bassPreservation?: number;
+  readonly mode?: number;
 }
 
 export interface ReverbSpec {
@@ -45,7 +48,7 @@ export const DSP_LIMITS = {
     decay: { min: 0.0, max: 0.99, default: 0.4 },
     preDelayMs: { min: 20, max: 500, default: 60 },
     roomScale: { min: 0.0, max: 1.0, default: 0.7 },
-    mix: { min: 0.0, max: 1.0, default: 0.3 },
+    mix: { min: 0.0, max: 1.0, default: 0.88 },
   },
   echo: {
     delayMs: { min: 50, max: 1000, default: 300 },

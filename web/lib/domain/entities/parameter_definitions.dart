@@ -30,5 +30,14 @@ const List<ParameterDefinition> effectParameterDefinitions = [
   ParameterDefinition('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
 ];
 
+/// Advanced reverb and spatial controls.
+const List<ParameterDefinition> advancedReverbParameterDefinitions = [
+  ParameterDefinition('preDelayMs', 'Pre-delay', 20.0, 500.0, 60.0),
+  ParameterDefinition('roomScale', 'Room Size', 0.0, 1.0, 0.7),
+  ParameterDefinition('reverbMix', 'Reverb Mix', 0.0, 1.0, 0.88),
+  ParameterDefinition('hfDamping', 'HF Damping', 0.0, 1.0, 0.0),
+  ParameterDefinition('stereoWidth', 'Stereo Width', 0.5, 2.0, 1.0),
+];
+
 /// Seek step in milliseconds for backward/forward navigation.
 const int seekStepMs = 10000;

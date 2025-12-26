@@ -96,23 +96,43 @@ class MobileEffectsSheet extends StatelessWidget {
         horizontal: SlowverbTokens.spacingMd,
         vertical: SlowverbTokens.spacingSm,
       ),
-      children: effectParameterDefinitions.map((param) {
-        final value = parameters[param.id] ?? param.defaultValue;
-        return CompactSlider(
-          label: param.label,
-          value: value,
-          min: param.min,
-          max: param.max,
-          formatValue: (v) => _formatParameterValue(param.id, v),
-          onChanged: (v) => notifier.updateParameter(param.id, v),
-        );
-      }).toList(),
+      children: [
+        ...effectParameterDefinitions.map((param) {
+          final value = parameters[param.id] ?? param.defaultValue;
+          return CompactSlider(
+            label: param.label,
+            value: value,
+            min: param.min,
+            max: param.max,
+            formatValue: (v) => _formatParameterValue(param.id, v),
+            onChanged: (v) => notifier.updateParameter(param.id, v),
+          );
+        }),
+        if (advancedReverbParameterDefinitions.isNotEmpty)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Advanced Reverb'),
+            children: advancedReverbParameterDefinitions.map((param) {
+              final value = parameters[param.id] ?? param.defaultValue;
+              return CompactSlider(
+                label: param.label,
+                value: value,
+                min: param.min,
+                max: param.max,
+                formatValue: (v) => _formatParameterValue(param.id, v),
+                onChanged: (v) => notifier.updateParameter(param.id, v),
+              );
+            }).toList(),
+          ),
+      ],
     );
   }
 
   String _formatParameterValue(String paramId, double value) {
     if (paramId == 'tempo') return '${(value * 100).toInt()}%';
     if (paramId == 'pitch') return '${value.toStringAsFixed(1)} st';
+    if (paramId == 'preDelayMs') return '${value.toStringAsFixed(0)} ms';
+    if (paramId == 'stereoWidth') return '${value.toStringAsFixed(2)}x';
     return '${(value * 100).toInt()}%';
   }
 }
