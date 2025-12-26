@@ -27,6 +27,10 @@ DEFINE_int32(mastering5_early_termination_patience, 500,
 DEFINE_double(mastering5_mastering_level, 0.5, "Mastering5 mastering level.");
 DEFINE_string(mastering5_mastering_reference_file, "",
               "Mastering reference json path.");
+DEFINE_bool(mastering5_use_warm_start, true,
+            "Use Level 3 result as initial seed for Level 5 optimization.");
+DEFINE_int32(mastering5_analysis_downsample_factor, 4,
+             "Downsample factor for analysis (1=disabled, 4=11kHz).");
 
 // Pre-compression
 DEFINE_double(pre_compression_threshold, 6.0,

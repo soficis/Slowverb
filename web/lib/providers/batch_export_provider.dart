@@ -6,6 +6,7 @@ import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/services/logger_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Status of batch export operation
@@ -100,6 +101,7 @@ class BatchExportState {
 class BatchExportNotifier extends StateNotifier<BatchExportState> {
   final Ref _ref;
   StreamSubscription<BatchRenderProgress>? _batchSubscription;
+  static const _log = SlowverbLogger('BatchExport');
 
   BatchExportNotifier(this._ref)
     : super(BatchExportState(selectedPreset: Presets.slowedReverb));
@@ -135,9 +137,7 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
           ),
         );
       } catch (e) {
-        // Skip files that fail to load
-        // ignore: avoid_print
-        print('[BatchExport] Failed to load ${file.fileName}: $e');
+        _log.warning('Failed to load ${file.fileName}', e);
       }
     }
 

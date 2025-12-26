@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/services/logger_service.dart';
 import 'package:slowverb_web/services/phase_limiter_service.dart';
 import 'package:slowverb_web/services/worker_pool_service.dart';
 import 'package:slowverb_web/services/zip_export_service.dart';
@@ -105,6 +106,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
   final PhaseLimiterService _phaseLimiter = PhaseLimiterService();
   final ZipExportService _zipService = ZipExportService();
   final WorkerPoolService _workerPool = WorkerPoolService();
+  static const _log = SlowverbLogger('Mastering');
   bool _isCancelled = false;
 
   MasteringNotifier(this._ref) : super(const MasteringState());
@@ -144,8 +146,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
           ),
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('[Mastering] Failed to load ${file.fileName}: $e');
+        _log.warning('Failed to load ${file.fileName}', e);
       }
     }
 

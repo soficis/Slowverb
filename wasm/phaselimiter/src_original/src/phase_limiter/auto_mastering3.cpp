@@ -49,6 +49,10 @@ constexpr int verbose = 0;
 constexpr int verbose2 = 0;
 constexpr int verbose3 = 0;
 
+#ifdef PHASELIMITER_ENABLE_FFTW
+phase_limiter::Mastering3OptimumParams g_last_mastering3_optimum_params;
+#endif
+
 struct State {
 	int param_count() const {
 		return 4 * comp_band_count;
@@ -651,6 +655,12 @@ void AutoMastering3(std::vector<float> *_wave, const int sample_rate, const std:
 	double optimum_eval;
 	SimulatedAnnealing(initialize_state, generate_neighbor, evaluate,
 		FLAGS_mastering3_iteration, 1, std::pow(0.01, 1.0 / FLAGS_mastering3_iteration), progress_callback, &optimum_state, &optimum_eval);
+
+	g_last_mastering3_optimum_params.comp_band_count = comp_band_count;
+	g_last_mastering3_optimum_params.compressor_ratios = optimum_state.compressor_ratios;
+	g_last_mastering3_optimum_params.compressor_thresholds = optimum_state.compressor_thresholds;
+	g_last_mastering3_optimum_params.compressor_wets = optimum_state.compressor_wets;
+	g_last_mastering3_optimum_params.compressor_gains = optimum_state.compressor_gains;
 	if (verbose) {
 		State state;
 		initialize_state(&state);
@@ -838,6 +848,19 @@ void AutoMastering3(std::vector<float> *_wave, const int sample_rate, const std:
 	progress_callback(1);
 
 	*_wave = std::move(result);
+#endif
+}
+
+Mastering3OptimumParams GetMastering3OptimumParams(const std::vector<float> &wave, const int sample_rate, const std::function<void(float)> &progress_callback) {
+#ifdef PHASELIMITER_ENABLE_FFTW
+	std::vector<float> temp_wave = wave;
+	AutoMastering3(&temp_wave, sample_rate, progress_callback);
+	return g_last_mastering3_optimum_params;
+#else
+	(void)wave;
+	(void)sample_rate;
+	(void)progress_callback;
+	return Mastering3OptimumParams();
 #endif
 }
 

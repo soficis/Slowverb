@@ -7,35 +7,18 @@ import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/parameter_definitions.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/editor/layouts/mobile_editor_layout.dart';
-import 'package:slowverb_web/providers/audio_editor_provider.dart';
-import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
+import 'package:slowverb_web/providers/audio_editor_provider.dart';
+import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/preset_repository_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:uuid/uuid.dart';
-
-// Parameter metadata definition
-class _ParamDef {
-  final String id;
-  final String label;
-  final double min;
-  final double max;
-  final double defaultValue;
-  const _ParamDef(this.id, this.label, this.min, this.max, this.defaultValue);
-}
-
-const _kParameterDefinitions = [
-  _ParamDef('tempo', 'Tempo', 0.5, 1.5, 1.0),
-  _ParamDef('pitch', 'Pitch', -12.0, 12.0, 0.0),
-  _ParamDef('reverbAmount', 'Reverb', 0.0, 1.0, 0.0),
-  _ParamDef('echoAmount', 'Echo', 0.0, 1.0, 0.0),
-  _ParamDef('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
-];
 
 /// Main editor screen with VaporXP layout shared with the web experience.
 class EditorScreen extends ConsumerStatefulWidget {
@@ -901,7 +884,7 @@ class _MobileEffectsSheet extends StatelessWidget {
                 horizontal: SlowverbTokens.spacingMd,
                 vertical: SlowverbTokens.spacingSm,
               ),
-              children: _kParameterDefinitions.map((param) {
+              children: effectParameterDefinitions.map((param) {
                 final value = parameters[param.id] ?? param.defaultValue;
                 return _CompactSlider(
                   label: param.label,
@@ -1742,7 +1725,7 @@ class _EffectColumn extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ..._kParameterDefinitions.map(
+                      ...effectParameterDefinitions.map(
                         (param) => Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: EffectSlider(
@@ -1934,7 +1917,7 @@ class _EffectColumn extends ConsumerWidget {
               ),
               const SizedBox(height: SlowverbTokens.spacingMd),
               // All effect parameters
-              ..._kParameterDefinitions.map(
+              ...effectParameterDefinitions.map(
                 (param) => Padding(
                   padding: const EdgeInsets.only(
                     bottom: SlowverbTokens.spacingMd,
