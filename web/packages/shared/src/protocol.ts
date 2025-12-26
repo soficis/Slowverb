@@ -1,4 +1,4 @@
-import type { MasteringSpec } from "./dsp.js";
+import type { DspSpec, MasteringSpec } from "./dsp.js";
 
 export type WorkerRequestType =
   | "INIT"
@@ -34,6 +34,9 @@ export interface ProbePayload {
 export interface RenderPayload {
   readonly fileId: string;
   readonly filterGraph?: string;
+  readonly dspSpec?: DspSpec;
+  readonly reverbIR?: ArrayBuffer;
+  readonly reverbIRSampleRate?: number;
   readonly mastering?: MasteringSpec;
   readonly format: ExportFormat;
   readonly bitrateKbps?: number;

@@ -34,7 +34,7 @@ const List<ParameterDefinition> effectParameterDefinitions = [
 const List<ParameterDefinition> advancedReverbParameterDefinitions = [
   ParameterDefinition('preDelayMs', 'Pre-delay', 20.0, 500.0, 60.0),
   ParameterDefinition('roomScale', 'Room Size', 0.0, 1.0, 0.7),
-  ParameterDefinition('reverbMix', 'Reverb Mix', 0.0, 1.0, 0.88),
+  ParameterDefinition('reverbMix', 'Reverb Mix', 0.0, 1.0, 0.6),
   ParameterDefinition('hfDamping', 'HF Damping', 0.0, 1.0, 0.0),
   ParameterDefinition('stereoWidth', 'Stereo Width', 0.5, 2.0, 1.0),
 ];

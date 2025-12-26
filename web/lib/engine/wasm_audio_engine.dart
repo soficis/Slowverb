@@ -607,6 +607,17 @@ class WasmAudioEngine implements AudioEngine {
       'normalize': false,
     };
 
+    final quality = <String, Object?>{};
+    if (config.hqTimeStretch > 0.5) {
+      quality['timeStretch'] = 'soundtouch';
+    }
+    if (config.hqReverb > 0.5 && config.reverbAmount > 0.0) {
+      quality['reverb'] = 'tone';
+    }
+    if (quality.isNotEmpty) {
+      spec['quality'] = quality;
+    }
+
     if (config.masteringEnabled > 0.5) {
       String algorithm = 'simple';
       if (config.masteringAlgorithm > 1.5) {
@@ -627,7 +638,7 @@ class WasmAudioEngine implements AudioEngine {
     }
 
     if (config.reverbAmount > 0.0) {
-      final mix = config.reverbMix ?? 0.88;
+      final mix = config.reverbMix ?? 0.6;
       spec['reverb'] = <String, Object?>{
         'decay': config.reverbAmount,
         'preDelayMs': (config.preDelayMs ?? 60).round(),

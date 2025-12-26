@@ -112,17 +112,35 @@ class MobileEffectsSheet extends StatelessWidget {
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text('Advanced Reverb'),
-            children: advancedReverbParameterDefinitions.map((param) {
-              final value = parameters[param.id] ?? param.defaultValue;
-              return CompactSlider(
-                label: param.label,
-                value: value,
-                min: param.min,
-                max: param.max,
-                formatValue: (v) => _formatParameterValue(param.id, v),
-                onChanged: (v) => notifier.updateParameter(param.id, v),
-              );
-            }).toList(),
+            children: [
+              CompactToggleRow(
+                label: 'HQ Slow (SoundTouch)',
+                value: (parameters['hqTimeStretch'] ?? 0.0) > 0.5,
+                onChanged: (enabled) => notifier.updateParameter(
+                  'hqTimeStretch',
+                  enabled ? 1.0 : 0.0,
+                ),
+              ),
+              CompactToggleRow(
+                label: 'HQ Reverb (Tone IR)',
+                value: (parameters['hqReverb'] ?? 0.0) > 0.5,
+                onChanged: (enabled) => notifier.updateParameter(
+                  'hqReverb',
+                  enabled ? 1.0 : 0.0,
+                ),
+              ),
+              ...advancedReverbParameterDefinitions.map((param) {
+                final value = parameters[param.id] ?? param.defaultValue;
+                return CompactSlider(
+                  label: param.label,
+                  value: value,
+                  min: param.min,
+                  max: param.max,
+                  formatValue: (v) => _formatParameterValue(param.id, v),
+                  onChanged: (v) => notifier.updateParameter(param.id, v),
+                );
+              }),
+            ],
           ),
       ],
     );
@@ -199,6 +217,44 @@ class CompactSlider extends StatelessWidget {
               ).textTheme.labelSmall?.copyWith(color: SlowverbColors.neonCyan),
               textAlign: TextAlign.right,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CompactToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const CompactToggleRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: SlowverbColors.neonCyan,
+            activeTrackColor: SlowverbColors.neonCyan.withValues(alpha: 0.4),
           ),
         ],
       ),

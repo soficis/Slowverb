@@ -90,6 +90,11 @@ async function encodeFromFloatPCM(params) {
   return { type: "encode-pcm-ok", payload: { buffer: result.buffer } };
 }
 
+async function resumeAudioContext() {
+  const ok = await engine.resumeAudioContext();
+  return { type: ok ? "audio-context-ok" : "audio-context-blocked" };
+}
+
 function buildCallbacks(jobId) {
   return {
     onProgress: (value, stage) => emitProgress(jobId, value, stage),
@@ -180,6 +185,7 @@ window.SlowverbBridge = {
   cancel,
   decodeToFloatPCM,
   encodeFromFloatPCM,
+  resumeAudioContext,
   setProgressHandler,
   setLogHandler,
   getMemoryUsage,

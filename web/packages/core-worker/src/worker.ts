@@ -1,5 +1,5 @@
 import createFFmpegCore from "@ffmpeg/core";
-import { log } from "@slowverb/shared";
+import { compileFilterChain, compileFilterChainParts, log } from "@slowverb/shared";
 import type {
   InitPayload,
   RenderPayload,
@@ -8,6 +8,7 @@ import type {
   WorkerRequest,
   WorkerResultPayload,
 } from "@slowverb/shared";
+import { SimpleFilter, SoundTouch } from "soundtouchjs";
 
 const ctx = self as DedicatedWorkerGlobalScope;
 
@@ -225,11 +226,14 @@ async function handleRender(
   const { payload, jobId, type } = request;
   const isPreview = type === "RENDER_PREVIEW";
   const shouldUsePhaseLimiter = isPhaseLimiterEnabled(payload);
+  const shouldUseSoundTouch = isSoundTouchEnabled(payload);
+  const shouldUseToneReverb = isToneReverbEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb;
   const filesToCleanup = new Set<string>([payload.fileId]);
 
   activeJobId = jobId;
   try {
-    if (!shouldUsePhaseLimiter) {
+    if (!shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
       const { args, outputFile } = buildRenderPlan(payload, jobId, isPreview);
       filesToCleanup.add(outputFile);
       log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
@@ -250,12 +254,59 @@ async function handleRender(
       return;
     }
 
-    log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
-    const result = await renderWithPhaseLimiter(payload, jobId, isPreview);
-    filesToCleanup.add(result.outputFile);
-    for (const temp of result.tempFiles) filesToCleanup.add(temp);
-    log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    if (shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
+      log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
+      const result = await renderWithPhaseLimiter(payload, jobId, isPreview);
+      filesToCleanup.add(result.outputFile);
+      for (const temp of result.tempFiles) filesToCleanup.add(temp);
+      log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
+      postRenderResult(request, result.buffer);
+      return;
+    }
+
+    log("info", "render:start(pcm-pipeline)", {
+      jobId,
+      fileId: payload.fileId,
+      format: payload.format,
+      soundtouch: shouldUseSoundTouch,
+      toneReverb: shouldUseToneReverb,
+      phaselimiter: shouldUsePhaseLimiter,
+    });
+
+    try {
+      const result = await renderWithPcmPipeline(payload, jobId, isPreview, {
+        applyPhaseLimiter: shouldUsePhaseLimiter,
+      });
+      filesToCleanup.add(result.outputFile);
+      for (const temp of result.tempFiles) filesToCleanup.add(temp);
+      log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
+      postRenderResult(request, result.buffer);
+      return;
+    } catch (error) {
+      if (!shouldUseSoundTouch) throw error;
+
+      log("warn", "render:pcm-pipeline-failed:fallback-ffmpeg", {
+        jobId,
+        fileId: payload.fileId,
+        error: (error as Error)?.message ?? String(error),
+      });
+
+      const fallback = buildFallbackRenderPayload(payload);
+      if (shouldUsePhaseLimiter) {
+        const result = await renderWithPhaseLimiter(fallback, jobId, isPreview);
+        filesToCleanup.add(result.outputFile);
+        for (const temp of result.tempFiles) filesToCleanup.add(temp);
+        postRenderResult(request, result.buffer);
+        return;
+      }
+
+      const { args, outputFile } = buildRenderPlan(fallback, jobId, isPreview);
+      filesToCleanup.add(outputFile);
+      withProgressStage("processing", 0, 1, () => ffmpeg.exec(...args));
+      const buffer = await readOutput(outputFile);
+      postRenderResult(request, buffer);
+      return;
+    }
   } finally {
     activeJobId = undefined;
     activeStage = undefined;
@@ -270,6 +321,57 @@ function isPhaseLimiterEnabled(payload: RenderPayload): boolean {
   const mastering = payload.mastering;
   if (!mastering) return false;
   return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
+}
+
+function isSoundTouchEnabled(payload: RenderPayload): boolean {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.timeStretch ?? "ffmpeg";
+  if (algorithm !== "soundtouch") return false;
+  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1.0;
+  const pitch = typeof spec?.pitch === "number" ? spec.pitch : 0.0;
+  return tempo !== 1.0 || pitch !== 0.0;
+}
+
+function isToneReverbEnabled(payload: RenderPayload): boolean {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.reverb ?? "ffmpeg";
+  return algorithm === "tone" && spec?.reverb != null;
+}
+
+function buildFallbackRenderPayload(payload: RenderPayload): RenderPayload {
+  const spec = payload.dspSpec;
+  if (!spec) return payload;
+
+  const fallbackSpec = {
+    ...spec,
+    quality: { ...(spec.quality ?? {}), timeStretch: "ffmpeg" as const, reverb: "ffmpeg" as const },
+  };
+
+  return {
+    ...payload,
+    dspSpec: fallbackSpec,
+    filterGraph: compileFilterChain(fallbackSpec),
+    reverbIR: undefined,
+    reverbIRSampleRate: undefined,
+  };
+}
+
+function buildFallbackReverbRenderPayload(payload: RenderPayload): RenderPayload {
+  const spec = payload.dspSpec;
+  if (!spec) return payload;
+
+  const fallbackSpec = {
+    ...spec,
+    quality: { ...(spec.quality ?? {}), reverb: "ffmpeg" as const },
+  };
+
+  return {
+    ...payload,
+    dspSpec: fallbackSpec,
+    filterGraph: compileFilterChain(fallbackSpec),
+    reverbIR: undefined,
+    reverbIRSampleRate: undefined,
+  };
 }
 
 function withProgressStage(stage: string, offset: number, scale: number, run: () => void): void {
@@ -341,12 +443,141 @@ async function renderWithPhaseLimiter(
   }
 }
 
+async function renderWithPcmPipeline(
+  payload: RenderPayload,
+  jobId: string,
+  isPreview: boolean,
+  options: { applyPhaseLimiter: boolean }
+): Promise<{ buffer: ArrayBuffer; outputFile: string; tempFiles: string[] }> {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+
+  const sampleRate = 44100;
+  const rawFile = `${payload.fileId}-${jobId}-raw.f32`;
+  const stretchedFile = `${payload.fileId}-${jobId}-stretched.f32`;
+  const effectsFile = `${payload.fileId}-${jobId}-effects.f32`;
+  const masteredFile = `${payload.fileId}-${jobId}-mastered.f32`;
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+
+  const tempFiles: string[] = [rawFile];
+  let currentPcmFile = rawFile;
+
+  // 1) Decode to float PCM (no filter graph applied; we need raw samples for SoundTouch/Tone).
+  const decodeArgs = buildRawDecodePlan(payload, rawFile, sampleRate, isPreview);
+  postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
+  withProgressStage("decoding", 0, 0.15, () => ffmpeg.exec(...decodeArgs));
+
+  // 2) High-quality time stretch / pitch-shift with SoundTouchJS.
+  if (isSoundTouchEnabled(payload)) {
+    const { tempo, pitchSemitones } = resolveTimeStretchParams(payload);
+    postEvent({ type: "PROGRESS", jobId, value: 0.15, stage: "time-stretch" });
+    const stretched = applySoundTouch(rawFile, tempo, pitchSemitones, jobId);
+    writeInterleavedF32(stretchedFile, stretched);
+    tempFiles.push(stretchedFile);
+    currentPcmFile = stretchedFile;
+    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "time-stretch" });
+  }
+
+  // 3) Apply remaining FFmpeg filter graph (eq/reverb/echo/lowpass/stereo/simple mastering), if any.
+  if (isToneReverbEnabled(payload)) {
+    if (!payload.dspSpec || !payload.dspSpec.reverb) {
+      throw new Error("Tone reverb enabled but dspSpec.reverb missing");
+    }
+    if (!payload.reverbIR) {
+      log("warn", "tone-reverb:missing-ir:fallback-ffmpeg", { jobId, fileId: payload.fileId });
+      const fallback = buildFallbackReverbRenderPayload(payload);
+      if (fallback.filterGraph && fallback.filterGraph !== "anull") {
+        const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, fallback.filterGraph, sampleRate);
+        postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+        withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
+        tempFiles.push(effectsFile);
+        currentPcmFile = effectsFile;
+      }
+    } else {
+      const irFile = `${payload.fileId}-${jobId}-ir.f32`;
+      ffmpeg.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
+      tempFiles.push(irFile);
+
+      const { pre, post } = compileFilterChainParts(payload.dspSpec);
+      const mix = clampNumber(payload.dspSpec.reverb.mix, 0.0, 1.0);
+      const dry = (1 - mix).toFixed(4);
+      const wet = mix.toFixed(4);
+      const irSampleRate = typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
+
+      const args: string[] = [];
+      args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile);
+      args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
+
+      const chains: string[] = [];
+      chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
+      chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
+      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet}[wet]`);
+      chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
+
+      args.push("-filter_complex", chains.join(";"));
+      args.push("-map", "[out]");
+      args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", effectsFile);
+
+      postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+      withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...args));
+      tempFiles.push(effectsFile);
+      currentPcmFile = effectsFile;
+    }
+  } else if (payload.filterGraph && payload.filterGraph !== "anull") {
+    const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, payload.filterGraph, sampleRate);
+    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+    withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
+    tempFiles.push(effectsFile);
+    currentPcmFile = effectsFile;
+  }
+
+  // 4) Optional PhaseLimiter mastering on PCM.
+  if (options.applyPhaseLimiter) {
+    const { left, right } = readAndSplitF32Stereo(currentPcmFile);
+
+    postEvent({ type: "PROGRESS", jobId, value: 0.7, stage: "mastering" });
+    const algorithm = payload.mastering!.algorithm as string;
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm, payload.mastering, {
+      offset: 0.7,
+      scale: 0.2,
+    });
+    writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
+    tempFiles.push(masteredFile);
+    currentPcmFile = masteredFile;
+  }
+
+  // 5) Encode from float PCM to target format.
+  const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
+  postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });
+  withProgressStage("encoding", 0.9, 0.1, () => ffmpeg.exec(...encodeArgs));
+
+  const buffer = await readOutput(outputFile);
+  return { buffer, outputFile, tempFiles };
+}
+
 function buildDecodePlan(payload: RenderPayload, outputFile: string, sampleRate: number, isPreview: boolean): string[] {
   const args: string[] = [];
   addTrimArgs(args, payload, isPreview);
   args.push("-i", payload.fileId);
   if (payload.filterGraph && payload.filterGraph !== "anull") {
     args.push("-af", payload.filterGraph);
+  }
+  args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
+  return args;
+}
+
+function buildRawDecodePlan(payload: RenderPayload, outputFile: string, sampleRate: number, isPreview: boolean): string[] {
+  const args: string[] = [];
+  addTrimArgs(args, payload, isPreview);
+  args.push("-i", payload.fileId);
+  args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
+  return args;
+}
+
+function buildPcmFilterPlan(inputFile: string, outputFile: string, filterGraph: string, sampleRate: number): string[] {
+  const args: string[] = [];
+  args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", inputFile);
+  if (filterGraph !== "anull") {
+    args.push("-af", filterGraph);
   }
   args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
   return args;
@@ -393,6 +624,93 @@ function writeInterleavedF32Stereo(path: string, left: Float32Array, right: Floa
   ffmpeg.FS.writeFile(path, new Uint8Array(interleaved.buffer));
 }
 
+function readInterleavedF32(path: string): Float32Array {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const bytes = ffmpeg.FS.readFile(path);
+  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
+  const pcm = bytes.slice().buffer;
+  const interleaved = new Float32Array(pcm);
+  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+  return interleaved;
+}
+
+function writeInterleavedF32(path: string, interleaved: Float32Array): void {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const bytes = new Uint8Array(interleaved.buffer, interleaved.byteOffset, interleaved.byteLength);
+  ffmpeg.FS.writeFile(path, bytes);
+}
+
+function resolveTimeStretchParams(payload: RenderPayload): { tempo: number; pitchSemitones: number } {
+  const spec = payload.dspSpec;
+  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1.0;
+  const pitchSemitones = typeof spec?.pitch === "number" ? spec.pitch : 0.0;
+  return {
+    tempo: clampNumber(tempo, 0.5, 2.0),
+    pitchSemitones: clampNumber(pitchSemitones, -12.0, 12.0),
+  };
+}
+
+function applySoundTouch(inputFile: string, tempo: number, pitchSemitones: number, jobId: string): Float32Array {
+  const input = readInterleavedF32(inputFile);
+  const totalFrames = Math.floor(input.length / 2);
+
+  const soundTouch = new SoundTouch();
+  // Ensure the internal Stretch instance is configured for our sample rate.
+  soundTouch.stretch?.setParameters?.(44100, 0, 0, 0);
+  soundTouch.tempo = tempo;
+  soundTouch.pitchSemitones = pitchSemitones;
+
+  class InterleavedStereoSource {
+    private position = 0;
+    constructor(private readonly samples: Float32Array) {}
+    extract(target: Float32Array, numFrames: number = 0, position: number = 0): number {
+      this.position = position;
+      const start = position * 2;
+      const availableFrames = Math.max(0, Math.floor((this.samples.length - start) / 2));
+      const frames = Math.max(0, Math.min(numFrames, availableFrames));
+      if (frames > 0) {
+        target.set(this.samples.subarray(start, start + frames * 2));
+      }
+      return frames;
+    }
+  }
+
+  const filter = new SimpleFilter(new InterleavedStereoSource(input), soundTouch);
+  const chunkFrames = 16384;
+  const chunk = new Float32Array(chunkFrames * 2);
+  const chunks: Float32Array[] = [];
+
+  let lastEmit = -1;
+  for (;;) {
+    const frames = filter.extract(chunk, chunkFrames);
+    if (frames === 0) break;
+    chunks.push(chunk.slice(0, frames * 2));
+
+    const sourceFrames = filter.sourcePosition ?? 0;
+    const percent = totalFrames > 0 ? clamp01(sourceFrames / totalFrames) : 1;
+    if (percent - lastEmit >= 0.05) {
+      postEvent({ type: "PROGRESS", jobId, value: 0.15 + percent * 0.2, stage: "time-stretch" });
+      lastEmit = percent;
+    }
+  }
+
+  const totalSamples = chunks.reduce((sum, block) => sum + block.length, 0);
+  const output = new Float32Array(totalSamples);
+  let offset = 0;
+  for (const block of chunks) {
+    output.set(block, offset);
+    offset += block.length;
+  }
+  return output;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
 function appendSimpleMasteringToFilterGraph(filterGraph?: string): string {
   if (!filterGraph || filterGraph === "anull") return SIMPLE_MASTERING_FILTER_CHAIN;
   if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return filterGraph;
@@ -405,7 +723,8 @@ async function processWithPhaseLimiter(
   sampleRate: number,
   jobId: string,
   algorithm: string,
-  mastering?: RenderPayload["mastering"]
+  mastering?: RenderPayload["mastering"],
+  progressRange: { offset: number; scale: number } = { offset: 0.2, scale: 0.6 }
 ): Promise<{ left: Float32Array; right: Float32Array }> {
   return new Promise((resolve, reject) => {
     const isPro = algorithm === "phaselimiter_pro";
@@ -427,7 +746,7 @@ async function processWithPhaseLimiter(
       const type = data.type;
       if (type === "progress") {
         const percent = typeof data.percent === "number" ? data.percent : 0;
-        const scaled = 0.2 + clamp01(percent) * 0.6;
+        const scaled = progressRange.offset + clamp01(percent) * progressRange.scale;
         postEvent({ type: "PROGRESS", jobId, value: scaled, stage: "mastering" });
         return;
       }

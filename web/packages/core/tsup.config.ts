@@ -8,7 +8,7 @@ export default defineConfig({
   outDir: "dist",
   treeshake: true,
   splitting: false,
-  noExternal: ["@slowverb/shared", "@slowverb/core-worker"],
+  noExternal: ["@slowverb/shared", "@slowverb/core-worker", "tone"],
   platform: "browser",
   shims: false,
 });

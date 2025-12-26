@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.6",
-    "@slowverb/shared": "0.0.1"
+    "@slowverb/shared": "0.0.1",
+    "soundtouchjs": "^0.1.30"
   }
 }

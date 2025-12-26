@@ -52,7 +52,7 @@ class FilterChainBuilder {
       filters.add(
         _buildReverbFilter(
           amount: config.reverbAmount,
-          mix: config.reverbMix ?? 0.88,
+          mix: config.reverbMix ?? 0.6,
           preDelayMs: config.preDelayMs ?? 60,
           roomScale: config.roomScale ?? 0.7,
         ),

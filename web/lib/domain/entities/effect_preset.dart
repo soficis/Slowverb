@@ -26,8 +26,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.95,
       'pitch': -2.0,
-      'reverbAmount': 0.7,
-      'reverbMix': 0.9,
+      'reverbAmount': 0.49,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.63,
       'preDelayMs': 80.0,
       'roomScale': 0.75,
       'hfDamping': 0.15,
@@ -46,8 +48,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.74074, // -25.926% = multiply by 0.74074
       'pitch': -4.5, // Matching tempo slow
-      'reverbAmount': 0.4, // 40% reverbance from screenshot
-      'reverbMix': 0.85,
+      'reverbAmount': 0.28, // Reduced for HQ reverb (was 0.4)
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.59,
       'preDelayMs': 90.0,
       'roomScale': 0.8,
       'hfDamping': 0.2,
@@ -66,8 +70,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.81, // -19% speed from Audacity
       'pitch': -3.2, // Matching tempo slow (~19% = ~3.2 semitones)
-      'reverbAmount': 0.5, // 50% reverbance
-      'reverbMix': 0.82,
+      'reverbAmount': 0.35, // Reduced for HQ reverb (was 0.5)
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.57,
       'preDelayMs': 70.0,
       'roomScale': 0.7,
       'echoAmount': 0.2,
@@ -85,8 +91,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.94, // 94% from screenshot
       'pitch': -3.5, // -3.5 semitones from screenshot
-      'reverbAmount': 0.85, // 85% reverb from screenshot
-      'reverbMix': 0.92,
+      'reverbAmount': 0.59, // Reduced for HQ reverb (was 0.85)
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.64,
       'preDelayMs': 120.0,
       'roomScale': 0.85,
       'hfDamping': 0.25,
@@ -106,8 +114,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.78,
       'pitch': -3.0,
-      'reverbAmount': 0.8,
-      'reverbMix': 0.88,
+      'reverbAmount': 0.56,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.61,
       'preDelayMs': 110.0,
       'roomScale': 0.9,
       'hfDamping': 0.3,
@@ -127,7 +137,7 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.25,
       'pitch': 4.0,
-      'reverbAmount': 0.3,
+      'reverbAmount': 0.21,
       'echoAmount': 0.1,
       'eqWarmth': 0.2,
       'masteringEnabled': 0.0,
@@ -143,7 +153,9 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.65,
       'pitch': -4.0,
-      'reverbAmount': 0.6,
+      'reverbAmount': 0.42,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
       'echoAmount': 0.8,
       'eqWarmth': 0.5,
       'masteringEnabled': 0.0,
@@ -159,7 +171,7 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.92,
       'pitch': -1.0,
-      'reverbAmount': 0.5,
+      'reverbAmount': 0.35,
       'echoAmount': 0.3,
       'eqWarmth': 0.8,
       'masteringEnabled': 0.0,
@@ -175,8 +187,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.70,
       'pitch': -2.5,
-      'reverbAmount': 0.9,
-      'reverbMix': 0.95,
+      'reverbAmount': 0.63,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.66,
       'preDelayMs': 140.0,
       'roomScale': 0.95,
       'hfDamping': 0.2,
@@ -196,7 +210,7 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.80,
       'pitch': -5.0,
-      'reverbAmount': 0.4,
+      'reverbAmount': 0.28,
       'echoAmount': 0.2,
       'eqWarmth': 0.9,
       'masteringEnabled': 0.0,
@@ -212,7 +226,7 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.0,
       'pitch': 2.0,
-      'reverbAmount': 0.2,
+      'reverbAmount': 0.14,
       'echoAmount': 0.1,
       'eqWarmth': 0.1,
       'masteringEnabled': 0.0,
@@ -228,8 +242,10 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.72,
       'pitch': -3.5,
-      'reverbAmount': 0.85,
-      'reverbMix': 0.9,
+      'reverbAmount': 0.59,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.63,
       'preDelayMs': 120.0,
       'roomScale': 0.8,
       'hfDamping': 0.6,
@@ -249,8 +265,8 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.05,
       'pitch': 1.0,
-      'reverbAmount': 0.6,
-      'reverbMix': 0.8,
+      'reverbAmount': 0.42,
+      'reverbMix': 0.56,
       'preDelayMs': 70.0,
       'roomScale': 0.7,
       'stereoWidth': 1.2,
@@ -269,7 +285,9 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.55,
       'pitch': -6.0,
-      'reverbAmount': 0.7,
+      'reverbAmount': 0.49,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
       'echoAmount': 0.6,
       'eqWarmth': 0.5,
       'masteringEnabled': 0.0,

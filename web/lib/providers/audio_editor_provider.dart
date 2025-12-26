@@ -16,6 +16,8 @@ import 'package:uuid/uuid.dart';
 
 /// State for audio editor
 class AudioEditorState {
+  static const Object _noChange = Object();
+
   final String? audioFileName;
   final String? fileId;
   final AudioMetadata? metadata;
@@ -64,7 +66,7 @@ class AudioEditorState {
     double? playbackPosition,
     EffectPreset? selectedPreset,
     Map<String, double>? currentParameters,
-    String? error,
+    Object? error = _noChange,
     String? projectId,
     String? projectName,
     DateTime? projectCreatedAt,
@@ -82,7 +84,7 @@ class AudioEditorState {
       playbackPosition: playbackPosition ?? this.playbackPosition,
       selectedPreset: selectedPreset ?? this.selectedPreset,
       currentParameters: currentParameters ?? this.currentParameters,
-      error: error,
+      error: identical(error, _noChange) ? this.error : error as String?,
       projectId: projectId ?? this.projectId,
       projectName: projectName ?? this.projectName,
       projectCreatedAt: projectCreatedAt ?? this.projectCreatedAt,
@@ -289,7 +291,18 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       'isPlaying': state.isPlaying,
     });
     if (state.fileId == null) {
-      _log.debug('No file loaded');
+      final message = state.isLoading
+          ? 'Loading audio…'
+          : 'No file loaded. Import a track first.';
+      _log.debug(message);
+      state = state.copyWith(error: message);
+      return;
+    }
+
+    if (state.isLoading) {
+      const message = 'Still processing… Please wait.';
+      _log.debug(message);
+      state = state.copyWith(error: message);
       return;
     }
 

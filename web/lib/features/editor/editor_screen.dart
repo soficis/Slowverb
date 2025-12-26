@@ -906,25 +906,100 @@ class _MobileEffectsSheet extends StatelessWidget {
                           .bodyMedium
                           ?.copyWith(color: SlowverbColors.textSecondary),
                     ),
-                    children: advancedReverbParameterDefinitions
-                        .map((param) {
-                          final value =
-                              parameters[param.id] ?? param.defaultValue;
-                          return _CompactSlider(
-                            label: param.label,
-                            value: value,
-                            min: param.min,
-                            max: param.max,
-                            formatValue: (v) =>
-                                _formatEffectValue(param.id, v),
-                            onChanged: (v) =>
-                                notifier.updateParameter(param.id, v),
-                          );
-                        })
-                        .toList(),
+                    children: [
+                      _HqProcessingToggles(
+                        parameters: parameters,
+                        onUpdateParam: notifier.updateParameter,
+                      ),
+                      ...advancedReverbParameterDefinitions.map((param) {
+                        final value = parameters[param.id] ?? param.defaultValue;
+                        return _CompactSlider(
+                          label: param.label,
+                          value: value,
+                          min: param.min,
+                          max: param.max,
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (v) => notifier.updateParameter(param.id, v),
+                        );
+                      }),
+                    ],
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HqProcessingToggles extends StatelessWidget {
+  final Map<String, double> parameters;
+  final void Function(String, double) onUpdateParam;
+
+  const _HqProcessingToggles({
+    required this.parameters,
+    required this.onUpdateParam,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hqTimeStretch = (parameters['hqTimeStretch'] ?? 0.0) > 0.5;
+    final hqReverb = (parameters['hqReverb'] ?? 0.0) > 0.5;
+
+    return Column(
+      children: [
+        _CompactToggleRow(
+          label: 'HQ Slow (SoundTouch)',
+          value: hqTimeStretch,
+          onChanged: (enabled) => onUpdateParam(
+            'hqTimeStretch',
+            enabled ? 1.0 : 0.0,
+          ),
+        ),
+        _CompactToggleRow(
+          label: 'HQ Reverb (Tone IR)',
+          value: hqReverb,
+          onChanged: (enabled) => onUpdateParam(
+            'hqReverb',
+            enabled ? 1.0 : 0.0,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CompactToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: SlowverbColors.neonCyan,
+            activeTrackColor: SlowverbColors.neonCyan.withValues(alpha: 0.4),
           ),
         ],
       ),
@@ -1776,30 +1851,32 @@ class _EffectColumn extends ConsumerWidget {
                                 .bodyMedium
                                 ?.copyWith(color: SlowverbColors.textSecondary),
                           ),
-                          children: advancedReverbParameterDefinitions
-                              .map(
-                                (param) => Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: 8),
-                                  child: EffectSlider(
-                                    label: param.label,
-                                    value: parameters[param.id] ??
-                                        param.defaultValue,
-                                    min: param.min,
-                                    max: param.max,
-                                    unit: '',
-                                    formatValue: (v) => _formatEffectValue(
-                                      param.id,
-                                      v,
-                                    ),
-                                    onChanged: (value) => onUpdateParam(
-                                      param.id,
-                                      value,
-                                    ),
+                          children: [
+                            _HqProcessingToggles(
+                              parameters: parameters,
+                              onUpdateParam: onUpdateParam,
+                            ),
+                            ...advancedReverbParameterDefinitions.map(
+                              (param) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: EffectSlider(
+                                  label: param.label,
+                                  value: parameters[param.id] ?? param.defaultValue,
+                                  min: param.min,
+                                  max: param.max,
+                                  unit: '',
+                                  formatValue: (v) => _formatEffectValue(
+                                    param.id,
+                                    v,
+                                  ),
+                                  onChanged: (value) => onUpdateParam(
+                                    param.id,
+                                    value,
                                   ),
                                 ),
-                              )
-                              .toList(),
+                              ),
+                            ),
+                          ],
                         ),
                     ],
                   ),
@@ -2002,26 +2079,28 @@ class _EffectColumn extends ConsumerWidget {
                         .bodyMedium
                         ?.copyWith(color: SlowverbColors.textSecondary),
                   ),
-                  children: advancedReverbParameterDefinitions
-                      .map(
-                        (param) => Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: SlowverbTokens.spacingMd,
-                          ),
-                          child: EffectSlider(
-                            label: param.label,
-                            value: parameters[param.id] ?? param.defaultValue,
-                            min: param.min,
-                            max: param.max,
-                            unit: '',
-                            formatValue: (v) =>
-                                _formatEffectValue(param.id, v),
-                            onChanged: (value) =>
-                                onUpdateParam(param.id, value),
-                          ),
+                  children: [
+                    _HqProcessingToggles(
+                      parameters: parameters,
+                      onUpdateParam: onUpdateParam,
+                    ),
+                    ...advancedReverbParameterDefinitions.map(
+                      (param) => Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: SlowverbTokens.spacingMd,
                         ),
-                      )
-                      .toList(),
+                        child: EffectSlider(
+                          label: param.label,
+                          value: parameters[param.id] ?? param.defaultValue,
+                          min: param.min,
+                          max: param.max,
+                          unit: '',
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (value) => onUpdateParam(param.id, value),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
             ],
           );

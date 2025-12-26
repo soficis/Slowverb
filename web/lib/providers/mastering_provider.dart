@@ -222,9 +222,9 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
     state = state.copyWith(
       settings: state.settings.copyWith(targetLufs: clamped),
     );
-    _ref.read(app_settings.masteringSettingsProvider.notifier).setTargetLufs(
-          clamped,
-        );
+    _ref
+        .read(app_settings.masteringSettingsProvider.notifier)
+        .setTargetLufs(clamped);
   }
 
   /// Update bass preservation (0.0 to 1.0)
@@ -300,12 +300,15 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
 
       if (state.isBatchMode && _canParallelizeBatch(state.queuedFiles)) {
         await _workerPool.initialize();
-        final decodedTasks = <({
-          MasteringQueueFile file,
-          Float32List left,
-          Float32List right,
-          int sampleRate,
-        })>[];
+        final decodedTasks =
+            <
+              ({
+                MasteringQueueFile file,
+                Float32List left,
+                Float32List right,
+                int sampleRate,
+              })
+            >[];
 
         for (var i = 0; i < totalFiles; i++) {
           if (_isCancelled) break;
@@ -367,7 +370,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
               .toList();
 
           final masteredResults = await _workerPool.processAll(tasks);
-          await progressSub?.cancel();
+          await progressSub.cancel();
 
           if (!_isCancelled) {
             var encodedCount = 0;
@@ -386,8 +389,10 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
                   currentFileIndex: i + 1,
                   totalFiles: totalFiles,
                   currentFileName: file.fileName,
-                  percent: (0.85 + (encodedCount / totalFiles) * 0.15)
-                      .clamp(0.0, 1.0),
+                  percent: (0.85 + (encodedCount / totalFiles) * 0.15).clamp(
+                    0.0,
+                    1.0,
+                  ),
                   stage: 'Encoding',
                 ),
               );
@@ -399,17 +404,13 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
                 format: state.selectedFormat,
                 bitrateKbps: state.selectedFormat == 'mp3'
                     ? state.mp3Bitrate
-                    : (state.selectedFormat == 'aac'
-                        ? state.aacBitrate
-                        : null),
+                    : (state.selectedFormat == 'aac' ? state.aacBitrate : null),
               );
 
               results.add(encoded);
               encodedCount++;
               _updateFileStatus(file.fileId, FileProcessStatus.completed);
-              state = state.copyWith(
-                completedResults: List.from(results),
-              );
+              state = state.copyWith(completedResults: List.from(results));
             }
           }
         }
@@ -440,8 +441,10 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
           // 2. Process with PhaseLimiter
           state = state.copyWith(
             status: MasteringStatus.mastering,
-            progress:
-                state.progress?.copyWith(stage: 'Mastering', percent: 0.3),
+            progress: state.progress?.copyWith(
+              stage: 'Mastering',
+              percent: 0.3,
+            ),
           );
 
           final mastered = await _phaseLimiter.process(

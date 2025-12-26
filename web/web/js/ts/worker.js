@@ -4595,12 +4595,804 @@ var createFFmpegCore = (() => {
   });
 })();
 var ffmpeg_core_default = createFFmpegCore;
+
+// ../shared/dist/index.js
+var DSP_LIMITS = {
+  tempo: { min: 0.5, max: 1.5},
+  pitch: { min: -12, max: 12},
+  reverb: {
+    decay: { min: 0, max: 0.99},
+    preDelayMs: { min: 20, max: 500},
+    roomScale: { min: 0, max: 1, default: 0.7 },
+    mix: { min: 0, max: 1}
+  },
+  echo: {
+    delayMs: { min: 50, max: 1e3},
+    feedback: { min: 0, max: 0.9}
+  },
+  lowPassCutoffHz: { min: 200, max: 2e4},
+  eqWarmth: { min: 0, max: 1},
+  hfDamping: { min: 0, max: 1},
+  stereoWidth: { min: 0.5, max: 2}
+};
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
+function compileFilterChain(spec) {
+  const filters = [];
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(filters, spec.tempo);
+    appendPitch(filters, spec.pitch);
+  }
+  appendEqWarmth(filters, spec.eqWarmth);
+  const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
+  if (reverbAlgorithm !== "tone") {
+    appendReverb(filters, spec.reverb);
+  }
+  appendEcho(filters, spec.echo);
+  appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(filters, spec.stereoWidth);
+  appendMastering(filters, spec.mastering);
+  return filters.length > 0 ? filters.join(",") : "anull";
+}
+function compileFilterChainParts(spec) {
+  const pre = [];
+  const post = [];
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(pre, spec.tempo);
+    appendPitch(pre, spec.pitch);
+  }
+  appendEqWarmth(pre, spec.eqWarmth);
+  appendEcho(post, spec.echo);
+  appendLowpass(post, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(post, spec.stereoWidth);
+  appendMastering(post, spec.mastering);
+  return {
+    pre: pre.length > 0 ? pre.join(",") : "anull",
+    post: post.length > 0 ? post.join(",") : "anull"
+  };
+}
+function appendTempo(filters, tempo) {
+  if (tempo === void 0 || tempo === 1) return;
+  filters.push(buildTempoFilter(clamp(tempo, DSP_LIMITS.tempo)));
+}
+function appendPitch(filters, pitch) {
+  if (pitch === void 0 || pitch === 0) return;
+  filters.push(buildPitchFilter(clamp(pitch, DSP_LIMITS.pitch)));
+}
+function appendEqWarmth(filters, warmth) {
+  if (warmth === void 0 || warmth <= 0) return;
+  filters.push(buildEqWarmthFilter(clamp(warmth, DSP_LIMITS.eqWarmth)));
+}
+function appendReverb(filters, reverb) {
+  if (!reverb) return;
+  filters.push(buildReverbFilter(normalizeReverb(reverb)));
+}
+function appendEcho(filters, echo) {
+  if (!echo) return;
+  filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+function appendLowpass(filters, cutoffHz, hfDamping) {
+  const lowpass = buildLowpassFilter(cutoffHz, hfDamping);
+  if (!lowpass) return;
+  filters.push(lowpass);
+}
+function appendStereoWidth(filters, width) {
+  if (width === void 0 || width === 1) return;
+  filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
+}
+function appendMastering(filters, mastering) {
+  if (!isMasteringEnabled(mastering)) return;
+  const algorithm = mastering?.algorithm ?? "simple";
+  if (algorithm !== "simple") return;
+  filters.push(buildSimpleMasteringFilterChain());
+}
+function isMasteringEnabled(mastering) {
+  return mastering?.enabled === true;
+}
+function buildSimpleMasteringFilterChain() {
+  return SIMPLE_MASTERING_FILTER_CHAIN;
+}
+function buildTempoFilter(tempo) {
+  if (tempo >= 0.5 && tempo <= 2) {
+    return `atempo=${tempo.toFixed(4)}`;
+  }
+  const filters = [];
+  let remaining = tempo;
+  while (remaining < 0.5) {
+    filters.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+  while (remaining > 2) {
+    filters.push("atempo=2.0");
+    remaining /= 2;
+  }
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
+}
+function buildPitchFilter(semitones) {
+  const rate = Math.pow(2, semitones / 12);
+  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
+}
+function buildEqWarmthFilter(warmth) {
+  const gain = (warmth * 6).toFixed(1);
+  return `equalizer=f=300:t=h:width=200:g=${gain}`;
+}
+function buildReverbFilter(reverb) {
+  const d1 = reverb.preDelayMs;
+  const scale = 1 + reverb.roomScale;
+  const d2 = Math.round(d1 * (1 + 0.35 * scale));
+  const d3 = Math.round(d1 * (1 + 0.7 * scale));
+  const d4 = Math.round(d1 * (1.4 + 0.6 * scale));
+  const d5 = Math.round(d1 * (1.9 + 0.8 * scale));
+  const decay = reverb.decay;
+  const mix = reverb.mix;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.95).toFixed(2)}|${(decay * 0.82).toFixed(2)}|${(decay * 0.67).toFixed(2)}|${(decay * 0.52).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+}
+function buildEchoFilter(echo) {
+  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+}
+function buildLowpassFilter(cutoffHz, hfDamping) {
+  if (cutoffHz !== void 0) {
+    const clamped = clamp(cutoffHz, DSP_LIMITS.lowPassCutoffHz);
+    return `lowpass=f=${clamped}`;
+  }
+  if (hfDamping !== void 0 && hfDamping > 0) {
+    const clamped = clamp(hfDamping, DSP_LIMITS.hfDamping);
+    const cutoff = Math.round(2e4 - clamped * 18e3);
+    return `lowpass=f=${cutoff}`;
+  }
+  return null;
+}
+function buildStereoFilter(width) {
+  if (width < 1) {
+    return `stereotools=mlev=${width.toFixed(2)}`;
+  }
+  const m = (width - 1) * 2.5;
+  return `extrastereo=m=${m.toFixed(2)}`;
+}
+function normalizeReverb(reverb) {
+  return {
+    decay: clamp(reverb.decay, DSP_LIMITS.reverb.decay),
+    preDelayMs: clamp(reverb.preDelayMs, DSP_LIMITS.reverb.preDelayMs),
+    roomScale: clamp(
+      reverb.roomScale ?? DSP_LIMITS.reverb.roomScale.default,
+      DSP_LIMITS.reverb.roomScale
+    ),
+    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix)
+  };
+}
+function normalizeEcho(echo) {
+  return {
+    delayMs: clamp(echo.delayMs, DSP_LIMITS.echo.delayMs),
+    feedback: clamp(echo.feedback, DSP_LIMITS.echo.feedback)
+  };
+}
+function clamp(value, limits) {
+  if (value < limits.min) return limits.min;
+  if (value > limits.max) return limits.max;
+  return value;
+}
 function log(level, message, data) {
   const env = import.meta.env;
   if (env?.DEV && typeof console?.[level] === "function") {
     console[level](message, data);
   }
 }
+
+// ../../node_modules/soundtouchjs/dist/soundtouch.js
+var FifoSampleBuffer = class {
+  constructor() {
+    this._vector = new Float32Array();
+    this._position = 0;
+    this._frameCount = 0;
+  }
+  get vector() {
+    return this._vector;
+  }
+  get position() {
+    return this._position;
+  }
+  get startIndex() {
+    return this._position * 2;
+  }
+  get frameCount() {
+    return this._frameCount;
+  }
+  get endIndex() {
+    return (this._position + this._frameCount) * 2;
+  }
+  clear() {
+    this.receive(this._frameCount);
+    this.rewind();
+  }
+  put(numFrames) {
+    this._frameCount += numFrames;
+  }
+  putSamples(samples, position, numFrames = 0) {
+    position = position || 0;
+    const sourceOffset = position * 2;
+    if (!(numFrames >= 0)) {
+      numFrames = (samples.length - sourceOffset) / 2;
+    }
+    const numSamples = numFrames * 2;
+    this.ensureCapacity(numFrames + this._frameCount);
+    const destOffset = this.endIndex;
+    this.vector.set(samples.subarray(sourceOffset, sourceOffset + numSamples), destOffset);
+    this._frameCount += numFrames;
+  }
+  putBuffer(buffer, position, numFrames = 0) {
+    position = position || 0;
+    if (!(numFrames >= 0)) {
+      numFrames = buffer.frameCount - position;
+    }
+    this.putSamples(buffer.vector, buffer.position + position, numFrames);
+  }
+  receive(numFrames) {
+    if (!(numFrames >= 0) || numFrames > this._frameCount) {
+      numFrames = this.frameCount;
+    }
+    this._frameCount -= numFrames;
+    this._position += numFrames;
+  }
+  receiveSamples(output, numFrames = 0) {
+    const numSamples = numFrames * 2;
+    const sourceOffset = this.startIndex;
+    output.set(this._vector.subarray(sourceOffset, sourceOffset + numSamples));
+    this.receive(numFrames);
+  }
+  extract(output, position = 0, numFrames = 0) {
+    const sourceOffset = this.startIndex + position * 2;
+    const numSamples = numFrames * 2;
+    output.set(this._vector.subarray(sourceOffset, sourceOffset + numSamples));
+  }
+  ensureCapacity(numFrames = 0) {
+    const minLength = parseInt(numFrames * 2);
+    if (this._vector.length < minLength) {
+      const newVector = new Float32Array(minLength);
+      newVector.set(this._vector.subarray(this.startIndex, this.endIndex));
+      this._vector = newVector;
+      this._position = 0;
+    } else {
+      this.rewind();
+    }
+  }
+  ensureAdditionalCapacity(numFrames = 0) {
+    this.ensureCapacity(this._frameCount + numFrames);
+  }
+  rewind() {
+    if (this._position > 0) {
+      this._vector.set(this._vector.subarray(this.startIndex, this.endIndex));
+      this._position = 0;
+    }
+  }
+};
+var AbstractFifoSamplePipe = class {
+  constructor(createBuffers) {
+    if (createBuffers) {
+      this._inputBuffer = new FifoSampleBuffer();
+      this._outputBuffer = new FifoSampleBuffer();
+    } else {
+      this._inputBuffer = this._outputBuffer = null;
+    }
+  }
+  get inputBuffer() {
+    return this._inputBuffer;
+  }
+  set inputBuffer(inputBuffer) {
+    this._inputBuffer = inputBuffer;
+  }
+  get outputBuffer() {
+    return this._outputBuffer;
+  }
+  set outputBuffer(outputBuffer) {
+    this._outputBuffer = outputBuffer;
+  }
+  clear() {
+    this._inputBuffer.clear();
+    this._outputBuffer.clear();
+  }
+};
+var RateTransposer = class _RateTransposer extends AbstractFifoSamplePipe {
+  constructor(createBuffers) {
+    super(createBuffers);
+    this.reset();
+    this._rate = 1;
+  }
+  set rate(rate) {
+    this._rate = rate;
+  }
+  reset() {
+    this.slopeCount = 0;
+    this.prevSampleL = 0;
+    this.prevSampleR = 0;
+  }
+  clone() {
+    const result = new _RateTransposer();
+    result.rate = this._rate;
+    return result;
+  }
+  process() {
+    const numFrames = this._inputBuffer.frameCount;
+    this._outputBuffer.ensureAdditionalCapacity(numFrames / this._rate + 1);
+    const numFramesOutput = this.transpose(numFrames);
+    this._inputBuffer.receive();
+    this._outputBuffer.put(numFramesOutput);
+  }
+  transpose(numFrames = 0) {
+    if (numFrames === 0) {
+      return 0;
+    }
+    const src = this._inputBuffer.vector;
+    const srcOffset = this._inputBuffer.startIndex;
+    const dest = this._outputBuffer.vector;
+    const destOffset = this._outputBuffer.endIndex;
+    let used = 0;
+    let i = 0;
+    while (this.slopeCount < 1) {
+      dest[destOffset + 2 * i] = (1 - this.slopeCount) * this.prevSampleL + this.slopeCount * src[srcOffset];
+      dest[destOffset + 2 * i + 1] = (1 - this.slopeCount) * this.prevSampleR + this.slopeCount * src[srcOffset + 1];
+      i = i + 1;
+      this.slopeCount += this._rate;
+    }
+    this.slopeCount -= 1;
+    if (numFrames !== 1) {
+      out: while (true) {
+        while (this.slopeCount > 1) {
+          this.slopeCount -= 1;
+          used = used + 1;
+          if (used >= numFrames - 1) {
+            break out;
+          }
+        }
+        const srcIndex = srcOffset + 2 * used;
+        dest[destOffset + 2 * i] = (1 - this.slopeCount) * src[srcIndex] + this.slopeCount * src[srcIndex + 2];
+        dest[destOffset + 2 * i + 1] = (1 - this.slopeCount) * src[srcIndex + 1] + this.slopeCount * src[srcIndex + 3];
+        i = i + 1;
+        this.slopeCount += this._rate;
+      }
+    }
+    this.prevSampleL = src[srcOffset + 2 * numFrames - 2];
+    this.prevSampleR = src[srcOffset + 2 * numFrames - 1];
+    return i;
+  }
+};
+var FilterSupport = class {
+  constructor(pipe) {
+    this._pipe = pipe;
+  }
+  get pipe() {
+    return this._pipe;
+  }
+  get inputBuffer() {
+    return this._pipe.inputBuffer;
+  }
+  get outputBuffer() {
+    return this._pipe.outputBuffer;
+  }
+  fillInputBuffer() {
+    throw new Error("fillInputBuffer() not overridden");
+  }
+  fillOutputBuffer(numFrames = 0) {
+    while (this.outputBuffer.frameCount < numFrames) {
+      const numInputFrames = 8192 * 2 - this.inputBuffer.frameCount;
+      this.fillInputBuffer(numInputFrames);
+      if (this.inputBuffer.frameCount < 8192 * 2) {
+        break;
+      }
+      this._pipe.process();
+    }
+  }
+  clear() {
+    this._pipe.clear();
+  }
+};
+var noop = function() {
+  return;
+};
+var SimpleFilter = class extends FilterSupport {
+  constructor(sourceSound, pipe, callback = noop) {
+    super(pipe);
+    this.callback = callback;
+    this.sourceSound = sourceSound;
+    this.historyBufferSize = 22050;
+    this._sourcePosition = 0;
+    this.outputBufferPosition = 0;
+    this._position = 0;
+  }
+  get position() {
+    return this._position;
+  }
+  set position(position) {
+    if (position > this._position) {
+      throw new RangeError("New position may not be greater than current position");
+    }
+    const newOutputBufferPosition = this.outputBufferPosition - (this._position - position);
+    if (newOutputBufferPosition < 0) {
+      throw new RangeError("New position falls outside of history buffer");
+    }
+    this.outputBufferPosition = newOutputBufferPosition;
+    this._position = position;
+  }
+  get sourcePosition() {
+    return this._sourcePosition;
+  }
+  set sourcePosition(sourcePosition) {
+    this.clear();
+    this._sourcePosition = sourcePosition;
+  }
+  onEnd() {
+    this.callback();
+  }
+  fillInputBuffer(numFrames = 0) {
+    const samples = new Float32Array(numFrames * 2);
+    const numFramesExtracted = this.sourceSound.extract(samples, numFrames, this._sourcePosition);
+    this._sourcePosition += numFramesExtracted;
+    this.inputBuffer.putSamples(samples, 0, numFramesExtracted);
+  }
+  extract(target, numFrames = 0) {
+    this.fillOutputBuffer(this.outputBufferPosition + numFrames);
+    const numFramesExtracted = Math.min(numFrames, this.outputBuffer.frameCount - this.outputBufferPosition);
+    this.outputBuffer.extract(target, this.outputBufferPosition, numFramesExtracted);
+    const currentFrames = this.outputBufferPosition + numFramesExtracted;
+    this.outputBufferPosition = Math.min(this.historyBufferSize, currentFrames);
+    this.outputBuffer.receive(Math.max(currentFrames - this.historyBufferSize, 0));
+    this._position += numFramesExtracted;
+    return numFramesExtracted;
+  }
+  handleSampleData(event) {
+    this.extract(event.data, 4096);
+  }
+  clear() {
+    super.clear();
+    this.outputBufferPosition = 0;
+  }
+};
+var USE_AUTO_SEQUENCE_LEN = 0;
+var DEFAULT_SEQUENCE_MS = USE_AUTO_SEQUENCE_LEN;
+var USE_AUTO_SEEKWINDOW_LEN = 0;
+var DEFAULT_SEEKWINDOW_MS = USE_AUTO_SEEKWINDOW_LEN;
+var DEFAULT_OVERLAP_MS = 8;
+var _SCAN_OFFSETS = [[124, 186, 248, 310, 372, 434, 496, 558, 620, 682, 744, 806, 868, 930, 992, 1054, 1116, 1178, 1240, 1302, 1364, 1426, 1488, 0], [-100, -75, -50, -25, 25, 50, 75, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-20, -15, -10, -5, 5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-4, -3, -2, -1, 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
+var AUTOSEQ_TEMPO_LOW = 0.5;
+var AUTOSEQ_TEMPO_TOP = 2;
+var AUTOSEQ_AT_MIN = 125;
+var AUTOSEQ_AT_MAX = 50;
+var AUTOSEQ_K = (AUTOSEQ_AT_MAX - AUTOSEQ_AT_MIN) / (AUTOSEQ_TEMPO_TOP - AUTOSEQ_TEMPO_LOW);
+var AUTOSEQ_C = AUTOSEQ_AT_MIN - AUTOSEQ_K * AUTOSEQ_TEMPO_LOW;
+var AUTOSEEK_AT_MIN = 25;
+var AUTOSEEK_AT_MAX = 15;
+var AUTOSEEK_K = (AUTOSEEK_AT_MAX - AUTOSEEK_AT_MIN) / (AUTOSEQ_TEMPO_TOP - AUTOSEQ_TEMPO_LOW);
+var AUTOSEEK_C = AUTOSEEK_AT_MIN - AUTOSEEK_K * AUTOSEQ_TEMPO_LOW;
+var Stretch = class _Stretch extends AbstractFifoSamplePipe {
+  constructor(createBuffers) {
+    super(createBuffers);
+    this._quickSeek = true;
+    this.midBufferDirty = false;
+    this.midBuffer = null;
+    this.overlapLength = 0;
+    this.autoSeqSetting = true;
+    this.autoSeekSetting = true;
+    this._tempo = 1;
+    this.setParameters(44100, DEFAULT_SEQUENCE_MS, DEFAULT_SEEKWINDOW_MS, DEFAULT_OVERLAP_MS);
+  }
+  clear() {
+    super.clear();
+    this.clearMidBuffer();
+  }
+  clearMidBuffer() {
+    if (this.midBufferDirty) {
+      this.midBufferDirty = false;
+      this.midBuffer = null;
+    }
+  }
+  setParameters(sampleRate, sequenceMs, seekWindowMs, overlapMs) {
+    if (sampleRate > 0) {
+      this.sampleRate = sampleRate;
+    }
+    if (overlapMs > 0) {
+      this.overlapMs = overlapMs;
+    }
+    if (sequenceMs > 0) {
+      this.sequenceMs = sequenceMs;
+      this.autoSeqSetting = false;
+    } else {
+      this.autoSeqSetting = true;
+    }
+    if (seekWindowMs > 0) {
+      this.seekWindowMs = seekWindowMs;
+      this.autoSeekSetting = false;
+    } else {
+      this.autoSeekSetting = true;
+    }
+    this.calculateSequenceParameters();
+    this.calculateOverlapLength(this.overlapMs);
+    this.tempo = this._tempo;
+  }
+  set tempo(newTempo) {
+    let intskip;
+    this._tempo = newTempo;
+    this.calculateSequenceParameters();
+    this.nominalSkip = this._tempo * (this.seekWindowLength - this.overlapLength);
+    this.skipFract = 0;
+    intskip = Math.floor(this.nominalSkip + 0.5);
+    this.sampleReq = Math.max(intskip + this.overlapLength, this.seekWindowLength) + this.seekLength;
+  }
+  get tempo() {
+    return this._tempo;
+  }
+  get inputChunkSize() {
+    return this.sampleReq;
+  }
+  get outputChunkSize() {
+    return this.overlapLength + Math.max(0, this.seekWindowLength - 2 * this.overlapLength);
+  }
+  calculateOverlapLength(overlapInMsec = 0) {
+    let newOvl;
+    newOvl = this.sampleRate * overlapInMsec / 1e3;
+    newOvl = newOvl < 16 ? 16 : newOvl;
+    newOvl -= newOvl % 8;
+    this.overlapLength = newOvl;
+    this.refMidBuffer = new Float32Array(this.overlapLength * 2);
+    this.midBuffer = new Float32Array(this.overlapLength * 2);
+  }
+  checkLimits(x, mi, ma) {
+    return x < mi ? mi : x > ma ? ma : x;
+  }
+  calculateSequenceParameters() {
+    let seq;
+    let seek;
+    if (this.autoSeqSetting) {
+      seq = AUTOSEQ_C + AUTOSEQ_K * this._tempo;
+      seq = this.checkLimits(seq, AUTOSEQ_AT_MAX, AUTOSEQ_AT_MIN);
+      this.sequenceMs = Math.floor(seq + 0.5);
+    }
+    if (this.autoSeekSetting) {
+      seek = AUTOSEEK_C + AUTOSEEK_K * this._tempo;
+      seek = this.checkLimits(seek, AUTOSEEK_AT_MAX, AUTOSEEK_AT_MIN);
+      this.seekWindowMs = Math.floor(seek + 0.5);
+    }
+    this.seekWindowLength = Math.floor(this.sampleRate * this.sequenceMs / 1e3);
+    this.seekLength = Math.floor(this.sampleRate * this.seekWindowMs / 1e3);
+  }
+  set quickSeek(enable) {
+    this._quickSeek = enable;
+  }
+  clone() {
+    const result = new _Stretch();
+    result.tempo = this._tempo;
+    result.setParameters(this.sampleRate, this.sequenceMs, this.seekWindowMs, this.overlapMs);
+    return result;
+  }
+  seekBestOverlapPosition() {
+    return this._quickSeek ? this.seekBestOverlapPositionStereoQuick() : this.seekBestOverlapPositionStereo();
+  }
+  seekBestOverlapPositionStereo() {
+    let bestOffset;
+    let bestCorrelation;
+    let correlation;
+    let i = 0;
+    this.preCalculateCorrelationReferenceStereo();
+    bestOffset = 0;
+    bestCorrelation = Number.MIN_VALUE;
+    for (; i < this.seekLength; i = i + 1) {
+      correlation = this.calculateCrossCorrelationStereo(2 * i, this.refMidBuffer);
+      if (correlation > bestCorrelation) {
+        bestCorrelation = correlation;
+        bestOffset = i;
+      }
+    }
+    return bestOffset;
+  }
+  seekBestOverlapPositionStereoQuick() {
+    let bestOffset;
+    let bestCorrelation;
+    let correlation;
+    let scanCount = 0;
+    let correlationOffset;
+    let tempOffset;
+    this.preCalculateCorrelationReferenceStereo();
+    bestCorrelation = Number.MIN_VALUE;
+    bestOffset = 0;
+    correlationOffset = 0;
+    tempOffset = 0;
+    for (; scanCount < 4; scanCount = scanCount + 1) {
+      let j = 0;
+      while (_SCAN_OFFSETS[scanCount][j]) {
+        tempOffset = correlationOffset + _SCAN_OFFSETS[scanCount][j];
+        if (tempOffset >= this.seekLength) {
+          break;
+        }
+        correlation = this.calculateCrossCorrelationStereo(2 * tempOffset, this.refMidBuffer);
+        if (correlation > bestCorrelation) {
+          bestCorrelation = correlation;
+          bestOffset = tempOffset;
+        }
+        j = j + 1;
+      }
+      correlationOffset = bestOffset;
+    }
+    return bestOffset;
+  }
+  preCalculateCorrelationReferenceStereo() {
+    let i = 0;
+    let context;
+    let temp;
+    for (; i < this.overlapLength; i = i + 1) {
+      temp = i * (this.overlapLength - i);
+      context = i * 2;
+      this.refMidBuffer[context] = this.midBuffer[context] * temp;
+      this.refMidBuffer[context + 1] = this.midBuffer[context + 1] * temp;
+    }
+  }
+  calculateCrossCorrelationStereo(mixingPosition, compare) {
+    const mixing = this._inputBuffer.vector;
+    mixingPosition += this._inputBuffer.startIndex;
+    let correlation = 0;
+    let i = 2;
+    const calcLength = 2 * this.overlapLength;
+    let mixingOffset;
+    for (; i < calcLength; i = i + 2) {
+      mixingOffset = i + mixingPosition;
+      correlation += mixing[mixingOffset] * compare[i] + mixing[mixingOffset + 1] * compare[i + 1];
+    }
+    return correlation;
+  }
+  overlap(overlapPosition) {
+    this.overlapStereo(2 * overlapPosition);
+  }
+  overlapStereo(inputPosition) {
+    const input = this._inputBuffer.vector;
+    inputPosition += this._inputBuffer.startIndex;
+    const output = this._outputBuffer.vector;
+    const outputPosition = this._outputBuffer.endIndex;
+    let i = 0;
+    let context;
+    let tempFrame;
+    const frameScale = 1 / this.overlapLength;
+    let fi;
+    let inputOffset;
+    let outputOffset;
+    for (; i < this.overlapLength; i = i + 1) {
+      tempFrame = (this.overlapLength - i) * frameScale;
+      fi = i * frameScale;
+      context = 2 * i;
+      inputOffset = context + inputPosition;
+      outputOffset = context + outputPosition;
+      output[outputOffset + 0] = input[inputOffset + 0] * fi + this.midBuffer[context + 0] * tempFrame;
+      output[outputOffset + 1] = input[inputOffset + 1] * fi + this.midBuffer[context + 1] * tempFrame;
+    }
+  }
+  process() {
+    let offset;
+    let temp;
+    let overlapSkip;
+    if (this.midBuffer === null) {
+      if (this._inputBuffer.frameCount < this.overlapLength) {
+        return;
+      }
+      this.midBuffer = new Float32Array(this.overlapLength * 2);
+      this._inputBuffer.receiveSamples(this.midBuffer, this.overlapLength);
+    }
+    while (this._inputBuffer.frameCount >= this.sampleReq) {
+      offset = this.seekBestOverlapPosition();
+      this._outputBuffer.ensureAdditionalCapacity(this.overlapLength);
+      this.overlap(Math.floor(offset));
+      this._outputBuffer.put(this.overlapLength);
+      temp = this.seekWindowLength - 2 * this.overlapLength;
+      if (temp > 0) {
+        this._outputBuffer.putBuffer(this._inputBuffer, offset + this.overlapLength, temp);
+      }
+      const start = this._inputBuffer.startIndex + 2 * (offset + this.seekWindowLength - this.overlapLength);
+      this.midBuffer.set(this._inputBuffer.vector.subarray(start, start + 2 * this.overlapLength));
+      this.skipFract += this.nominalSkip;
+      overlapSkip = Math.floor(this.skipFract);
+      this.skipFract -= overlapSkip;
+      this._inputBuffer.receive(overlapSkip);
+    }
+  }
+};
+var testFloatEqual = function(a, b) {
+  return (a > b ? a - b : b - a) > 1e-10;
+};
+var SoundTouch = class _SoundTouch {
+  constructor() {
+    this.transposer = new RateTransposer(false);
+    this.stretch = new Stretch(false);
+    this._inputBuffer = new FifoSampleBuffer();
+    this._intermediateBuffer = new FifoSampleBuffer();
+    this._outputBuffer = new FifoSampleBuffer();
+    this._rate = 0;
+    this._tempo = 0;
+    this.virtualPitch = 1;
+    this.virtualRate = 1;
+    this.virtualTempo = 1;
+    this.calculateEffectiveRateAndTempo();
+  }
+  clear() {
+    this.transposer.clear();
+    this.stretch.clear();
+  }
+  clone() {
+    const result = new _SoundTouch();
+    result.rate = this.rate;
+    result.tempo = this.tempo;
+    return result;
+  }
+  get rate() {
+    return this._rate;
+  }
+  set rate(rate) {
+    this.virtualRate = rate;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set rateChange(rateChange) {
+    this._rate = 1 + 0.01 * rateChange;
+  }
+  get tempo() {
+    return this._tempo;
+  }
+  set tempo(tempo) {
+    this.virtualTempo = tempo;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set tempoChange(tempoChange) {
+    this.tempo = 1 + 0.01 * tempoChange;
+  }
+  set pitch(pitch) {
+    this.virtualPitch = pitch;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set pitchOctaves(pitchOctaves) {
+    this.pitch = Math.exp(0.69314718056 * pitchOctaves);
+    this.calculateEffectiveRateAndTempo();
+  }
+  set pitchSemitones(pitchSemitones) {
+    this.pitchOctaves = pitchSemitones / 12;
+  }
+  get inputBuffer() {
+    return this._inputBuffer;
+  }
+  get outputBuffer() {
+    return this._outputBuffer;
+  }
+  calculateEffectiveRateAndTempo() {
+    const previousTempo = this._tempo;
+    const previousRate = this._rate;
+    this._tempo = this.virtualTempo / this.virtualPitch;
+    this._rate = this.virtualRate * this.virtualPitch;
+    if (testFloatEqual(this._tempo, previousTempo)) {
+      this.stretch.tempo = this._tempo;
+    }
+    if (testFloatEqual(this._rate, previousRate)) {
+      this.transposer.rate = this._rate;
+    }
+    if (this._rate > 1) {
+      if (this._outputBuffer != this.transposer.outputBuffer) {
+        this.stretch.inputBuffer = this._inputBuffer;
+        this.stretch.outputBuffer = this._intermediateBuffer;
+        this.transposer.inputBuffer = this._intermediateBuffer;
+        this.transposer.outputBuffer = this._outputBuffer;
+      }
+    } else {
+      if (this._outputBuffer != this.stretch.outputBuffer) {
+        this.transposer.inputBuffer = this._inputBuffer;
+        this.transposer.outputBuffer = this._intermediateBuffer;
+        this.stretch.inputBuffer = this._intermediateBuffer;
+        this.stretch.outputBuffer = this._outputBuffer;
+      }
+    }
+  }
+  process() {
+    if (this._rate > 1) {
+      this.stretch.process();
+      this.transposer.process();
+    } else {
+      this.transposer.process();
+      this.stretch.process();
+    }
+  }
+};
 
 // src/worker.ts
 var ctx = self;
@@ -4627,7 +5419,7 @@ var activeProgressOffset = 0;
 var activeProgressScale = 1;
 var loadedFiles = /* @__PURE__ */ new Set();
 var logCapture = null;
-var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
+var SIMPLE_MASTERING_FILTER_CHAIN2 = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
 ctx.onmessage = (event) => {
   const request = event.data;
   log("debug", "request:received", { type: request.type, jobId: getJobId(request) });
@@ -4781,10 +5573,13 @@ async function handleRender(request) {
   const { payload, jobId, type } = request;
   const isPreview = type === "RENDER_PREVIEW";
   const shouldUsePhaseLimiter = isPhaseLimiterEnabled(payload);
+  const shouldUseSoundTouch = isSoundTouchEnabled(payload);
+  const shouldUseToneReverb = isToneReverbEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb;
   const filesToCleanup = /* @__PURE__ */ new Set([payload.fileId]);
   activeJobId = jobId;
   try {
-    if (!shouldUsePhaseLimiter) {
+    if (!shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
       const { args, outputFile } = buildRenderPlan(payload, jobId, isPreview);
       filesToCleanup.add(outputFile);
       log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
@@ -4803,12 +5598,54 @@ async function handleRender(request) {
       postRenderResult(request, buffer);
       return;
     }
-    log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
-    const result = await renderWithPhaseLimiter(payload, jobId, isPreview);
-    filesToCleanup.add(result.outputFile);
-    for (const temp of result.tempFiles) filesToCleanup.add(temp);
-    log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    if (shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
+      log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
+      const result = await renderWithPhaseLimiter(payload, jobId, isPreview);
+      filesToCleanup.add(result.outputFile);
+      for (const temp of result.tempFiles) filesToCleanup.add(temp);
+      log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
+      postRenderResult(request, result.buffer);
+      return;
+    }
+    log("info", "render:start(pcm-pipeline)", {
+      jobId,
+      fileId: payload.fileId,
+      format: payload.format,
+      soundtouch: shouldUseSoundTouch,
+      toneReverb: shouldUseToneReverb,
+      phaselimiter: shouldUsePhaseLimiter
+    });
+    try {
+      const result = await renderWithPcmPipeline(payload, jobId, isPreview, {
+        applyPhaseLimiter: shouldUsePhaseLimiter
+      });
+      filesToCleanup.add(result.outputFile);
+      for (const temp of result.tempFiles) filesToCleanup.add(temp);
+      log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
+      postRenderResult(request, result.buffer);
+      return;
+    } catch (error) {
+      if (!shouldUseSoundTouch) throw error;
+      log("warn", "render:pcm-pipeline-failed:fallback-ffmpeg", {
+        jobId,
+        fileId: payload.fileId,
+        error: error?.message ?? String(error)
+      });
+      const fallback = buildFallbackRenderPayload(payload);
+      if (shouldUsePhaseLimiter) {
+        const result = await renderWithPhaseLimiter(fallback, jobId, isPreview);
+        filesToCleanup.add(result.outputFile);
+        for (const temp of result.tempFiles) filesToCleanup.add(temp);
+        postRenderResult(request, result.buffer);
+        return;
+      }
+      const { args, outputFile } = buildRenderPlan(fallback, jobId, isPreview);
+      filesToCleanup.add(outputFile);
+      withProgressStage("processing", 0, 1, () => ffmpeg.exec(...args));
+      const buffer = await readOutput(outputFile);
+      postRenderResult(request, buffer);
+      return;
+    }
   } finally {
     activeJobId = void 0;
     activeStage = void 0;
@@ -4822,6 +5659,49 @@ function isPhaseLimiterEnabled(payload) {
   const mastering = payload.mastering;
   if (!mastering) return false;
   return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
+}
+function isSoundTouchEnabled(payload) {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.timeStretch ?? "ffmpeg";
+  if (algorithm !== "soundtouch") return false;
+  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1;
+  const pitch = typeof spec?.pitch === "number" ? spec.pitch : 0;
+  return tempo !== 1 || pitch !== 0;
+}
+function isToneReverbEnabled(payload) {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.reverb ?? "ffmpeg";
+  return algorithm === "tone" && spec?.reverb != null;
+}
+function buildFallbackRenderPayload(payload) {
+  const spec = payload.dspSpec;
+  if (!spec) return payload;
+  const fallbackSpec = {
+    ...spec,
+    quality: { ...spec.quality ?? {}, timeStretch: "ffmpeg", reverb: "ffmpeg" }
+  };
+  return {
+    ...payload,
+    dspSpec: fallbackSpec,
+    filterGraph: compileFilterChain(fallbackSpec),
+    reverbIR: void 0,
+    reverbIRSampleRate: void 0
+  };
+}
+function buildFallbackReverbRenderPayload(payload) {
+  const spec = payload.dspSpec;
+  if (!spec) return payload;
+  const fallbackSpec = {
+    ...spec,
+    quality: { ...spec.quality ?? {}, reverb: "ffmpeg" }
+  };
+  return {
+    ...payload,
+    dspSpec: fallbackSpec,
+    filterGraph: compileFilterChain(fallbackSpec),
+    reverbIR: void 0,
+    reverbIRSampleRate: void 0
+  };
 }
 function withProgressStage(stage, offset, scale, run) {
   const prevStage = activeStage;
@@ -4874,12 +5754,114 @@ async function renderWithPhaseLimiter(payload, jobId, isPreview) {
     return { buffer, outputFile: plan.outputFile, tempFiles: [decodeFile, masteredFile] };
   }
 }
+async function renderWithPcmPipeline(payload, jobId, isPreview, options) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const sampleRate = 44100;
+  const rawFile = `${payload.fileId}-${jobId}-raw.f32`;
+  const stretchedFile = `${payload.fileId}-${jobId}-stretched.f32`;
+  const effectsFile = `${payload.fileId}-${jobId}-effects.f32`;
+  const masteredFile = `${payload.fileId}-${jobId}-mastered.f32`;
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+  const tempFiles = [rawFile];
+  let currentPcmFile = rawFile;
+  const decodeArgs = buildRawDecodePlan(payload, rawFile, sampleRate, isPreview);
+  postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
+  withProgressStage("decoding", 0, 0.15, () => ffmpeg.exec(...decodeArgs));
+  if (isSoundTouchEnabled(payload)) {
+    const { tempo, pitchSemitones } = resolveTimeStretchParams(payload);
+    postEvent({ type: "PROGRESS", jobId, value: 0.15, stage: "time-stretch" });
+    const stretched = applySoundTouch(rawFile, tempo, pitchSemitones, jobId);
+    writeInterleavedF32(stretchedFile, stretched);
+    tempFiles.push(stretchedFile);
+    currentPcmFile = stretchedFile;
+    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "time-stretch" });
+  }
+  if (isToneReverbEnabled(payload)) {
+    if (!payload.dspSpec || !payload.dspSpec.reverb) {
+      throw new Error("Tone reverb enabled but dspSpec.reverb missing");
+    }
+    if (!payload.reverbIR) {
+      log("warn", "tone-reverb:missing-ir:fallback-ffmpeg", { jobId, fileId: payload.fileId });
+      const fallback = buildFallbackReverbRenderPayload(payload);
+      if (fallback.filterGraph && fallback.filterGraph !== "anull") {
+        const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, fallback.filterGraph, sampleRate);
+        postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+        withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
+        tempFiles.push(effectsFile);
+        currentPcmFile = effectsFile;
+      }
+    } else {
+      const irFile = `${payload.fileId}-${jobId}-ir.f32`;
+      ffmpeg.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
+      tempFiles.push(irFile);
+      const { pre, post } = compileFilterChainParts(payload.dspSpec);
+      const mix = clampNumber(payload.dspSpec.reverb.mix, 0, 1);
+      const dry = (1 - mix).toFixed(4);
+      const wet = mix.toFixed(4);
+      const irSampleRate = typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
+      const args = [];
+      args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile);
+      args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
+      const chains = [];
+      chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
+      chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
+      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet}[wet]`);
+      chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
+      args.push("-filter_complex", chains.join(";"));
+      args.push("-map", "[out]");
+      args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", effectsFile);
+      postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+      withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...args));
+      tempFiles.push(effectsFile);
+      currentPcmFile = effectsFile;
+    }
+  } else if (payload.filterGraph && payload.filterGraph !== "anull") {
+    const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, payload.filterGraph, sampleRate);
+    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+    withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
+    tempFiles.push(effectsFile);
+    currentPcmFile = effectsFile;
+  }
+  if (options.applyPhaseLimiter) {
+    const { left, right } = readAndSplitF32Stereo(currentPcmFile);
+    postEvent({ type: "PROGRESS", jobId, value: 0.7, stage: "mastering" });
+    const algorithm = payload.mastering.algorithm;
+    const processed = await processWithPhaseLimiter(left, right, sampleRate, jobId, algorithm, payload.mastering, {
+      offset: 0.7,
+      scale: 0.2
+    });
+    writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
+    tempFiles.push(masteredFile);
+    currentPcmFile = masteredFile;
+  }
+  const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
+  postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });
+  withProgressStage("encoding", 0.9, 0.1, () => ffmpeg.exec(...encodeArgs));
+  const buffer = await readOutput(outputFile);
+  return { buffer, outputFile, tempFiles };
+}
 function buildDecodePlan(payload, outputFile, sampleRate, isPreview) {
   const args = [];
   addTrimArgs(args, payload, isPreview);
   args.push("-i", payload.fileId);
   if (payload.filterGraph && payload.filterGraph !== "anull") {
     args.push("-af", payload.filterGraph);
+  }
+  args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
+  return args;
+}
+function buildRawDecodePlan(payload, outputFile, sampleRate, isPreview) {
+  const args = [];
+  addTrimArgs(args, payload, isPreview);
+  args.push("-i", payload.fileId);
+  args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
+  return args;
+}
+function buildPcmFilterPlan(inputFile, outputFile, filterGraph, sampleRate) {
+  const args = [];
+  args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", inputFile);
+  if (filterGraph !== "anull") {
+    args.push("-af", filterGraph);
   }
   args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", outputFile);
   return args;
@@ -4918,12 +5900,89 @@ function writeInterleavedF32Stereo(path, left, right) {
   }
   ffmpeg.FS.writeFile(path, new Uint8Array(interleaved.buffer));
 }
-function appendSimpleMasteringToFilterGraph(filterGraph) {
-  if (!filterGraph || filterGraph === "anull") return SIMPLE_MASTERING_FILTER_CHAIN;
-  if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return filterGraph;
-  return `${filterGraph},${SIMPLE_MASTERING_FILTER_CHAIN}`;
+function readInterleavedF32(path) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const bytes = ffmpeg.FS.readFile(path);
+  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
+  const pcm = bytes.slice().buffer;
+  const interleaved = new Float32Array(pcm);
+  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+  return interleaved;
 }
-async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId, algorithm, mastering) {
+function writeInterleavedF32(path, interleaved) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const bytes = new Uint8Array(interleaved.buffer, interleaved.byteOffset, interleaved.byteLength);
+  ffmpeg.FS.writeFile(path, bytes);
+}
+function resolveTimeStretchParams(payload) {
+  const spec = payload.dspSpec;
+  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1;
+  const pitchSemitones = typeof spec?.pitch === "number" ? spec.pitch : 0;
+  return {
+    tempo: clampNumber(tempo, 0.5, 2),
+    pitchSemitones: clampNumber(pitchSemitones, -12, 12)
+  };
+}
+function applySoundTouch(inputFile, tempo, pitchSemitones, jobId) {
+  const input = readInterleavedF32(inputFile);
+  const totalFrames = Math.floor(input.length / 2);
+  const soundTouch = new SoundTouch();
+  soundTouch.stretch?.setParameters?.(44100, 0, 0, 0);
+  soundTouch.tempo = tempo;
+  soundTouch.pitchSemitones = pitchSemitones;
+  class InterleavedStereoSource {
+    constructor(samples) {
+      this.samples = samples;
+    }
+    position = 0;
+    extract(target, numFrames = 0, position = 0) {
+      this.position = position;
+      const start = position * 2;
+      const availableFrames = Math.max(0, Math.floor((this.samples.length - start) / 2));
+      const frames = Math.max(0, Math.min(numFrames, availableFrames));
+      if (frames > 0) {
+        target.set(this.samples.subarray(start, start + frames * 2));
+      }
+      return frames;
+    }
+  }
+  const filter = new SimpleFilter(new InterleavedStereoSource(input), soundTouch);
+  const chunkFrames = 16384;
+  const chunk = new Float32Array(chunkFrames * 2);
+  const chunks = [];
+  let lastEmit = -1;
+  for (; ; ) {
+    const frames = filter.extract(chunk, chunkFrames);
+    if (frames === 0) break;
+    chunks.push(chunk.slice(0, frames * 2));
+    const sourceFrames = filter.sourcePosition ?? 0;
+    const percent = totalFrames > 0 ? clamp01(sourceFrames / totalFrames) : 1;
+    if (percent - lastEmit >= 0.05) {
+      postEvent({ type: "PROGRESS", jobId, value: 0.15 + percent * 0.2, stage: "time-stretch" });
+      lastEmit = percent;
+    }
+  }
+  const totalSamples = chunks.reduce((sum, block) => sum + block.length, 0);
+  const output = new Float32Array(totalSamples);
+  let offset = 0;
+  for (const block of chunks) {
+    output.set(block, offset);
+    offset += block.length;
+  }
+  return output;
+}
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+function appendSimpleMasteringToFilterGraph(filterGraph) {
+  if (!filterGraph || filterGraph === "anull") return SIMPLE_MASTERING_FILTER_CHAIN2;
+  if (filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN2)) return filterGraph;
+  return `${filterGraph},${SIMPLE_MASTERING_FILTER_CHAIN2}`;
+}
+async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jobId, algorithm, mastering, progressRange = { offset: 0.2, scale: 0.6 }) {
   return new Promise((resolve, reject) => {
     const isPro = algorithm === "phaselimiter_pro";
     const workerScript = isPro ? "/js/phase_limiter_pro_worker.js" : "/js/phase_limiter_worker.js";
@@ -4938,7 +5997,7 @@ async function processWithPhaseLimiter(leftChannel, rightChannel, sampleRate, jo
       const type = data.type;
       if (type === "progress") {
         const percent = typeof data.percent === "number" ? data.percent : 0;
-        const scaled = 0.2 + clamp01(percent) * 0.6;
+        const scaled = progressRange.offset + clamp01(percent) * progressRange.scale;
         postEvent({ type: "PROGRESS", jobId, value: scaled, stage: "mastering" });
         return;
       }
@@ -5073,8 +6132,8 @@ function addInputArgs(args, payload) {
 }
 function stripSimpleMasteringFromFilterGraph(filterGraph) {
   if (!filterGraph || filterGraph === "anull") return null;
-  if (!filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN)) return null;
-  const withoutSuffix = filterGraph.slice(0, -SIMPLE_MASTERING_FILTER_CHAIN.length);
+  if (!filterGraph.endsWith(SIMPLE_MASTERING_FILTER_CHAIN2)) return null;
+  const withoutSuffix = filterGraph.slice(0, -SIMPLE_MASTERING_FILTER_CHAIN2.length);
   const withoutTrailingComma = withoutSuffix.endsWith(",") ? withoutSuffix.slice(0, -1) : withoutSuffix;
   return withoutTrailingComma.length > 0 ? withoutTrailingComma : "anull";
 }

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@slowverb/core-worker": "0.0.1",
-    "@slowverb/shared": "0.0.1"
+    "@slowverb/shared": "0.0.1",
+    "tone": "^15.1.22"
   }
 }

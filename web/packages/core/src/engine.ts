@@ -20,6 +20,7 @@ import type {
   EncodePcmResultPayload,
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
+import { Reverb, start as toneStart } from "tone";
 
 type WorkerFactory = () => Worker;
 
@@ -61,6 +62,7 @@ export class SlowverbEngine {
   private readonly workerFactory: WorkerFactory;
   private readonly initPayload: InitPayload;
   private readonly active = new Map<string, WorkerRunner>();
+  private readonly toneReverbIrCache = new Map<string, { pcm: ArrayBuffer; sampleRate: number }>();
 
   constructor(options: EngineInitOptions = {}) {
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
@@ -144,7 +146,7 @@ export class SlowverbEngine {
 
     try {
       await this.prepareSource(runner, request.source);
-      const payload = this.buildRenderPayload(request);
+      const payload = await this.buildRenderPayload(request);
       const result = await runner.render(type, payload, jobId);
       return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer };
     } finally {
@@ -170,11 +172,15 @@ export class SlowverbEngine {
     await runner.probe({ fileId: source.fileId });
   }
 
-  private buildRenderPayload(request: RenderRequest): RenderPayload {
+  private async buildRenderPayload(request: RenderRequest): Promise<RenderPayload> {
     const filterGraph = this.resolveFilterGraph(request);
+    const toneIr = await this.resolveToneReverbIR(request.dspSpec);
     return {
       fileId: request.source.fileId,
       filterGraph,
+      dspSpec: request.dspSpec,
+      reverbIR: toneIr?.pcm,
+      reverbIRSampleRate: toneIr?.sampleRate,
       mastering: request.dspSpec?.mastering,
       format: request.format ?? "mp3",
       bitrateKbps: request.bitrateKbps,
@@ -189,6 +195,35 @@ export class SlowverbEngine {
     return undefined;
   }
 
+  private async resolveToneReverbIR(
+    spec?: DspSpec
+  ): Promise<{ pcm: ArrayBuffer; sampleRate: number } | null> {
+    if (!spec) return null;
+    if ((spec.quality?.reverb ?? "ffmpeg") !== "tone") return null;
+    if (!spec.reverb) return null;
+    if (spec.reverb.mix <= 0) return null;
+
+    const key = JSON.stringify({
+      decay: spec.reverb.decay,
+      preDelayMs: spec.reverb.preDelayMs,
+      roomScale: spec.reverb.roomScale ?? null,
+    });
+
+    const cached = this.toneReverbIrCache.get(key);
+    if (cached) {
+      return { pcm: cached.pcm.slice(0), sampleRate: cached.sampleRate };
+    }
+
+    try {
+      const generated = await withTimeout(generateToneReverbIr(spec.reverb), 12_000, "Tone IR generation timed out");
+      this.toneReverbIrCache.set(key, generated);
+      return { pcm: generated.pcm.slice(0), sampleRate: generated.sampleRate };
+    } catch (error) {
+      console.warn("[SlowverbEngine] Tone reverb IR generation failed; falling back to FFmpeg reverb", error);
+      return null;
+    }
+  }
+
   async cancel(jobId: string): Promise<boolean> {
     const runner = this.active.get(jobId);
     if (!runner) return false;
@@ -199,6 +234,16 @@ export class SlowverbEngine {
       this.active.delete(jobId);
     }
     return true;
+  }
+
+  async resumeAudioContext(): Promise<boolean> {
+    try {
+      await toneStart();
+      return true;
+    } catch (error) {
+      console.debug("[SlowverbEngine] Tone.start() blocked or failed", error);
+      return false;
+    }
   }
 }
 
@@ -269,7 +314,9 @@ class WorkerRunner {
     jobId: string
   ): Promise<RenderResultPayload> {
     const requestId = this.nextRequestId();
-    return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer: [] });
+    const transfer: Transferable[] = [];
+    if (payload.reverbIR) transfer.push(payload.reverbIR);
+    return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer });
   }
 
   async waveform(payload: WaveformPayload, jobId: string): Promise<WorkerResultPayload> {
@@ -418,6 +465,59 @@ class WorkerRunner {
       maybeGc();
     }
   }
+}
+
+async function generateToneReverbIr(
+  reverb: NonNullable<DspSpec["reverb"]>
+): Promise<{ pcm: ArrayBuffer; sampleRate: number }> {
+  const decaySeconds = clampNumber(0.25 + reverb.decay * 10.0, 0.25, 12.0);
+  const roomScale = clampNumber(reverb.roomScale ?? 0.7, 0.0, 1.0);
+  const scaledDecay = clampNumber(decaySeconds * (0.85 + roomScale * 0.3), 0.25, 12.0);
+  const preDelaySeconds = clampNumber(reverb.preDelayMs, 0, 500) / 1000;
+
+  const effect = new Reverb({ decay: scaledDecay, preDelay: preDelaySeconds });
+  try {
+    await effect.ready;
+    const convolverBuffer = (effect as any)?._convolver?.buffer;
+    const audioBuffer = convolverBuffer?.get?.();
+    if (!audioBuffer) throw new Error("Tone Reverb impulse response not available");
+
+    const channels = audioBuffer.numberOfChannels;
+    const frames = audioBuffer.length;
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(channels > 1 ? 1 : 0);
+
+    const interleaved = new Float32Array(frames * 2);
+    for (let i = 0; i < frames; i += 1) {
+      interleaved[i * 2] = left[i];
+      interleaved[i * 2 + 1] = right[i];
+    }
+
+    return { pcm: interleaved.buffer, sampleRate: audioBuffer.sampleRate };
+  } finally {
+    effect.dispose();
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 const defaultWorkerFactory: WorkerFactory = () =>

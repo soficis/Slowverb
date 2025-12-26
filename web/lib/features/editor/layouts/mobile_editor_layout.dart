@@ -91,6 +91,7 @@ class _MobileEditorLayoutState extends ConsumerState<MobileEditorLayout> {
             position: widget.position,
             duration: widget.duration,
             isPlaying: widget.isPlaying,
+            isProcessing: widget.isGeneratingPreview,
             onPlayPause: widget.notifier.togglePlayback,
             onSeek: (pos) => widget.notifier.seek(
               widget.duration.inMilliseconds > 0
@@ -153,6 +154,7 @@ class _MiniTransportBar extends StatelessWidget {
   final Duration position;
   final Duration duration;
   final bool isPlaying;
+  final bool isProcessing;
   final VoidCallback onPlayPause;
   final void Function(int) onSeek;
   final VoidCallback onExpandEffects;
@@ -165,6 +167,7 @@ class _MiniTransportBar extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.isPlaying,
+    required this.isProcessing,
     required this.onPlayPause,
     required this.onSeek,
     required this.onExpandEffects,
@@ -266,14 +269,23 @@ class _MiniTransportBar extends StatelessWidget {
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: onPlayPause,
+                  onTap: isProcessing ? null : onPlayPause,
                   child: Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: isProcessing
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                   ),
                 ),
               ),
@@ -510,22 +522,35 @@ class _MobileEffectsSheet extends ConsumerWidget {
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
                     title: const Text('Advanced Reverb'),
-                    children: advancedReverbParameterDefinitions
-                        .map((param) {
-                          final value =
-                              parameters[param.id] ?? param.defaultValue;
-                          return _CompactSlider(
-                            label: param.label,
-                            value: value,
-                            min: param.min,
-                            max: param.max,
-                            formatValue: (v) =>
-                                _formatEffectValue(param.id, v),
-                            onChanged: (v) =>
-                                notifier.updateParameter(param.id, v),
-                          );
-                        })
-                        .toList(),
+                    children: [
+                      _CompactToggleRow(
+                        label: 'HQ Slow (SoundTouch)',
+                        value: (parameters['hqTimeStretch'] ?? 0.0) > 0.5,
+                        onChanged: (enabled) => notifier.updateParameter(
+                          'hqTimeStretch',
+                          enabled ? 1.0 : 0.0,
+                        ),
+                      ),
+                      _CompactToggleRow(
+                        label: 'HQ Reverb (Tone IR)',
+                        value: (parameters['hqReverb'] ?? 0.0) > 0.5,
+                        onChanged: (enabled) => notifier.updateParameter(
+                          'hqReverb',
+                          enabled ? 1.0 : 0.0,
+                        ),
+                      ),
+                      ...advancedReverbParameterDefinitions.map((param) {
+                        final value = parameters[param.id] ?? param.defaultValue;
+                        return _CompactSlider(
+                          label: param.label,
+                          value: value,
+                          min: param.min,
+                          max: param.max,
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (v) => notifier.updateParameter(param.id, v),
+                        );
+                      }),
+                    ],
                   ),
               ],
             ),
@@ -598,6 +623,43 @@ class _CompactSlider extends StatelessWidget {
               ).textTheme.labelSmall?.copyWith(color: SlowverbColors.neonCyan),
               textAlign: TextAlign.right,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CompactToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: SlowverbColors.neonCyan,
+            activeTrackColor: SlowverbColors.neonCyan.withValues(alpha: 0.4),
           ),
         ],
       ),

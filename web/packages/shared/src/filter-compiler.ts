@@ -11,16 +11,47 @@ const SIMPLE_MASTERING_FILTER_CHAIN =
 export function compileFilterChain(spec: DspSpec): string {
   const filters: string[] = [];
 
-  appendTempo(filters, spec.tempo);
-  appendPitch(filters, spec.pitch);
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(filters, spec.tempo);
+    appendPitch(filters, spec.pitch);
+  }
   appendEqWarmth(filters, spec.eqWarmth);
-  appendReverb(filters, spec.reverb);
+  const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
+  if (reverbAlgorithm !== "tone") {
+    appendReverb(filters, spec.reverb);
+  }
   appendEcho(filters, spec.echo);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
   appendMastering(filters, spec.mastering);
 
   return filters.length > 0 ? filters.join(",") : "anull";
+}
+
+export function compileFilterChainParts(spec: DspSpec): { pre: string; post: string } {
+  const pre: string[] = [];
+  const post: string[] = [];
+
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(pre, spec.tempo);
+    appendPitch(pre, spec.pitch);
+  }
+  appendEqWarmth(pre, spec.eqWarmth);
+
+  // NOTE: Reverb is intentionally not included here. The caller can insert a
+  // high-quality reverb stage between `pre` and `post` (e.g., Tone-generated IR).
+
+  appendEcho(post, spec.echo);
+  appendLowpass(post, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(post, spec.stereoWidth);
+  appendMastering(post, spec.mastering);
+
+  return {
+    pre: pre.length > 0 ? pre.join(",") : "anull",
+    post: post.length > 0 ? post.join(",") : "anull",
+  };
 }
 
 function appendTempo(filters: string[], tempo?: number): void {

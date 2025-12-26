@@ -140,6 +140,8 @@ class EffectConfig {
   final double? reverbMix; // 0.0 - 1.0
   final double echoAmount; // 0.0 - 1.0
   final double eqWarmth; // 0.0 - 1.0
+  final double hqTimeStretch; // 0.0 or 1.0
+  final double hqReverb; // 0.0 or 1.0
   final double masteringEnabled; // 0.0 or 1.0
   final double masteringAlgorithm; // 0.0=simple, 1.0=phaselimiter
   final double? masteringTargetLufs; // -24 to -6
@@ -158,6 +160,8 @@ class EffectConfig {
     this.reverbMix,
     this.echoAmount = 0.0,
     this.eqWarmth = 0.0,
+    this.hqTimeStretch = 0.0,
+    this.hqReverb = 0.0,
     this.masteringEnabled = 0.0,
     this.masteringAlgorithm = 0.0,
     this.masteringTargetLufs,
@@ -179,6 +183,8 @@ class EffectConfig {
       reverbMix: params['reverbMix'],
       echoAmount: params['echoAmount'] ?? 0.0,
       eqWarmth: params['eqWarmth'] ?? 0.0,
+      hqTimeStretch: params['hqTimeStretch'] ?? 0.0,
+      hqReverb: params['hqReverb'] ?? 0.0,
       masteringEnabled: params['masteringEnabled'] ?? 0.0,
       masteringAlgorithm: params['masteringAlgorithm'] ?? 0.0,
       masteringTargetLufs: params['masteringTargetLufs'],

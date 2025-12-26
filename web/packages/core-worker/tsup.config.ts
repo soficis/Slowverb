@@ -8,7 +8,7 @@ export default defineConfig({
   outDir: "dist",
   treeshake: true,
   splitting: false,
-  noExternal: ["@slowverb/shared", "@ffmpeg/core"],
+  noExternal: ["@slowverb/shared", "@ffmpeg/core", "soundtouchjs"],
   platform: "browser",
   shims: false,
   esbuildOptions(options) {
