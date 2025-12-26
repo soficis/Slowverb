@@ -10,6 +10,9 @@ build/
 *.so
 *.dylib
 *.wasm
+# BUT include production WASM files needed for deployment
+!web/web/js/*.wasm
+!web/web/js/vendor/*.wasm
 *.js.map
 *.js.mem
 .flutter_sdk
