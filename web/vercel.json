@@ -13,7 +13,7 @@
     ],
     "headers": [
         {
-            "source": "**/*.wasm",
+            "source": "/:path*.wasm",
             "headers": [
                 {
                     "key": "Content-Type",

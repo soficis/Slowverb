@@ -127,6 +127,11 @@ Map<String, Object?> _toDspSpec(EffectConfig config) {
       'decay': config.reverbAmount,
       'preDelayMs': 30,
       'roomScale': 0.7,
+      'mix': 0.6,
+    },
+    'quality': {
+      'timeStretch': 'soundtouch', // Enabled if hqTimeStretch > 0.5
+      'reverb': 'tone',           // Enabled if hqReverb > 0.5
     },
     'echo': {
       'delayMs': 500 * config.echoAmount,

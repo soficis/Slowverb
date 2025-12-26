@@ -64,6 +64,14 @@ The editor screen provides interactive sliders for:
 | **Echo**      | 0% – 100%        | Add a repeating echo effect.                     |
 | **EQ Warmth** | 0% – 100%        | Boost low frequencies for a warmer, lo-fi sound. |
 
+### ✨ High-Quality (HQ) Audio Engine
+
+Slowverb now defaults to high-quality processing for all presets:
+
+- **HQ Slowed (SoundTouch)**: Uses the industry-standard SoundTouch algorithm for time-stretching. This prevents the "phasing" or "metallic" artifacts common in basic slowdowns, resulting in a cleaner, more natural sound even at extreme speeds.
+- **HQ Reverb (Tone)**: Utilizes an advanced reverb engine with configurable room scale, damping, and stereo width. It provides a much denser and more immersive atmosphere than standard algorithmic reverbs.
+- **HQ Enabled by Default**: All built-in presets have been re-tuned to leverage these HQ features for the best possible audio experience.
+
 ### 📊 Waveform Display
 
 The waveform panel shows a visual representation of your audio file. You can click anywhere on the waveform to seek to that position in the track.
@@ -166,20 +174,20 @@ Slowverb includes **13 curated presets** to get you started quickly:
 
 | Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
 |--------------------|---------|----------|--------|-------|--------|-----------------------------------|
-| **Slowed + Reverb**| 0.95x   | -2 semi  | 70%    | 20%   | 40%    | Classic dreamy vaporwave.         |
-| **Slowed + Reverb 2**| 0.74x | -4.5 semi| 40%    | 15%   | 50%    | Precise -25.926% slowdown.        |
-| **Slowed + Reverb 3**| 0.81x | -3.2 semi| 50%    | 20%   | 50%    | -19% speed with balanced reverb.  |
-| **Slow Chill**     | 0.94x   | -3.5 semi| 85%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
-| **Vaporwave Chill**| 0.78x   | -3 semi  | 80%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
-| **Nightcore**      | 1.25x   | +4 semi  | 30%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
-| **Echo Slow**      | 0.65x   | -4 semi  | 60%    | 80%   | 50%    | Ultra slow with cascading echoes. |
-| **Lo-Fi**          | 0.92x   | -1 semi  | 50%    | 30%   | 80%    | Relaxed, warm, dusty sound.       |
-| **Ambient Space**  | 0.70x   | -2.5 semi| 90%    | 60%   | 30%    | Ethereal, floating atmosphere.    |
-| **Deep Bass**      | 0.80x   | -5 semi  | 40%    | 20%   | 90%    | Heavy low-end focus.              |
-| **Crystal Clear**  | 1.00x   | +2 semi  | 20%    | 10%   | 10%    | Crisp, bright, clean.             |
-| **Underwater**     | 0.72x   | -3.5 semi| 85%    | 50%   | 60%    | Muffled, submerged atmosphere.    |
-| **Synthwave**      | 1.05x   | +1 semi  | 60%    | 40%   | 40%    | Retro 80s vibes.                  |
-| **Slow Motion**    | 0.55x   | -6 semi  | 70%    | 60%   | 50%    | Extreme slow-down effect.         |
+| **Slowed + Reverb**| 0.95x   | -2 semi  | 49%    | 20%   | 40%    | Classic dreamy vaporwave.         |
+| **Slowed + Reverb 2**| 0.74x | -4.5 semi| 28%    | 15%   | 50%    | Precise -25.926% slowdown.        |
+| **Slowed + Reverb 3**| 0.81x | -3.2 semi| 35%    | 20%   | 50%    | -19% speed with balanced reverb.  |
+| **Slow Chill**     | 0.94x   | -3.5 semi| 59%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
+| **Vaporwave Chill**| 0.78x   | -3 semi  | 56%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
+| **Nightcore**      | 1.25x   | +4 semi  | 21%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
+| **Echo Slow**      | 0.65x   | -4 semi  | 42%    | 80%   | 50%    | Ultra slow with cascading echoes. |
+| **Lo-Fi**          | 0.92x   | -1 semi  | 35%    | 30%   | 80%    | Relaxed, warm, dusty sound.       |
+| **Ambient Space**  | 0.70x   | -2.5 semi| 63%    | 60%   | 30%    | Ethereal, floating atmosphere.    |
+| **Deep Bass**      | 0.80x   | -5 semi  | 28%    | 20%   | 90%    | Heavy low-end focus.              |
+| **Crystal Clear**  | 1.00x   | +2 semi  | 14%    | 10%   | 10%    | Crisp, bright, clean.             |
+| **Underwater**     | 0.72x   | -3.5 semi| 59%    | 50%   | 60%    | Muffled, submerged atmosphere.    |
+| **Synthwave**      | 1.05x   | +1 semi  | 42%    | 40%   | 40%    | Retro 80s vibes.                  |
+| **Slow Motion**    | 0.55x   | -6 semi  | 49%    | 60%   | 50%    | Extreme slow-down effect.         |
 | **Manual**         | 1.00x   | 0 semi   | 0%     | 0%    | 50%    | Start from scratch.               |
 
 ### 💾 Custom Presets
