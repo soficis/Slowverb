@@ -37,4 +37,9 @@ npm run sync:bridge
 echo "Building Flutter Web application (WASM + Release)..."
 flutter build web --wasm --release --verbose
 
+# 6. Copy JavaScript/WASM assets to build output
+# These files (phaselimiter_pro.wasm, etc.) are not handled by Flutter
+echo "Copying JS/WASM assets to build directory..."
+cp -rv web/js/* build/web/js/
+
 echo "Build complete! Output directory: build/web"
