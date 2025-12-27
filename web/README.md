@@ -135,13 +135,21 @@ Map<String, Object?> _toDspSpec(EffectConfig config) {
     },
     'echo': {
       'delayMs': 500 * config.echoAmount,
-      'feedback': config.echoAmount * 0.6,
+      'feedback': 0.6,             // Refined to 0.6 to prevent percussion artifacts
     },
   };
 }
 ```
 
-The worker translates this spec into FFmpeg filter arguments.
+The worker translates this spec into FFmpeg filter arguments, applying aggressive gain compensation (up to **42dB** for HQ Reverb) to ensure consistent output levels across all mastering paths.
+
+### Preview Progress Tracking
+
+The engine supports real-time progress updates for preview rendering. When `renderPreview` is called:
+
+1. A unique `jobId` is generated.
+2. The `WasmAudioEngine` uses `setPreviewProgressCallback` to route worker progress events to the UI.
+3. The UI (via `MasteringProgress`) displays the current stage (`decoding`, `effects`, `mastering`) and percentage.
 
 ---
 

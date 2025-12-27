@@ -11,6 +11,7 @@ import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/project_repository_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
+import 'package:slowverb_web/providers/processing_progress_provider.dart';
 import 'package:slowverb_web/services/logger_service.dart';
 import 'package:uuid/uuid.dart';
 
@@ -333,6 +334,10 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     try {
       state = state.copyWith(isLoading: true, error: null);
 
+      // Resume AudioContext to allow Tone.js reverb IR generation
+      final engine = _ref.read(audioEngineProvider);
+      await engine.resumeAudioContext();
+
       _log.debug('Generating preview', {'dirty': state.isPreviewDirty});
 
       final previewUri = await generatePreview();
@@ -394,6 +399,10 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     state = state.copyWith(isPreviewDirty: true, isLoading: true, error: null);
 
     try {
+      // Resume AudioContext to allow Tone.js reverb IR generation
+      final engine = _ref.read(audioEngineProvider);
+      await engine.resumeAudioContext();
+
       _log.debug('Generating fresh preview');
       final previewUri = await generatePreview();
       if (previewUri != null) {
@@ -462,9 +471,24 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     state = state.copyWith(isLoading: true, error: null);
 
+    // Check if this is Level 5 mastering
+    final masteringMode = state.currentParameters['masteringMode'] ?? 3.0;
+    final masteringEnabled =
+        (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
+    final isLevel5 = masteringEnabled && masteringMode >= 5;
+
+    // Start progress tracking
+    final progressNotifier = _ref.read(processingProgressProvider.notifier);
+    progressNotifier.startProcessing(isLevel5: isLevel5);
+
     try {
       final engine = _ref.read(audioEngineProvider);
       _log.debug('Reading engine provider', engine.runtimeType);
+
+      // Set up progress callback to update the progress provider
+      engine.setPreviewProgressCallback((progress, stage) {
+        progressNotifier.updateProgress(progress, stage);
+      });
 
       // Build effect config from current parameters
       final config = EffectConfig.fromParams(
@@ -484,9 +508,22 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
       state = state.copyWith(isLoading: false);
 
+      // Complete progress tracking
+      progressNotifier.complete();
+
+      // Clear the progress callback
+      engine.setPreviewProgressCallback(null);
+
       return previewUri;
     } catch (e, stack) {
       _log.error('generatePreview failed', e, stack);
+
+      // Cancel progress tracking on error
+      _ref.read(processingProgressProvider.notifier).cancel();
+
+      // Clear the progress callback
+      _ref.read(audioEngineProvider).setPreviewProgressCallback(null);
+
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to generate preview: $e',
@@ -498,6 +535,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   /// Clear error
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  /// Force stop all running tasks immediately
+  void forceStop() {
+    _previewDebounce?.cancel();
+    state = state.copyWith(isLoading: false, isPlaying: false, error: null);
+    _ref.read(audioPlaybackProvider.notifier).stop();
   }
 
   /// Persist export metadata for the current project.

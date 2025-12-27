@@ -17,6 +17,8 @@ class EffectPreset {
 }
 
 /// Pre-defined effect presets for Slowverb Web
+/// Note: HQ Reverb (Tone IR) is more powerful than FFmpeg's aecho,
+/// so these values are tuned lower to avoid excessive echo-y drum effect.
 abstract final class Presets {
   /// Classic slowed + reverb effect
   static const slowedReverb = EffectPreset(
@@ -26,14 +28,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.95,
       'pitch': -2.0,
-      'reverbAmount': 0.49,
+      'reverbAmount': 0.22, // Reduced from 0.49 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.63,
-      'preDelayMs': 80.0,
-      'roomScale': 0.75,
-      'hfDamping': 0.15,
-      'echoAmount': 0.2,
+      'reverbMix': 0.35, // Reduced from 0.63
+      'preDelayMs': 50.0, // Reduced from 80
+      'roomScale': 0.55, // Reduced from 0.75
+      'hfDamping': 0.25, // Increased from 0.15 to soften highs
+      'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.4,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -48,14 +50,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.74074, // -25.926% = multiply by 0.74074
       'pitch': -4.5, // Matching tempo slow
-      'reverbAmount': 0.28, // Reduced for HQ reverb (was 0.4)
+      'reverbAmount': 0.15, // Reduced from 0.28 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.59,
-      'preDelayMs': 90.0,
-      'roomScale': 0.8,
-      'hfDamping': 0.2,
-      'echoAmount': 0.15,
+      'reverbMix': 0.32, // Reduced from 0.59
+      'preDelayMs': 60.0, // Reduced from 90
+      'roomScale': 0.55, // Reduced from 0.8
+      'hfDamping': 0.3, // Increased from 0.2
+      'echoAmount': 0.06, // Reduced from 0.15
       'eqWarmth': 0.5, // Balanced warmth
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -70,13 +72,13 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.81, // -19% speed from Audacity
       'pitch': -3.2, // Matching tempo slow (~19% = ~3.2 semitones)
-      'reverbAmount': 0.35, // Reduced for HQ reverb (was 0.5)
+      'reverbAmount': 0.18, // Reduced from 0.35 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.57,
-      'preDelayMs': 70.0,
-      'roomScale': 0.7,
-      'echoAmount': 0.2,
+      'reverbMix': 0.32, // Reduced from 0.57
+      'preDelayMs': 45.0, // Reduced from 70
+      'roomScale': 0.5, // Reduced from 0.7
+      'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.5, // 50% tone balance
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -89,18 +91,18 @@ abstract final class Presets {
     name: 'Slow Chill',
     description: 'Smooth slowed sound with warm reverb',
     parameters: {
-      'tempo': 0.94, // 94% from screenshot
-      'pitch': -3.5, // -3.5 semitones from screenshot
-      'reverbAmount': 0.59, // Reduced for HQ reverb (was 0.85)
+      'tempo': 0.94,
+      'pitch': -3.5,
+      'reverbAmount': 0.28, // Reduced from 0.59 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.64,
-      'preDelayMs': 120.0,
-      'roomScale': 0.85,
-      'hfDamping': 0.25,
+      'reverbMix': 0.38, // Reduced from 0.64
+      'preDelayMs': 80.0, // Reduced from 120
+      'roomScale': 0.6, // Reduced from 0.85
+      'hfDamping': 0.35, // Increased from 0.25
       'stereoWidth': 1.2,
-      'echoAmount': 0.38, // 38% echo from screenshot
-      'eqWarmth': 0.83, // 83% warmth from screenshot
+      'echoAmount': 0.15, // Reduced from 0.38
+      'eqWarmth': 0.83,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
     },
@@ -114,15 +116,15 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.78,
       'pitch': -3.0,
-      'reverbAmount': 0.56,
+      'reverbAmount': 0.26, // Reduced from 0.56 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.61,
-      'preDelayMs': 110.0,
-      'roomScale': 0.9,
-      'hfDamping': 0.3,
+      'reverbMix': 0.36, // Reduced from 0.61
+      'preDelayMs': 70.0, // Reduced from 110
+      'roomScale': 0.6, // Reduced from 0.9
+      'hfDamping': 0.4, // Increased from 0.3
       'stereoWidth': 1.3,
-      'echoAmount': 0.4,
+      'echoAmount': 0.15, // Reduced from 0.4
       'eqWarmth': 0.7,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -137,10 +139,11 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.25,
       'pitch': 4.0,
-      'reverbAmount': 0.21,
+      'reverbAmount': 0.10, // Reduced from 0.21 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.1,
+      'reverbMix': 0.28,
+      'echoAmount': 0.04, // Reduced from 0.1
       'eqWarmth': 0.2,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -155,10 +158,11 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.65,
       'pitch': -4.0,
-      'reverbAmount': 0.42,
+      'reverbAmount': 0.20, // Reduced from 0.42 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.8,
+      'reverbMix': 0.35,
+      'echoAmount': 0.45, // Reduced from 0.8 - still emphasized for this preset
       'eqWarmth': 0.5,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -173,10 +177,12 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.92,
       'pitch': -1.0,
-      'reverbAmount': 0.35,
+      'reverbAmount': 0.16, // Reduced from 0.35 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.3,
+      'reverbMix': 0.30,
+      'hfDamping': 0.4, // Added - soften highs for lo-fi feel
+      'echoAmount': 0.12, // Reduced from 0.3
       'eqWarmth': 0.8,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -191,15 +197,15 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.70,
       'pitch': -2.5,
-      'reverbAmount': 0.63,
+      'reverbAmount': 0.32, // Reduced from 0.63 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.66,
-      'preDelayMs': 140.0,
-      'roomScale': 0.95,
-      'hfDamping': 0.2,
+      'reverbMix': 0.42, // Reduced from 0.66
+      'preDelayMs': 100.0, // Reduced from 140
+      'roomScale': 0.7, // Reduced from 0.95
+      'hfDamping': 0.3, // Increased from 0.2
       'stereoWidth': 1.4,
-      'echoAmount': 0.6,
+      'echoAmount': 0.25, // Reduced from 0.6
       'eqWarmth': 0.3,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -214,10 +220,12 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.80,
       'pitch': -5.0,
-      'reverbAmount': 0.28,
+      'reverbAmount': 0.14, // Reduced from 0.28 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.2,
+      'reverbMix': 0.28,
+      'hfDamping': 0.5, // Added - keep focus on low end
+      'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.9,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -232,10 +240,11 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.0,
       'pitch': 2.0,
-      'reverbAmount': 0.14,
+      'reverbAmount': 0.08, // Reduced from 0.14 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.1,
+      'reverbMix': 0.22,
+      'echoAmount': 0.04, // Reduced from 0.1
       'eqWarmth': 0.1,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -250,15 +259,15 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.72,
       'pitch': -3.5,
-      'reverbAmount': 0.59,
+      'reverbAmount': 0.28, // Reduced from 0.59 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.63,
-      'preDelayMs': 120.0,
-      'roomScale': 0.8,
-      'hfDamping': 0.6,
+      'reverbMix': 0.38, // Reduced from 0.63
+      'preDelayMs': 80.0, // Reduced from 120
+      'roomScale': 0.55, // Reduced from 0.8
+      'hfDamping': 0.7, // Increased from 0.6 for muffled feel
       'stereoWidth': 1.1,
-      'echoAmount': 0.5,
+      'echoAmount': 0.20, // Reduced from 0.5
       'eqWarmth': 0.6,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -273,14 +282,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.05,
       'pitch': 1.0,
-      'reverbAmount': 0.42,
+      'reverbAmount': 0.20, // Reduced from 0.42 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.56,
-      'preDelayMs': 70.0,
-      'roomScale': 0.7,
+      'reverbMix': 0.32, // Reduced from 0.56
+      'preDelayMs': 45.0, // Reduced from 70
+      'roomScale': 0.5, // Reduced from 0.7
       'stereoWidth': 1.2,
-      'echoAmount': 0.4,
+      'echoAmount': 0.15, // Reduced from 0.4
       'eqWarmth': 0.4,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,
@@ -295,10 +304,11 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.55,
       'pitch': -6.0,
-      'reverbAmount': 0.49,
+      'reverbAmount': 0.24, // Reduced from 0.49 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'echoAmount': 0.6,
+      'reverbMix': 0.35,
+      'echoAmount': 0.25, // Reduced from 0.6
       'eqWarmth': 0.5,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 0.0,

@@ -26,6 +26,15 @@ class WasmAudioEngine implements AudioEngine {
   bool _progressHandlerInstalled = false;
   bool _logHandlerInstalled = false;
 
+  // Preview progress callback for UI integration
+  void Function(double progress, String stage)? _previewProgressCallback;
+  String? _currentPreviewJobId;
+
+  /// Set a callback to receive preview progress updates
+  void setPreviewProgressCallback(void Function(double, String)? callback) {
+    _previewProgressCallback = callback;
+  }
+
   @override
   bool get isReady => _isInitialized;
 
@@ -138,6 +147,14 @@ class WasmAudioEngine implements AudioEngine {
     return BridgeInterop.bufferToUint8List(buffer);
   }
 
+  /// Resume the audio context to allow Tone.js reverb IR generation.
+  ///
+  /// This must be called after a user gesture (e.g., clicking play button)
+  /// to comply with browser autoplay policies.
+  Future<bool> resumeAudioContext() async {
+    return BridgeInterop.resumeAudioContext();
+  }
+
   @override
   Future<Float32List> getWaveform(
     String fileId, {
@@ -181,30 +198,42 @@ class WasmAudioEngine implements AudioEngine {
       _currentPreviewUrl = null;
     }
 
-    final payload = BridgeInterop.toJsObject({
-      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
-      'dspSpec': _toDspSpec(config),
-      'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
-      'durationSec': duration != null ? duration.inMilliseconds / 1000.0 : null,
-    });
+    // Generate a jobId to track progress for this preview
+    final jobId = 'preview-${DateTime.now().millisecondsSinceEpoch}';
+    _currentPreviewJobId = jobId;
 
-    final response = await BridgeInterop.renderPreview(payload);
-    final buffer = response
-        .getProperty<JSObject>('payload'.toJS)
-        .getProperty<JSObject>('buffer'.toJS);
-    final bytes = BridgeInterop.bufferToUint8List(buffer);
+    try {
+      final payload = BridgeInterop.toJsObject({
+        'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
+        'dspSpec': _toDspSpec(config),
+        'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
+        'durationSec': duration != null
+            ? duration.inMilliseconds / 1000.0
+            : null,
+        'jobId': jobId,
+      });
 
-    final blob = web.Blob(
-      [bytes.toJS].toJS,
-      web.BlobPropertyBag(type: 'audio/mp3'),
-    );
-    final url = web.URL.createObjectURL(blob);
+      final response = await BridgeInterop.renderPreview(payload);
+      final buffer = response
+          .getProperty<JSObject>('payload'.toJS)
+          .getProperty<JSObject>('buffer'.toJS);
+      final bytes = BridgeInterop.bufferToUint8List(buffer);
 
-    // Track blob URL for cleanup
-    _currentPreviewUrl = url;
-    _activeBlobUrls.add(url);
+      final blob = web.Blob(
+        [bytes.toJS].toJS,
+        web.BlobPropertyBag(type: 'audio/mp3'),
+      );
+      final url = web.URL.createObjectURL(blob);
 
-    return Uri.parse(url);
+      // Track blob URL for cleanup
+      _currentPreviewUrl = url;
+      _activeBlobUrls.add(url);
+
+      return Uri.parse(url);
+    } finally {
+      // Clear the preview job ID after completion
+      _currentPreviewJobId = null;
+    }
   }
 
   @override
@@ -361,18 +390,21 @@ class WasmAudioEngine implements AudioEngine {
   // Batch processing state
   bool _batchCancelled = false;
   bool _batchPaused = false;
+  void Function(String fileName, Uint8List bytes)? _batchResultCallback;
 
   @override
   Stream<BatchRenderProgress> renderBatch({
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
     required ExportOptions options,
+    void Function(String fileName, Uint8List bytes)? onResultReady,
   }) {
     final controller = StreamController<BatchRenderProgress>.broadcast();
 
     // Reset status flags
     _batchCancelled = false;
     _batchPaused = false;
+    _batchResultCallback = onResultReady;
 
     // Start processing in the background
     _runParallelBatch(files, defaultPreset, options, controller);
@@ -395,8 +427,9 @@ class WasmAudioEngine implements AudioEngine {
     controller.add(BatchRenderProgress.initial(files.length));
 
     const int maxConcurrency = 3;
-    final int concurrency =
-        files.length < maxConcurrency ? files.length : maxConcurrency;
+    final int concurrency = files.length < maxConcurrency
+        ? files.length
+        : maxConcurrency;
     int nextIndex = 0;
     final activeJobs = <int, Future<void>>{};
 
@@ -451,7 +484,18 @@ class WasmAudioEngine implements AudioEngine {
 
         final result = await getResult(jobId);
         if (result.success && result.outputBytes != null) {
-          _triggerDownload(result.outputBytes!, file.fileName, options.format);
+          final outputFileName =
+              '${_removeExtension(file.fileName)}_slowverb.${options.format}';
+          // Call the callback if provided, otherwise trigger download
+          if (_batchResultCallback != null) {
+            _batchResultCallback!(outputFileName, result.outputBytes!);
+          } else {
+            _triggerDownload(
+              result.outputBytes!,
+              file.fileName,
+              options.format,
+            );
+          }
           completedCount++;
           completedFileNames.add(file.fileName);
         } else {
@@ -632,9 +676,11 @@ class WasmAudioEngine implements AudioEngine {
           'targetLufs': config.masteringTargetLufs,
         if (config.masteringBassPreservation != null)
           'bassPreservation': config.masteringBassPreservation,
-        if (config.masteringMode != null)
-          'mode': config.masteringMode!.round(),
+        if (config.masteringMode != null) 'mode': config.masteringMode!.round(),
       };
+    } else {
+      // Explicitly mark mastering as disabled so normalization filter is applied
+      spec['mastering'] = <String, Object?>{'enabled': false};
     }
 
     if (config.reverbAmount > 0.0) {
@@ -678,15 +724,23 @@ class WasmAudioEngine implements AudioEngine {
             event.getProperty<JSNumber?>('value'.toJS)?.toDartDouble ?? 0.0;
         final stage =
             event.getProperty<JSString?>('stage'.toJS)?.toDart ?? 'processing';
+
+        // Handle preview progress callback
+        if (jobId == _currentPreviewJobId && _previewProgressCallback != null) {
+          _previewProgressCallback!(value, stage);
+        }
+
+        // Handle render job progress streams
         final controller = _progressControllers[jobId];
-        if (controller == null || controller.isClosed) return;
-        controller.add(
-          RenderProgress(
-            jobId: RenderJobId(jobId),
-            progress: value,
-            stage: stage,
-          ),
-        );
+        if (controller != null && !controller.isClosed) {
+          controller.add(
+            RenderProgress(
+              jobId: RenderJobId(jobId),
+              progress: value,
+              stage: stage,
+            ),
+          );
+        }
       }).toJS,
     );
   }

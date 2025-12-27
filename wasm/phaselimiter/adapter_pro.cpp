@@ -15,7 +15,8 @@ extern "C" {
 
 EMSCRIPTEN_KEEPALIVE
 int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
-                             int sample_rate, int mode) {
+                             int sample_rate, int mode,
+                             void (*progress_cb)(float)) {
   if (!left_ptr || !right_ptr)
     return -1;
   int channels = 2;
@@ -26,6 +27,12 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
             << ", sizeof(size_t)=" << sizeof(size_t) << std::endl;
 
   bool fallback_occurred = false;
+
+  // Create progress callback wrapper that safely calls JS if provided
+  auto report_progress = [progress_cb](float p) {
+    if (progress_cb)
+      progress_cb(p);
+  };
 
   try {
     // Check filesystem for preloaded data
@@ -49,14 +56,10 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
 
     if (mode == 2) {
       std::cerr << "[adapter_pro] Calling AutoMastering2" << std::endl;
-      phase_limiter::AutoMastering2(&wave, sample_rate, [](float p) {
-        // no progress log here to avoid clutter
-      });
+      phase_limiter::AutoMastering2(&wave, sample_rate, report_progress);
     } else if (mode == 3) {
       std::cerr << "[adapter_pro] Calling AutoMastering3" << std::endl;
-      phase_limiter::AutoMastering3(&wave, sample_rate, [](float p) {
-        // no progress log
-      });
+      phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
     } else {
       std::cerr << "[adapter_pro] Calling AutoMastering5" << std::endl;
 
@@ -67,23 +70,17 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
                 << FLAGS_sound_quality2_cache << std::endl;
 
       try {
-        phase_limiter::AutoMastering5(&wave, sample_rate, [](float p) {
-          // no progress log
-        });
+        phase_limiter::AutoMastering5(&wave, sample_rate, report_progress);
       } catch (const std::exception &e) {
         std::cerr << "[adapter_pro] Level 5 failed: " << e.what()
                   << ". Falling back to Level 3..." << std::endl;
-        phase_limiter::AutoMastering3(&wave, sample_rate, [](float p) {
-          // no progress log
-        });
+        phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
         fallback_occurred = true;
       } catch (...) {
         std::cerr << "[adapter_pro] Level 5 failed with unknown error. Falling "
                      "back to Level 3..."
                   << std::endl;
-        phase_limiter::AutoMastering3(&wave, sample_rate, [](float p) {
-          // no progress log
-        });
+        phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
         fallback_occurred = true;
       }
     }

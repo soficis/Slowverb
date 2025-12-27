@@ -72,10 +72,13 @@ abstract class AudioEngine {
   /// Render multiple files with batch processing
   ///
   /// For web, this uses limited concurrency to balance speed and memory.
+  /// If [onResultReady] is provided, it will be called with each file's
+  /// result bytes instead of (or in addition to) auto-downloading.
   Stream<BatchRenderProgress> renderBatch({
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
     required ExportOptions options,
+    void Function(String fileName, Uint8List bytes)? onResultReady,
   });
 
   /// Cancel the entire batch operation
@@ -103,6 +106,12 @@ abstract class AudioEngine {
     required String format,
     int? bitrateKbps,
   });
+
+  /// Resume the audio context to allow Tone.js reverb IR generation.
+  ///
+  /// This must be called after a user gesture (e.g., clicking play button)
+  /// to comply with browser autoplay policies. Returns true if successful.
+  Future<bool> resumeAudioContext();
 }
 
 /// Metadata extracted from an audio file

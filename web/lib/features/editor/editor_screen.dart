@@ -12,6 +12,7 @@ import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/editor/layouts/mobile_editor_layout.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
+import 'package:slowverb_web/features/editor/widgets/processing_indicator.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
@@ -182,6 +183,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                           presetName: presetName,
                           masteringEnabled: masteringEnabled,
                           previewMasteringApplied: previewMasteringApplied,
+                          isLoading: isGeneratingPreview,
                           onBack: () {
                             notifier.stop();
                             context.go(AppRoutes.import_);
@@ -191,6 +193,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                           onFullscreen: () {
                             setState(() => _isFullscreenVisualizer = true);
                           },
+                          onForceStop: notifier.forceStop,
                         ),
 
                         const SizedBox(height: SlowverbTokens.spacingMd),
@@ -901,10 +904,9 @@ class _MobileEffectsSheet extends StatelessWidget {
                     tilePadding: EdgeInsets.zero,
                     title: Text(
                       'Advanced Reverb',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: SlowverbColors.textSecondary),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: SlowverbColors.textSecondary,
+                      ),
                     ),
                     children: [
                       _HqProcessingToggles(
@@ -912,14 +914,16 @@ class _MobileEffectsSheet extends StatelessWidget {
                         onUpdateParam: notifier.updateParameter,
                       ),
                       ...advancedReverbParameterDefinitions.map((param) {
-                        final value = parameters[param.id] ?? param.defaultValue;
+                        final value =
+                            parameters[param.id] ?? param.defaultValue;
                         return _CompactSlider(
                           label: param.label,
                           value: value,
                           min: param.min,
                           max: param.max,
                           formatValue: (v) => _formatEffectValue(param.id, v),
-                          onChanged: (v) => notifier.updateParameter(param.id, v),
+                          onChanged: (v) =>
+                              notifier.updateParameter(param.id, v),
                         );
                       }),
                     ],
@@ -952,18 +956,14 @@ class _HqProcessingToggles extends StatelessWidget {
         _CompactToggleRow(
           label: 'HQ Slow (SoundTouch)',
           value: hqTimeStretch,
-          onChanged: (enabled) => onUpdateParam(
-            'hqTimeStretch',
-            enabled ? 1.0 : 0.0,
-          ),
+          onChanged: (enabled) =>
+              onUpdateParam('hqTimeStretch', enabled ? 1.0 : 0.0),
         ),
         _CompactToggleRow(
           label: 'HQ Reverb (Tone IR)',
           value: hqReverb,
-          onChanged: (enabled) => onUpdateParam(
-            'hqReverb',
-            enabled ? 1.0 : 0.0,
-          ),
+          onChanged: (enabled) =>
+              onUpdateParam('hqReverb', enabled ? 1.0 : 0.0),
         ),
       ],
     );
@@ -1077,17 +1077,21 @@ class _EditorTitleBar extends StatelessWidget {
   final String presetName;
   final bool masteringEnabled;
   final bool previewMasteringApplied;
+  final bool isLoading;
   final VoidCallback onBack;
   final VoidCallback onExport;
   final VoidCallback onFullscreen;
+  final VoidCallback onForceStop;
 
   const _EditorTitleBar({
     required this.presetName,
     required this.masteringEnabled,
     required this.previewMasteringApplied,
+    this.isLoading = false,
     required this.onBack,
     required this.onExport,
     required this.onFullscreen,
+    required this.onForceStop,
   });
 
   @override
@@ -1170,6 +1174,29 @@ class _EditorTitleBar extends StatelessWidget {
                 ),
               ),
             ],
+            const SizedBox(width: SlowverbTokens.spacingSm),
+          ],
+
+          // Right: Force Stop button (visible only when loading)
+          if (isLoading) ...[
+            // Processing progress indicator with time estimate
+            const ProcessingIndicator(),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            ElevatedButton.icon(
+              onPressed: onForceStop,
+              icon: const Icon(Icons.stop_circle, size: 20),
+              label: const Text('FORCE STOP'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                side: BorderSide(color: Colors.red.shade400, width: 2),
+                elevation: 4,
+              ),
+            ),
             const SizedBox(width: SlowverbTokens.spacingSm),
           ],
 
@@ -1832,10 +1859,7 @@ class _EffectColumn extends ConsumerWidget {
                             min: param.min,
                             max: param.max,
                             unit: '',
-                            formatValue: (v) => _formatEffectValue(
-                              param.id,
-                              v,
-                            ),
+                            formatValue: (v) => _formatEffectValue(param.id, v),
                             onChanged: (value) =>
                                 onUpdateParam(param.id, value),
                           ),
@@ -1846,9 +1870,7 @@ class _EffectColumn extends ConsumerWidget {
                           tilePadding: EdgeInsets.zero,
                           title: Text(
                             'Advanced Reverb',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: SlowverbColors.textSecondary),
                           ),
                           children: [
@@ -1861,18 +1883,16 @@ class _EffectColumn extends ConsumerWidget {
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: EffectSlider(
                                   label: param.label,
-                                  value: parameters[param.id] ?? param.defaultValue,
+                                  value:
+                                      parameters[param.id] ??
+                                      param.defaultValue,
                                   min: param.min,
                                   max: param.max,
                                   unit: '',
-                                  formatValue: (v) => _formatEffectValue(
-                                    param.id,
-                                    v,
-                                  ),
-                                  onChanged: (value) => onUpdateParam(
-                                    param.id,
-                                    value,
-                                  ),
+                                  formatValue: (v) =>
+                                      _formatEffectValue(param.id, v),
+                                  onChanged: (value) =>
+                                      onUpdateParam(param.id, value),
                                 ),
                               ),
                             ),
@@ -2074,10 +2094,9 @@ class _EffectColumn extends ConsumerWidget {
                   tilePadding: EdgeInsets.zero,
                   title: Text(
                     'Advanced Reverb',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: SlowverbColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: SlowverbColors.textSecondary,
+                    ),
                   ),
                   children: [
                     _HqProcessingToggles(

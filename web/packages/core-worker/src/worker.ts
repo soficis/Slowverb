@@ -510,7 +510,8 @@ async function renderWithPcmPipeline(
       const chains: string[] = [];
       chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
       chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
-      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet}[wet]`);
+      // Convolution reverb (afir) reduces volume - add 42dB boost
+      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
       chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
 
       args.push("-filter_complex", chains.join(";"));
@@ -543,6 +544,38 @@ async function renderWithPcmPipeline(
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
     tempFiles.push(masteredFile);
     currentPcmFile = masteredFile;
+
+    // Level 5 (Pro) conditional boosting
+    if (algorithm === "phaselimiter_pro") {
+      const isHqReverb = isToneReverbEnabled(payload);
+      // Refined Round 4: 4dB if reverb OFF, 6dB if reverb ON (36dB was deafening)
+      const boostValue = isHqReverb ? "6dB" : "4dB";
+
+      const boostedFile = `${payload.fileId}-${jobId}-pro-boosted.f32`;
+      const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, `volume=${boostValue}`, sampleRate);
+      withProgressStage("mastering-boost", 0.9, 0.0, () => ffmpeg.exec(...boostArgs));
+      tempFiles.push(boostedFile);
+      currentPcmFile = boostedFile;
+    }
+
+    // Level 3 (Lite) is slightly too loud - subtle -2dB reduction
+    if (algorithm === "phaselimiter") {
+      const reducedFile = `${payload.fileId}-${jobId}-lite-reduced.f32`;
+      const reduceArgs = buildPcmFilterPlan(currentPcmFile, reducedFile, "volume=-2dB", sampleRate);
+      withProgressStage("mastering-reduction", 0.9, 0.0, () => ffmpeg.exec(...reduceArgs));
+      tempFiles.push(reducedFile);
+      currentPcmFile = reducedFile;
+    }
+  }
+
+  // Simple Mastering + HQ Reverb is too quiet - add moderate boost
+  const isSimpleMastering = payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
+  if (isSimpleMastering && isToneReverbEnabled(payload)) {
+    const boostedFile = `${payload.fileId}-${jobId}-simple-boosted.f32`;
+    const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, "volume=12dB", sampleRate);
+    withProgressStage("simple-mastering-boost", 0.9, 0.0, () => ffmpeg.exec(...boostArgs));
+    tempFiles.push(boostedFile);
+    currentPcmFile = boostedFile;
   }
 
   // 5) Encode from float PCM to target format.
@@ -662,7 +695,7 @@ function applySoundTouch(inputFile: string, tempo: number, pitchSemitones: numbe
 
   class InterleavedStereoSource {
     private position = 0;
-    constructor(private readonly samples: Float32Array) {}
+    constructor(private readonly samples: Float32Array) { }
     extract(target: Float32Array, numFrames: number = 0, position: number = 0): number {
       this.position = position;
       const start = position * 2;
@@ -681,7 +714,7 @@ function applySoundTouch(inputFile: string, tempo: number, pitchSemitones: numbe
   const chunks: Float32Array[] = [];
 
   let lastEmit = -1;
-  for (;;) {
+  for (; ;) {
     const frames = filter.extract(chunk, chunkFrames);
     if (frames === 0) break;
     chunks.push(chunk.slice(0, frames * 2));
@@ -733,12 +766,12 @@ async function processWithPhaseLimiter(
     const config = isPro
       ? { mode: Math.round(masteringConfig.mode ?? 5) }
       : {
-          targetLufs: typeof masteringConfig.targetLufs === "number" ? masteringConfig.targetLufs : -14.0,
-          bassPreservation:
-            typeof masteringConfig.bassPreservation === "number"
-              ? masteringConfig.bassPreservation
-              : 0.5,
-        };
+        targetLufs: typeof masteringConfig.targetLufs === "number" ? masteringConfig.targetLufs : -14.0,
+        bassPreservation:
+          typeof masteringConfig.bassPreservation === "number"
+            ? masteringConfig.bassPreservation
+            : 0.5,
+      };
     const worker = new Worker(workerScript);
 
     const onMessage = (event: MessageEvent) => {

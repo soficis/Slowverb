@@ -260,7 +260,7 @@ class WorkerRunner {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly callbacks?: RenderCallbacks;
   private requestCounter = 0;
-  private readonly requestTimeoutMs = 120_000;
+  private readonly requestTimeoutMs = 600_000; // 10 minutes for Level 5 mastering
 
   constructor(factory: WorkerFactory, callbacks?: RenderCallbacks) {
     this.worker = factory();
@@ -470,17 +470,83 @@ class WorkerRunner {
 async function generateToneReverbIr(
   reverb: NonNullable<DspSpec["reverb"]>
 ): Promise<{ pcm: ArrayBuffer; sampleRate: number }> {
-  const decaySeconds = clampNumber(0.25 + reverb.decay * 10.0, 0.25, 12.0);
-  const roomScale = clampNumber(reverb.roomScale ?? 0.7, 0.0, 1.0);
-  const scaledDecay = clampNumber(decaySeconds * (0.85 + roomScale * 0.3), 0.25, 12.0);
+  // Ensure AudioContext is started (required for browser autoplay policy)
+  try {
+    await toneStart();
+  } catch (e) {
+    console.warn("[generateToneReverbIr] Tone.start() failed:", e);
+  }
+
+  const decaySeconds = clampNumber(0.1 + reverb.decay * 6.0, 0.1, 8.0);
+  const roomScale = clampNumber(reverb.roomScale ?? 0.5, 0.0, 1.0);
+  const scaledDecay = clampNumber(decaySeconds * (0.7 + roomScale * 0.2), 0.1, 8.0);
   const preDelaySeconds = clampNumber(reverb.preDelayMs, 0, 500) / 1000;
 
   const effect = new Reverb({ decay: scaledDecay, preDelay: preDelaySeconds });
   try {
+    // Wait for the Reverb effect to be fully ready
     await effect.ready;
-    const convolverBuffer = (effect as any)?._convolver?.buffer;
-    const audioBuffer = convolverBuffer?.get?.();
-    if (!audioBuffer) throw new Error("Tone Reverb impulse response not available");
+
+    // Give the internal convolver time to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Access the internal convolver - Tone.js v15 structure
+    const effectAny = effect as any;
+    let audioBuffer: AudioBuffer | undefined;
+
+    // Try multiple access patterns for different Tone.js versions
+    // Pattern 1: Tone.js v15+ with _convolver.buffer as a Tone Param
+    if (effectAny._convolver?.buffer) {
+      const bufferParam = effectAny._convolver.buffer;
+      if (typeof bufferParam?.get === "function") {
+        audioBuffer = bufferParam.get();
+      } else if (bufferParam instanceof AudioBuffer) {
+        audioBuffer = bufferParam;
+      } else if (typeof bufferParam === "object" && bufferParam?.value instanceof AudioBuffer) {
+        audioBuffer = bufferParam.value;
+      }
+    }
+
+    // Pattern 2: Direct _convolver access
+    if (!audioBuffer && effectAny._convolver) {
+      const convolver = effectAny._convolver;
+      if (convolver.buffer instanceof AudioBuffer) {
+        audioBuffer = convolver.buffer;
+      } else if (convolver._buffer instanceof AudioBuffer) {
+        audioBuffer = convolver._buffer;
+      }
+    }
+
+    // Pattern 3: Try accessing via the convolver's internal structure
+    if (!audioBuffer && effectAny.convolver) {
+      const convolver = effectAny.convolver;
+      if (typeof convolver.buffer?.get === "function") {
+        audioBuffer = convolver.buffer.get();
+      } else if (convolver.buffer instanceof AudioBuffer) {
+        audioBuffer = convolver.buffer;
+      }
+    }
+
+    // Pattern 4: Generate our own simple impulse response if Tone.js doesn't provide one
+    if (!audioBuffer) {
+      console.warn("[generateToneReverbIr] Could not access Tone Reverb buffer, generating synthetic IR");
+      const sampleRate = 44100;
+      const irLength = Math.floor(scaledDecay * sampleRate);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioBuffer = audioCtx.createBuffer(2, irLength, sampleRate);
+
+      // Generate exponential decay impulse response
+      for (let channel = 0; channel < 2; channel++) {
+        const data = audioBuffer.getChannelData(channel);
+        for (let i = 0; i < irLength; i++) {
+          const t = i / sampleRate;
+          const decay = Math.exp(-3 * t / scaledDecay);
+          // Add some randomness for natural reverb character
+          data[i] = (Math.random() * 2 - 1) * decay * 0.5;
+        }
+      }
+      audioCtx.close();
+    }
 
     const channels = audioBuffer.numberOfChannels;
     const frames = audioBuffer.length;
@@ -498,6 +564,7 @@ async function generateToneReverbIr(
     effect.dispose();
   }
 }
+
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;

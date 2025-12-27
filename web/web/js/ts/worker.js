@@ -4615,7 +4615,7 @@ var DSP_LIMITS = {
   hfDamping: { min: 0, max: 1},
   stereoWidth: { min: 0.5, max: 2}
 };
-var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
 function compileFilterChain(spec) {
   const filters = [];
   const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
@@ -4682,7 +4682,10 @@ function appendStereoWidth(filters, width) {
   filters.push(buildStereoFilter(clamp(width, DSP_LIMITS.stereoWidth)));
 }
 function appendMastering(filters, mastering) {
-  if (!isMasteringEnabled(mastering)) return;
+  if (!isMasteringEnabled(mastering)) {
+    filters.push(buildNormalizationFilter());
+    return;
+  }
   const algorithm = mastering?.algorithm ?? "simple";
   if (algorithm !== "simple") return;
   filters.push(buildSimpleMasteringFilterChain());
@@ -4692,6 +4695,9 @@ function isMasteringEnabled(mastering) {
 }
 function buildSimpleMasteringFilterChain() {
   return SIMPLE_MASTERING_FILTER_CHAIN;
+}
+function buildNormalizationFilter() {
+  return "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1";
 }
 function buildTempoFilter(tempo) {
   if (tempo >= 0.5 && tempo <= 2) {
@@ -4727,10 +4733,10 @@ function buildReverbFilter(reverb) {
   const d5 = Math.round(d1 * (1.9 + 0.8 * scale));
   const decay = reverb.decay;
   const mix = reverb.mix;
-  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.95).toFixed(2)}|${(decay * 0.82).toFixed(2)}|${(decay * 0.67).toFixed(2)}|${(decay * 0.52).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.8).toFixed(2)}|${(decay * 0.6).toFixed(2)}|${(decay * 0.4).toFixed(2)}|${(decay * 0.25).toFixed(2)}|${(decay * 0.1).toFixed(2)}`;
 }
 function buildEchoFilter(echo) {
-  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+  return `aecho=0.8:0.2:${echo.delayMs}:0.6`;
 }
 function buildLowpassFilter(cutoffHz, hfDamping) {
   if (cutoffHz !== void 0) {
@@ -5805,7 +5811,7 @@ async function renderWithPcmPipeline(payload, jobId, isPreview, options) {
       const chains = [];
       chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
       chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
-      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet}[wet]`);
+      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
       chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
       args.push("-filter_complex", chains.join(";"));
       args.push("-map", "[out]");
@@ -5833,6 +5839,30 @@ async function renderWithPcmPipeline(payload, jobId, isPreview, options) {
     writeInterleavedF32Stereo(masteredFile, processed.left, processed.right);
     tempFiles.push(masteredFile);
     currentPcmFile = masteredFile;
+    if (algorithm === "phaselimiter_pro") {
+      const isHqReverb = isToneReverbEnabled(payload);
+      const boostValue = isHqReverb ? "6dB" : "4dB";
+      const boostedFile = `${payload.fileId}-${jobId}-pro-boosted.f32`;
+      const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, `volume=${boostValue}`, sampleRate);
+      withProgressStage("mastering-boost", 0.9, 0, () => ffmpeg.exec(...boostArgs));
+      tempFiles.push(boostedFile);
+      currentPcmFile = boostedFile;
+    }
+    if (algorithm === "phaselimiter") {
+      const reducedFile = `${payload.fileId}-${jobId}-lite-reduced.f32`;
+      const reduceArgs = buildPcmFilterPlan(currentPcmFile, reducedFile, "volume=-2dB", sampleRate);
+      withProgressStage("mastering-reduction", 0.9, 0, () => ffmpeg.exec(...reduceArgs));
+      tempFiles.push(reducedFile);
+      currentPcmFile = reducedFile;
+    }
+  }
+  const isSimpleMastering = payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
+  if (isSimpleMastering && isToneReverbEnabled(payload)) {
+    const boostedFile = `${payload.fileId}-${jobId}-simple-boosted.f32`;
+    const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, "volume=12dB", sampleRate);
+    withProgressStage("simple-mastering-boost", 0.9, 0, () => ffmpeg.exec(...boostArgs));
+    tempFiles.push(boostedFile);
+    currentPcmFile = boostedFile;
   }
   const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
   postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });

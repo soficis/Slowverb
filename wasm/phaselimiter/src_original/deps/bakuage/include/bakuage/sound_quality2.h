@@ -16,7 +16,6 @@
 #include "bakuage/vector_math.h"
 #include "picojson.h"
 
-
 // #define BA_SOUND_QUALITY2_KL
 // #define BA_SOUND_QUALITY2_MEAN_COV_DIAG_ONLY
 
@@ -538,12 +537,8 @@ public:
     CalculateSoundQuality(reference, output_sound_quality, output_lof);
   }
 
-  int band_count() const {
-    std::cerr << "band_count called. units_[0]=" << units_[0] << std::endl;
-    return units_[0]->band_count();
-  }
+  int band_count() const { return units_[0]->band_count(); }
   const SoundQuality2CalculatorUnit::Band *bands() const {
-    std::cerr << "bands called. units_[0]=" << units_[0] << std::endl;
     return units_[0]->bands();
   }
 

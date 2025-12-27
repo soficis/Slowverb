@@ -6,7 +6,7 @@ type NormalizedReverb = Readonly<Required<ReverbSpec>>;
 type NormalizedEcho = Readonly<EchoSpec>;
 
 const SIMPLE_MASTERING_FILTER_CHAIN =
-  "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
+  "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
 
 export function compileFilterChain(spec: DspSpec): string {
   const filters: string[] = [];
@@ -91,7 +91,12 @@ function appendStereoWidth(filters: string[], width?: number): void {
 }
 
 function appendMastering(filters: string[], mastering?: MasteringSpec): void {
-  if (!isMasteringEnabled(mastering)) return;
+  if (!isMasteringEnabled(mastering)) {
+    // When mastering is disabled, apply a simple limiter to ensure
+    // audio is at a reasonable volume level (prevents inaudible output).
+    filters.push(buildNormalizationFilter());
+    return;
+  }
 
   const algorithm = mastering?.algorithm ?? "simple";
   if (algorithm !== "simple") return;
@@ -106,6 +111,13 @@ function isMasteringEnabled(mastering?: MasteringSpec): boolean {
 function buildSimpleMasteringFilterChain(): string {
   return SIMPLE_MASTERING_FILTER_CHAIN;
 }
+
+// When mastering is off, apply moderate volume boost + limiter to compensate for signal chain
+function buildNormalizationFilter(): string {
+  // 6dB boost + limiter
+  return "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1";
+}
+
 
 function buildTempoFilter(tempo: number): string {
   if (tempo >= 0.5 && tempo <= 2.0) {
@@ -149,11 +161,12 @@ function buildReverbFilter(reverb: NormalizedReverb): string {
   const decay = reverb.decay;
   const mix = reverb.mix;
 
-  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.95).toFixed(2)}|${(decay * 0.82).toFixed(2)}|${(decay * 0.67).toFixed(2)}|${(decay * 0.52).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.8).toFixed(2)}|${(decay * 0.6).toFixed(2)}|${(decay * 0.4).toFixed(2)}|${(decay * 0.25).toFixed(2)}|${(decay * 0.1).toFixed(2)}`;
 }
 
 function buildEchoFilter(echo: NormalizedEcho): string {
-  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+  // Reduced mix to 0.2 and feedback to 0.6 to fix "echo-y" percussion
+  return `aecho=0.8:0.2:${echo.delayMs}:0.6`;
 }
 
 function buildLowpassFilter(cutoffHz?: number, hfDamping?: number): string | null {

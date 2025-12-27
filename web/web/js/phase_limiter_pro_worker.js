@@ -68,13 +68,30 @@ self.onmessage = async (event) => {
         Module.HEAPF32.set(leftChannel, leftPtr >> 2);
         Module.HEAPF32.set(rightChannel, rightPtr >> 2);
 
-        // int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length, int sample_rate, int mode)
+        // Create progress callback using Emscripten's addFunction
+        let progressPtr = 0;
+        if (typeof Module.addFunction === "function") {
+            try {
+                progressPtr = Module.addFunction((percent) => {
+                    self.postMessage({ type: "progress", percent });
+                }, "vf");  // "vf" = void function(float)
+            } catch (e) {
+                console.warn("[PhaseLimiterWorker] addFunction failed:", e);
+            }
+        }
+
+        // int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length, int sample_rate, int mode, void (*progress_cb)(float))
         const errorCode = Module.ccall(
             "phaselimiter_pro_process",
             "number",
-            ["number", "number", "number", "number", "number"],
-            [leftPtrRaw, rightPtrRaw, sampleCount, sampleRate, mode]
+            ["number", "number", "number", "number", "number", "number"],
+            [leftPtrRaw, rightPtrRaw, sampleCount, sampleRate, mode, progressPtr]
         );
+
+        // Cleanup progress callback
+        if (progressPtr !== 0 && typeof Module.removeFunction === "function") {
+            Module.removeFunction(progressPtr);
+        }
 
         console.log(`[PhaseLimiterWorker] errorCode: ${errorCode} (type: ${typeof errorCode})`);
 

@@ -69,8 +69,8 @@ The editor screen provides interactive sliders for:
 Slowverb now defaults to high-quality processing for all presets:
 
 - **HQ Slowed (SoundTouch)**: Uses the industry-standard SoundTouch algorithm for time-stretching. This prevents the "phasing" or "metallic" artifacts common in basic slowdowns, resulting in a cleaner, more natural sound even at extreme speeds.
-- **HQ Reverb (Tone)**: Utilizes an advanced reverb engine with configurable room scale, damping, and stereo width. It provides a much denser and more immersive atmosphere than standard algorithmic reverbs.
-- **HQ Enabled by Default**: All built-in presets have been re-tuned to leverage these HQ features for the best possible audio experience.
+- **HQ Reverb (Tone)**: Utilizes an advanced reverb engine with configurable room scale, damping, and stereo width. It provides a much denser and more immersive atmosphere than standard algorithmic reverbs. Recent tuning has refined the gain staging (up to +42dB compensation) and echo feedback to eliminate unwanted percussion artifacts.
+- **HQ Enabled by Default**: All built-in presets leverage these HQ features for a professional, consistent audio experience.
 
 ### 📊 Waveform Display
 
@@ -78,7 +78,7 @@ The waveform panel shows a visual representation of your audio file. You can cli
 
 ### 🎧 Preview Mode
 
-Before exporting, you can generate a **real-time preview** of your processed audio. This lets you hear changes as you tweak the sliders, without waiting for a full render.
+Before exporting, you can generate a **real-time preview** of your processed audio. The editor displays live progress updates (Decoding -> Effects -> Mastering) so you know exactly when your preview is ready to play. This lets you hear changes as you tweak the sliders, without waiting for a full render.
 
 ### 💾 Automatic Project Saving
 

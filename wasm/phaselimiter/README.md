@@ -71,7 +71,7 @@ PhaseLimiter Level 5 treats mastering as a mathematical optimization problem:
     - **Differential Evolution (DE)**: Population-based global search.
     - **Particle Swarm Optimization (PSO)**: Swarm-based search.
     - **Nelder-Mead (NM)**: Simplex-based local optimization.
-4. **Early Termination**: If no improvement is found within a certain number of evaluations (patience), the search stops early to save time.
+4. **Early Termination**: Optimized for web performance. If no improvement is found within **500 evaluations** (patience), the search stops early. The global maximum is typically capped at **4000 evaluations**.
 
 #### Multi-Band Implementation
 

@@ -1,5 +1,5 @@
 // Separate cache names for better versioning control
-const STATIC_CACHE_NAME = "slowverb-static-v5";
+const STATIC_CACHE_NAME = "slowverb-static-v10";
 const WASM_CACHE_NAME = "slowverb-wasm-v2";
 
 // WASM files get separate cache for easier maintenance
