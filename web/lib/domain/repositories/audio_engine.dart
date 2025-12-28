@@ -71,12 +71,14 @@ abstract class AudioEngine {
 
   /// Render multiple files with batch processing
   ///
-  /// For web, this ALWAYS uses sequential processing (concurrency = 1)
-  /// to avoid browser memory issues. Files are processed one at a time.
+  /// For web, this uses limited concurrency to balance speed and memory.
+  /// If [onResultReady] is provided, it will be called with each file's
+  /// result bytes instead of (or in addition to) auto-downloading.
   Stream<BatchRenderProgress> renderBatch({
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
     required ExportOptions options,
+    void Function(String fileName, Uint8List bytes)? onResultReady,
   });
 
   /// Cancel the entire batch operation
@@ -87,6 +89,29 @@ abstract class AudioEngine {
 
   /// Resume a paused batch operation
   Future<void> resumeBatch();
+
+  /// Decodes an audio file to raw Float32 PCM data (stereo).
+  ///
+  /// Returns left and right channels and the sample rate.
+  Future<({Float32List left, Float32List right, int sampleRate})>
+  decodeToFloatPCM(String fileId);
+
+  /// Encodes raw Float32 PCM data back to an audio file.
+  ///
+  /// Takes interleaved or separate channels and returns the encoded bytes.
+  Future<Uint8List> encodeFromFloatPCM({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required String format,
+    int? bitrateKbps,
+  });
+
+  /// Resume the audio context to allow Tone.js reverb IR generation.
+  ///
+  /// This must be called after a user gesture (e.g., clicking play button)
+  /// to comply with browser autoplay policies. Returns true if successful.
+  Future<bool> resumeAudioContext();
 }
 
 /// Metadata extracted from an audio file
@@ -121,10 +146,16 @@ class EffectConfig {
   final double tempo; // 0.5 - 1.5
   final double pitchSemitones; // -12 to +12
   final double reverbAmount; // 0.0 - 1.0
+  final double? reverbMix; // 0.0 - 1.0
   final double echoAmount; // 0.0 - 1.0
   final double eqWarmth; // 0.0 - 1.0
+  final double hqTimeStretch; // 0.0 or 1.0
+  final double hqReverb; // 0.0 or 1.0
   final double masteringEnabled; // 0.0 or 1.0
   final double masteringAlgorithm; // 0.0=simple, 1.0=phaselimiter
+  final double? masteringTargetLufs; // -24 to -6
+  final double? masteringBassPreservation; // 0.0 - 1.0
+  final double? masteringMode; // 3 or 5
   final double? preDelayMs; // 0 - 200
   final double? hfDamping; // 0.0 - 1.0
   final double? roomScale; // 0.0 - 1.0
@@ -135,10 +166,16 @@ class EffectConfig {
     required this.tempo,
     required this.pitchSemitones,
     required this.reverbAmount,
+    this.reverbMix,
     this.echoAmount = 0.0,
     this.eqWarmth = 0.0,
+    this.hqTimeStretch = 0.0,
+    this.hqReverb = 0.0,
     this.masteringEnabled = 0.0,
     this.masteringAlgorithm = 0.0,
+    this.masteringTargetLufs,
+    this.masteringBassPreservation,
+    this.masteringMode,
     this.preDelayMs,
     this.hfDamping,
     this.roomScale,
@@ -152,10 +189,16 @@ class EffectConfig {
       tempo: params['tempo'] ?? 1.0,
       pitchSemitones: params['pitch'] ?? 0.0,
       reverbAmount: params['reverbAmount'] ?? 0.0,
+      reverbMix: params['reverbMix'],
       echoAmount: params['echoAmount'] ?? 0.0,
       eqWarmth: params['eqWarmth'] ?? 0.0,
+      hqTimeStretch: params['hqTimeStretch'] ?? 0.0,
+      hqReverb: params['hqReverb'] ?? 0.0,
       masteringEnabled: params['masteringEnabled'] ?? 0.0,
       masteringAlgorithm: params['masteringAlgorithm'] ?? 0.0,
+      masteringTargetLufs: params['masteringTargetLufs'],
+      masteringBassPreservation: params['masteringBassPreservation'],
+      masteringMode: params['masteringMode'],
       preDelayMs: params['preDelayMs'],
       hfDamping: params['hfDamping'],
       roomScale: params['roomScale'],

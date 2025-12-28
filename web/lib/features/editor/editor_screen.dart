@@ -7,35 +7,19 @@ import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/app/widgets/responsive_scaffold.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/parameter_definitions.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/editor/layouts/mobile_editor_layout.dart';
-import 'package:slowverb_web/providers/audio_editor_provider.dart';
-import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/playback_controls.dart';
+import 'package:slowverb_web/features/editor/widgets/processing_indicator.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
+import 'package:slowverb_web/providers/audio_editor_provider.dart';
+import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/preset_repository_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:uuid/uuid.dart';
-
-// Parameter metadata definition
-class _ParamDef {
-  final String id;
-  final String label;
-  final double min;
-  final double max;
-  final double defaultValue;
-  const _ParamDef(this.id, this.label, this.min, this.max, this.defaultValue);
-}
-
-const _kParameterDefinitions = [
-  _ParamDef('tempo', 'Tempo', 0.5, 1.5, 1.0),
-  _ParamDef('pitch', 'Pitch', -12.0, 12.0, 0.0),
-  _ParamDef('reverbAmount', 'Reverb', 0.0, 1.0, 0.0),
-  _ParamDef('echoAmount', 'Echo', 0.0, 1.0, 0.0),
-  _ParamDef('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
-];
 
 /// Main editor screen with VaporXP layout shared with the web experience.
 class EditorScreen extends ConsumerStatefulWidget {
@@ -199,6 +183,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                           presetName: presetName,
                           masteringEnabled: masteringEnabled,
                           previewMasteringApplied: previewMasteringApplied,
+                          isLoading: isGeneratingPreview,
                           onBack: () {
                             notifier.stop();
                             context.go(AppRoutes.import_);
@@ -208,6 +193,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                           onFullscreen: () {
                             setState(() => _isFullscreenVisualizer = true);
                           },
+                          onForceStop: notifier.forceStop,
                         ),
 
                         const SizedBox(height: SlowverbTokens.spacingMd),
@@ -901,24 +887,119 @@ class _MobileEffectsSheet extends StatelessWidget {
                 horizontal: SlowverbTokens.spacingMd,
                 vertical: SlowverbTokens.spacingSm,
               ),
-              children: _kParameterDefinitions.map((param) {
-                final value = parameters[param.id] ?? param.defaultValue;
-                return _CompactSlider(
-                  label: param.label,
-                  value: value,
-                  min: param.min,
-                  max: param.max,
-                  formatValue: (v) {
-                    if (param.id == 'tempo') return '${(v * 100).toInt()}%';
-                    if (param.id == 'pitch') {
-                      return '${v.toStringAsFixed(1)} st';
-                    }
-                    return '${(v * 100).toInt()}%';
-                  },
-                  onChanged: (v) => notifier.updateParameter(param.id, v),
-                );
-              }).toList(),
+              children: [
+                ...effectParameterDefinitions.map((param) {
+                  final value = parameters[param.id] ?? param.defaultValue;
+                  return _CompactSlider(
+                    label: param.label,
+                    value: value,
+                    min: param.min,
+                    max: param.max,
+                    formatValue: (v) => _formatEffectValue(param.id, v),
+                    onChanged: (v) => notifier.updateParameter(param.id, v),
+                  );
+                }),
+                if (advancedReverbParameterDefinitions.isNotEmpty)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      'Advanced Reverb',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: SlowverbColors.textSecondary,
+                      ),
+                    ),
+                    children: [
+                      _HqProcessingToggles(
+                        parameters: parameters,
+                        onUpdateParam: notifier.updateParameter,
+                      ),
+                      ...advancedReverbParameterDefinitions.map((param) {
+                        final value =
+                            parameters[param.id] ?? param.defaultValue;
+                        return _CompactSlider(
+                          label: param.label,
+                          value: value,
+                          min: param.min,
+                          max: param.max,
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (v) =>
+                              notifier.updateParameter(param.id, v),
+                        );
+                      }),
+                    ],
+                  ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HqProcessingToggles extends StatelessWidget {
+  final Map<String, double> parameters;
+  final void Function(String, double) onUpdateParam;
+
+  const _HqProcessingToggles({
+    required this.parameters,
+    required this.onUpdateParam,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hqTimeStretch = (parameters['hqTimeStretch'] ?? 0.0) > 0.5;
+    final hqReverb = (parameters['hqReverb'] ?? 0.0) > 0.5;
+
+    return Column(
+      children: [
+        _CompactToggleRow(
+          label: 'HQ Slow (SoundTouch)',
+          value: hqTimeStretch,
+          onChanged: (enabled) =>
+              onUpdateParam('hqTimeStretch', enabled ? 1.0 : 0.0),
+        ),
+        _CompactToggleRow(
+          label: 'HQ Reverb (Tone IR)',
+          value: hqReverb,
+          onChanged: (enabled) =>
+              onUpdateParam('hqReverb', enabled ? 1.0 : 0.0),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CompactToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: SlowverbColors.neonCyan,
+            activeTrackColor: SlowverbColors.neonCyan.withValues(alpha: 0.4),
           ),
         ],
       ),
@@ -996,17 +1077,21 @@ class _EditorTitleBar extends StatelessWidget {
   final String presetName;
   final bool masteringEnabled;
   final bool previewMasteringApplied;
+  final bool isLoading;
   final VoidCallback onBack;
   final VoidCallback onExport;
   final VoidCallback onFullscreen;
+  final VoidCallback onForceStop;
 
   const _EditorTitleBar({
     required this.presetName,
     required this.masteringEnabled,
     required this.previewMasteringApplied,
+    this.isLoading = false,
     required this.onBack,
     required this.onExport,
     required this.onFullscreen,
+    required this.onForceStop,
   });
 
   @override
@@ -1089,6 +1174,29 @@ class _EditorTitleBar extends StatelessWidget {
                 ),
               ),
             ],
+            const SizedBox(width: SlowverbTokens.spacingSm),
+          ],
+
+          // Right: Force Stop button (visible only when loading)
+          if (isLoading) ...[
+            // Processing progress indicator with time estimate
+            const ProcessingIndicator(),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            ElevatedButton.icon(
+              onPressed: onForceStop,
+              icon: const Icon(Icons.stop_circle, size: 20),
+              label: const Text('FORCE STOP'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                side: BorderSide(color: Colors.red.shade400, width: 2),
+                elevation: 4,
+              ),
+            ),
             const SizedBox(width: SlowverbTokens.spacingSm),
           ],
 
@@ -1686,8 +1794,8 @@ class _EffectColumn extends ConsumerWidget {
                                         : (parameters['masteringAlgorithm'] ??
                                                   0.0) <
                                               1.5
-                                        ? 'Lite'
-                                        : 'Pro',
+                                        ? 'Level 3'
+                                        : 'Level 5',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
@@ -1742,7 +1850,7 @@ class _EffectColumn extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ..._kParameterDefinitions.map(
+                      ...effectParameterDefinitions.map(
                         (param) => Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: EffectSlider(
@@ -1750,15 +1858,46 @@ class _EffectColumn extends ConsumerWidget {
                             value: parameters[param.id] ?? param.defaultValue,
                             min: param.min,
                             max: param.max,
-                            unit: param.id == 'pitch' ? 'st' : '%',
-                            formatValue: param.id == 'pitch'
-                                ? (v) => v.toStringAsFixed(1)
-                                : (v) => '${(v * 100).toInt()}%',
+                            unit: '',
+                            formatValue: (v) => _formatEffectValue(param.id, v),
                             onChanged: (value) =>
                                 onUpdateParam(param.id, value),
                           ),
                         ),
                       ),
+                      if (advancedReverbParameterDefinitions.isNotEmpty)
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: Text(
+                            'Advanced Reverb',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: SlowverbColors.textSecondary),
+                          ),
+                          children: [
+                            _HqProcessingToggles(
+                              parameters: parameters,
+                              onUpdateParam: onUpdateParam,
+                            ),
+                            ...advancedReverbParameterDefinitions.map(
+                              (param) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: EffectSlider(
+                                  label: param.label,
+                                  value:
+                                      parameters[param.id] ??
+                                      param.defaultValue,
+                                  min: param.min,
+                                  max: param.max,
+                                  unit: '',
+                                  formatValue: (v) =>
+                                      _formatEffectValue(param.id, v),
+                                  onChanged: (value) =>
+                                      onUpdateParam(param.id, value),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -1880,8 +2019,8 @@ class _EffectColumn extends ConsumerWidget {
                                 ? 'Simple'
                                 : (parameters['masteringAlgorithm'] ?? 0.0) <
                                       1.5
-                                ? 'Lite'
-                                : 'Pro',
+                                ? 'Level 3'
+                                : 'Level 5',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: SlowverbColors.neonCyan,
@@ -1934,7 +2073,7 @@ class _EffectColumn extends ConsumerWidget {
               ),
               const SizedBox(height: SlowverbTokens.spacingMd),
               // All effect parameters
-              ..._kParameterDefinitions.map(
+              ...effectParameterDefinitions.map(
                 (param) => Padding(
                   padding: const EdgeInsets.only(
                     bottom: SlowverbTokens.spacingMd,
@@ -1944,14 +2083,44 @@ class _EffectColumn extends ConsumerWidget {
                     value: parameters[param.id] ?? param.defaultValue,
                     min: param.min,
                     max: param.max,
-                    unit: param.id == 'pitch' ? 'st' : '%',
-                    formatValue: param.id == 'pitch'
-                        ? (v) => v.toStringAsFixed(1)
-                        : (v) => '${(v * 100).toInt()}%',
+                    unit: '',
+                    formatValue: (v) => _formatEffectValue(param.id, v),
                     onChanged: (value) => onUpdateParam(param.id, value),
                   ),
                 ),
               ),
+              if (advancedReverbParameterDefinitions.isNotEmpty)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                    'Advanced Reverb',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: SlowverbColors.textSecondary,
+                    ),
+                  ),
+                  children: [
+                    _HqProcessingToggles(
+                      parameters: parameters,
+                      onUpdateParam: onUpdateParam,
+                    ),
+                    ...advancedReverbParameterDefinitions.map(
+                      (param) => Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: SlowverbTokens.spacingMd,
+                        ),
+                        child: EffectSlider(
+                          label: param.label,
+                          value: parameters[param.id] ?? param.defaultValue,
+                          min: param.min,
+                          max: param.max,
+                          unit: '',
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (value) => onUpdateParam(param.id, value),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           );
         },
@@ -2201,4 +2370,23 @@ void _showSavePresetDialog(
       ],
     ),
   );
+}
+
+String _formatEffectValue(String paramId, double value) {
+  switch (paramId) {
+    case 'tempo':
+      return '${(value * 100).toInt()}%';
+    case 'pitch':
+      return '${value.toStringAsFixed(1)} st';
+    case 'preDelayMs':
+      return '${value.toStringAsFixed(0)} ms';
+    case 'roomScale':
+    case 'reverbMix':
+    case 'hfDamping':
+      return '${(value * 100).toInt()}%';
+    case 'stereoWidth':
+      return '${value.toStringAsFixed(2)}x';
+    default:
+      return '${(value * 100).toInt()}%';
+  }
 }

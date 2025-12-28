@@ -6,6 +6,8 @@ import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
+import 'package:slowverb_web/services/logger_service.dart';
+import 'package:slowverb_web/services/zip_export_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Status of batch export operation
@@ -37,9 +39,12 @@ class BatchExportState {
   final int aacBitrate;
   final int flacCompressionLevel;
   final EffectPreset selectedPreset;
+  final bool zipExportEnabled;
   final BatchExportStatus status;
   final BatchRenderProgress? progress;
   final String? errorMessage;
+  final List<({String fileName, Uint8List bytes})> completedResults;
+  final Uint8List? zipResult;
 
   const BatchExportState({
     this.queuedFiles = const [],
@@ -48,9 +53,12 @@ class BatchExportState {
     this.aacBitrate = 256,
     this.flacCompressionLevel = 8,
     required this.selectedPreset,
+    this.zipExportEnabled = false,
     this.status = BatchExportStatus.idle,
     this.progress,
     this.errorMessage,
+    this.completedResults = const [],
+    this.zipResult,
   });
 
   /// True if ALL queued files have lossless source format
@@ -66,6 +74,12 @@ class BatchExportState {
   bool get canStart =>
       queuedFiles.isNotEmpty && status == BatchExportStatus.idle;
 
+  /// True if batch mode (multiple files)
+  bool get isBatchMode => queuedFiles.length > 1;
+
+  /// True if ZIP option should be shown
+  bool get showZipOption => isBatchMode;
+
   /// File count helper
   int get fileCount => queuedFiles.length;
 
@@ -76,11 +90,15 @@ class BatchExportState {
     int? aacBitrate,
     int? flacCompressionLevel,
     EffectPreset? selectedPreset,
+    bool? zipExportEnabled,
     BatchExportStatus? status,
     BatchRenderProgress? progress,
     bool clearProgress = false,
     String? errorMessage,
     bool clearError = false,
+    List<({String fileName, Uint8List bytes})>? completedResults,
+    Uint8List? zipResult,
+    bool clearZip = false,
   }) {
     return BatchExportState(
       queuedFiles: queuedFiles ?? this.queuedFiles,
@@ -89,9 +107,12 @@ class BatchExportState {
       aacBitrate: aacBitrate ?? this.aacBitrate,
       flacCompressionLevel: flacCompressionLevel ?? this.flacCompressionLevel,
       selectedPreset: selectedPreset ?? this.selectedPreset,
+      zipExportEnabled: zipExportEnabled ?? this.zipExportEnabled,
       status: status ?? this.status,
       progress: clearProgress ? null : (progress ?? this.progress),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      completedResults: completedResults ?? this.completedResults,
+      zipResult: clearZip ? null : (zipResult ?? this.zipResult),
     );
   }
 }
@@ -100,6 +121,8 @@ class BatchExportState {
 class BatchExportNotifier extends StateNotifier<BatchExportState> {
   final Ref _ref;
   StreamSubscription<BatchRenderProgress>? _batchSubscription;
+  final ZipExportService _zipService = ZipExportService();
+  static const _log = SlowverbLogger('BatchExport');
 
   BatchExportNotifier(this._ref)
     : super(BatchExportState(selectedPreset: Presets.slowedReverb));
@@ -135,9 +158,7 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
           ),
         );
       } catch (e) {
-        // Skip files that fail to load
-        // ignore: avoid_print
-        print('[BatchExport] Failed to load ${file.fileName}: $e');
+        _log.warning('Failed to load ${file.fileName}', e);
       }
     }
 
@@ -219,13 +240,33 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
     state = state.copyWith(selectedPreset: preset);
   }
 
+  /// Enable ZIP export for batch
+  void enableZipExport() {
+    state = state.copyWith(zipExportEnabled: true);
+  }
+
+  /// Disable ZIP export
+  void disableZipExport() {
+    state = state.copyWith(zipExportEnabled: false);
+  }
+
+  /// Toggle ZIP export
+  void toggleZipExport() {
+    state = state.copyWith(zipExportEnabled: !state.zipExportEnabled);
+  }
+
   /// Start batch processing
   Future<void> startBatch() async {
     if (!state.canStart) {
       throw StateError('Cannot start batch: no files or already running');
     }
 
-    state = state.copyWith(status: BatchExportStatus.running, clearError: true);
+    state = state.copyWith(
+      status: BatchExportStatus.running,
+      clearError: true,
+      completedResults: [],
+      clearZip: true,
+    );
 
     final engine = _ref.read(audioEngineProvider);
 
@@ -243,11 +284,23 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
         )
         .toList();
 
+    // Collect results for zip if enabled
+    final collectedResults = <({String fileName, Uint8List bytes})>[];
+
     try {
       final stream = engine.renderBatch(
         files: batchFiles,
         defaultPreset: state.selectedPreset,
         options: options,
+        // Use callback to collect results when zip export is enabled
+        onResultReady: state.zipExportEnabled
+            ? (fileName, bytes) {
+                collectedResults.add((fileName: fileName, bytes: bytes));
+                state = state.copyWith(
+                  completedResults: List.from(collectedResults),
+                );
+              }
+            : null,
       );
 
       _batchSubscription = stream.listen(
@@ -255,7 +308,12 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
           state = state.copyWith(progress: progress);
 
           if (progress.isFinished) {
-            state = state.copyWith(status: BatchExportStatus.completed);
+            // Create zip if enabled and we have results
+            if (state.zipExportEnabled && collectedResults.isNotEmpty) {
+              _createZipFromResults(collectedResults);
+            } else {
+              state = state.copyWith(status: BatchExportStatus.completed);
+            }
           }
         },
         onError: (error) {
@@ -266,7 +324,12 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
         },
         onDone: () {
           if (state.status == BatchExportStatus.running) {
-            state = state.copyWith(status: BatchExportStatus.completed);
+            // Create zip if enabled and we have results
+            if (state.zipExportEnabled && collectedResults.isNotEmpty) {
+              _createZipFromResults(collectedResults);
+            } else {
+              state = state.copyWith(status: BatchExportStatus.completed);
+            }
           }
         },
       );
@@ -274,6 +337,29 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
       state = state.copyWith(
         status: BatchExportStatus.error,
         errorMessage: 'Failed to start batch: $e',
+      );
+    }
+  }
+
+  Future<void> _createZipFromResults(
+    List<({String fileName, Uint8List bytes})> results,
+  ) async {
+    try {
+      final zipMap = <String, Uint8List>{};
+      for (final result in results) {
+        zipMap[result.fileName] = result.bytes;
+      }
+
+      final zipBytes = await _zipService.createZip(zipMap);
+      state = state.copyWith(
+        zipResult: zipBytes,
+        status: BatchExportStatus.completed,
+      );
+    } catch (e) {
+      _log.warning('Failed to create zip', e);
+      state = state.copyWith(
+        status: BatchExportStatus.completed,
+        errorMessage: 'Files exported but zip creation failed: $e',
       );
     }
   }

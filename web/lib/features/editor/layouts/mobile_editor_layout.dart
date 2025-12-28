@@ -5,6 +5,7 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/router.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/parameter_definitions.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,6 +91,7 @@ class _MobileEditorLayoutState extends ConsumerState<MobileEditorLayout> {
             position: widget.position,
             duration: widget.duration,
             isPlaying: widget.isPlaying,
+            isProcessing: widget.isGeneratingPreview,
             onPlayPause: widget.notifier.togglePlayback,
             onSeek: (pos) => widget.notifier.seek(
               widget.duration.inMilliseconds > 0
@@ -152,6 +154,7 @@ class _MiniTransportBar extends StatelessWidget {
   final Duration position;
   final Duration duration;
   final bool isPlaying;
+  final bool isProcessing;
   final VoidCallback onPlayPause;
   final void Function(int) onSeek;
   final VoidCallback onExpandEffects;
@@ -164,6 +167,7 @@ class _MiniTransportBar extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.isPlaying,
+    required this.isProcessing,
     required this.onPlayPause,
     required this.onSeek,
     required this.onExpandEffects,
@@ -265,14 +269,23 @@ class _MiniTransportBar extends StatelessWidget {
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: onPlayPause,
+                  onTap: isProcessing ? null : onPlayPause,
                   child: Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: isProcessing
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                   ),
                 ),
               ),
@@ -326,15 +339,6 @@ class _MobileEffectsSheet extends ConsumerWidget {
   final Map<String, double> parameters;
   final AudioEditorNotifier notifier;
   final VoidCallback onClose;
-
-  // Parameter definitions (duplicated from editor_screen.dart temporarily)
-  static const _paramDefs = [
-    _ParamDef('tempo', 'Tempo', 0.5, 1.5, 1.0),
-    _ParamDef('pitch', 'Pitch', -12.0, 12.0, 0.0),
-    _ParamDef('reverbAmount', 'Reverb', 0.0, 1.0, 0.0),
-    _ParamDef('echoAmount', 'Echo', 0.0, 1.0, 0.0),
-    _ParamDef('eqWarmth', 'Warmth', 0.0, 1.0, 0.5),
-  ];
 
   const _MobileEffectsSheet({
     required this.selectedPresetId,
@@ -502,23 +506,53 @@ class _MobileEffectsSheet extends ConsumerWidget {
                 horizontal: SlowverbTokens.spacingMd,
                 vertical: SlowverbTokens.spacingSm,
               ),
-              children: _paramDefs.map((param) {
-                final value = parameters[param.id] ?? param.defaultValue;
-                return _CompactSlider(
-                  label: param.label,
-                  value: value,
-                  min: param.min,
-                  max: param.max,
-                  formatValue: (v) {
-                    if (param.id == 'tempo') return '${(v * 100).toInt()}%';
-                    if (param.id == 'pitch') {
-                      return '${v.toStringAsFixed(1)} st';
-                    }
-                    return '${(v * 100).toInt()}%';
-                  },
-                  onChanged: (v) => notifier.updateParameter(param.id, v),
-                );
-              }).toList(),
+              children: [
+                ...effectParameterDefinitions.map((param) {
+                  final value = parameters[param.id] ?? param.defaultValue;
+                  return _CompactSlider(
+                    label: param.label,
+                    value: value,
+                    min: param.min,
+                    max: param.max,
+                    formatValue: (v) => _formatEffectValue(param.id, v),
+                    onChanged: (v) => notifier.updateParameter(param.id, v),
+                  );
+                }),
+                if (advancedReverbParameterDefinitions.isNotEmpty)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Advanced Reverb'),
+                    children: [
+                      _CompactToggleRow(
+                        label: 'HQ Slow (SoundTouch)',
+                        value: (parameters['hqTimeStretch'] ?? 0.0) > 0.5,
+                        onChanged: (enabled) => notifier.updateParameter(
+                          'hqTimeStretch',
+                          enabled ? 1.0 : 0.0,
+                        ),
+                      ),
+                      _CompactToggleRow(
+                        label: 'HQ Reverb (Tone IR)',
+                        value: (parameters['hqReverb'] ?? 0.0) > 0.5,
+                        onChanged: (enabled) => notifier.updateParameter(
+                          'hqReverb',
+                          enabled ? 1.0 : 0.0,
+                        ),
+                      ),
+                      ...advancedReverbParameterDefinitions.map((param) {
+                        final value = parameters[param.id] ?? param.defaultValue;
+                        return _CompactSlider(
+                          label: param.label,
+                          value: value,
+                          min: param.min,
+                          max: param.max,
+                          formatValue: (v) => _formatEffectValue(param.id, v),
+                          onChanged: (v) => notifier.updateParameter(param.id, v),
+                        );
+                      }),
+                    ],
+                  ),
+              ],
             ),
           ),
         ],
@@ -596,13 +630,54 @@ class _CompactSlider extends StatelessWidget {
   }
 }
 
-/// Internal parameter definition class.
-class _ParamDef {
-  final String id;
+class _CompactToggleRow extends StatelessWidget {
   final String label;
-  final double min;
-  final double max;
-  final double defaultValue;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
-  const _ParamDef(this.id, this.label, this.min, this.max, this.defaultValue);
+  const _CompactToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: SlowverbColors.textSecondary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: SlowverbColors.neonCyan,
+            activeTrackColor: SlowverbColors.neonCyan.withValues(alpha: 0.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatEffectValue(String paramId, double value) {
+  switch (paramId) {
+    case 'tempo':
+      return '${(value * 100).toInt()}%';
+    case 'pitch':
+      return '${value.toStringAsFixed(1)} st';
+    case 'preDelayMs':
+      return '${value.toStringAsFixed(0)} ms';
+    case 'stereoWidth':
+      return '${value.toStringAsFixed(2)}x';
+    default:
+      return '${(value * 100).toInt()}%';
+  }
 }

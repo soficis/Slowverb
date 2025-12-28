@@ -6,21 +6,52 @@ type NormalizedReverb = Readonly<Required<ReverbSpec>>;
 type NormalizedEcho = Readonly<EchoSpec>;
 
 const SIMPLE_MASTERING_FILTER_CHAIN =
-  "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=3,alimiter=limit=0.95";
+  "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
 
 export function compileFilterChain(spec: DspSpec): string {
   const filters: string[] = [];
 
-  appendTempo(filters, spec.tempo);
-  appendPitch(filters, spec.pitch);
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(filters, spec.tempo);
+    appendPitch(filters, spec.pitch);
+  }
   appendEqWarmth(filters, spec.eqWarmth);
-  appendReverb(filters, spec.reverb);
+  const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
+  if (reverbAlgorithm !== "tone") {
+    appendReverb(filters, spec.reverb);
+  }
   appendEcho(filters, spec.echo);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
   appendMastering(filters, spec.mastering);
 
   return filters.length > 0 ? filters.join(",") : "anull";
+}
+
+export function compileFilterChainParts(spec: DspSpec): { pre: string; post: string } {
+  const pre: string[] = [];
+  const post: string[] = [];
+
+  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
+  if (timeStretchAlgorithm !== "soundtouch") {
+    appendTempo(pre, spec.tempo);
+    appendPitch(pre, spec.pitch);
+  }
+  appendEqWarmth(pre, spec.eqWarmth);
+
+  // NOTE: Reverb is intentionally not included here. The caller can insert a
+  // high-quality reverb stage between `pre` and `post` (e.g., Tone-generated IR).
+
+  appendEcho(post, spec.echo);
+  appendLowpass(post, spec.lowPassCutoffHz, spec.hfDamping);
+  appendStereoWidth(post, spec.stereoWidth);
+  appendMastering(post, spec.mastering);
+
+  return {
+    pre: pre.length > 0 ? pre.join(",") : "anull",
+    post: post.length > 0 ? post.join(",") : "anull",
+  };
 }
 
 function appendTempo(filters: string[], tempo?: number): void {
@@ -60,7 +91,12 @@ function appendStereoWidth(filters: string[], width?: number): void {
 }
 
 function appendMastering(filters: string[], mastering?: MasteringSpec): void {
-  if (!isMasteringEnabled(mastering)) return;
+  if (!isMasteringEnabled(mastering)) {
+    // When mastering is disabled, apply a simple limiter to ensure
+    // audio is at a reasonable volume level (prevents inaudible output).
+    filters.push(buildNormalizationFilter());
+    return;
+  }
 
   const algorithm = mastering?.algorithm ?? "simple";
   if (algorithm !== "simple") return;
@@ -75,6 +111,13 @@ function isMasteringEnabled(mastering?: MasteringSpec): boolean {
 function buildSimpleMasteringFilterChain(): string {
   return SIMPLE_MASTERING_FILTER_CHAIN;
 }
+
+// When mastering is off, apply moderate volume boost + limiter to compensate for signal chain
+function buildNormalizationFilter(): string {
+  // 6dB boost + limiter
+  return "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1";
+}
+
 
 function buildTempoFilter(tempo: number): string {
   if (tempo >= 0.5 && tempo <= 2.0) {
@@ -99,7 +142,7 @@ function buildTempoFilter(tempo: number): string {
 
 function buildPitchFilter(semitones: number): string {
   const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100`;
+  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
 }
 
 function buildEqWarmthFilter(warmth: number): string {
@@ -109,17 +152,21 @@ function buildEqWarmthFilter(warmth: number): string {
 
 function buildReverbFilter(reverb: NormalizedReverb): string {
   const d1 = reverb.preDelayMs;
-  const d2 = Math.round(d1 * (1 + reverb.roomScale * 0.5));
-  const d3 = Math.round(d2 * 1.3);
+  const scale = 1 + reverb.roomScale;
+  const d2 = Math.round(d1 * (1 + 0.35 * scale));
+  const d3 = Math.round(d1 * (1 + 0.7 * scale));
+  const d4 = Math.round(d1 * (1.4 + 0.6 * scale));
+  const d5 = Math.round(d1 * (1.9 + 0.8 * scale));
 
   const decay = reverb.decay;
   const mix = reverb.mix;
 
-  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}:${(decay * 0.9).toFixed(2)}|${(decay * 0.7).toFixed(2)}|${(decay * 0.4).toFixed(2)}`;
+  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.8).toFixed(2)}|${(decay * 0.6).toFixed(2)}|${(decay * 0.4).toFixed(2)}|${(decay * 0.25).toFixed(2)}|${(decay * 0.1).toFixed(2)}`;
 }
 
 function buildEchoFilter(echo: NormalizedEcho): string {
-  return `aecho=0.8:0.5:${echo.delayMs}:${echo.feedback.toFixed(2)}`;
+  // Reduced mix to 0.2 and feedback to 0.6 to fix "echo-y" percussion
+  return `aecho=0.8:0.2:${echo.delayMs}:0.6`;
 }
 
 function buildLowpassFilter(cutoffHz?: number, hfDamping?: number): string | null {

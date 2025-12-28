@@ -3,11 +3,57 @@
     "outputDirectory": "build/web",
     "rewrites": [
         {
+            "source": "/js/:file",
+            "destination": "/js/:file"
+        },
+        {
+            "source": "/assets/:path*",
+            "destination": "/assets/:path*"
+        },
+        {
+            "source": "/:path*.:ext(js|wasm|data|css|json|html|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|mp3|wav|ogg|webp)",
+            "destination": "/:path*.:ext"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }
     ],
     "headers": [
+        {
+            "source": "/js/(.*).wasm",
+            "headers": [
+                {
+                    "key": "Content-Type",
+                    "value": "application/wasm"
+                },
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin"
+                },
+                {
+                    "key": "Cross-Origin-Embedder-Policy",
+                    "value": "require-corp"
+                }
+            ]
+        },
+        {
+            "source": "/(.*).wasm",
+            "headers": [
+                {
+                    "key": "Content-Type",
+                    "value": "application/wasm"
+                },
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin"
+                },
+                {
+                    "key": "Cross-Origin-Embedder-Policy",
+                    "value": "require-corp"
+                }
+            ]
+        },
         {
             "source": "/(.*)",
             "headers": [

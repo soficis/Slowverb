@@ -64,13 +64,21 @@ The editor screen provides interactive sliders for:
 | **Echo**      | 0% – 100%        | Add a repeating echo effect.                     |
 | **EQ Warmth** | 0% – 100%        | Boost low frequencies for a warmer, lo-fi sound. |
 
+### ✨ High-Quality (HQ) Audio Engine
+
+Slowverb now defaults to high-quality processing for all presets:
+
+- **HQ Slowed (SoundTouch)**: Uses the industry-standard SoundTouch algorithm for time-stretching. This prevents the "phasing" or "metallic" artifacts common in basic slowdowns, resulting in a cleaner, more natural sound even at extreme speeds.
+- **HQ Reverb (Tone)**: Utilizes an advanced reverb engine with configurable room scale, damping, and stereo width. It provides a much denser and more immersive atmosphere than standard algorithmic reverbs. Recent tuning has refined the gain staging (up to +42dB compensation) and echo feedback to eliminate unwanted percussion artifacts.
+- **HQ Enabled by Default**: All built-in presets leverage these HQ features for a professional, consistent audio experience.
+
 ### 📊 Waveform Display
 
 The waveform panel shows a visual representation of your audio file. You can click anywhere on the waveform to seek to that position in the track.
 
 ### 🎧 Preview Mode
 
-Before exporting, you can generate a **real-time preview** of your processed audio. This lets you hear changes as you tweak the sliders, without waiting for a full render.
+Before exporting, you can generate a **real-time preview** of your processed audio. The editor displays live progress updates (Decoding -> Effects -> Mastering) so you know exactly when your preview is ready to play. This lets you hear changes as you tweak the sliders, without waiting for a full render.
 
 ### 💾 Automatic Project Saving
 
@@ -92,24 +100,35 @@ Export your finished audio in one of four formats:
 
 ### 🎛️ Mastering & Quality
 
-Slowverb features a mastering engine powered by **PhaseLimiter**. This ensures your slowed + reverb tracks have consistent loudness and punch without clipping.
+Slowverb features a professional-grade mastering engine powered by **PhaseLimiter**. This ensures your tracks have consistent loudness and punch without clipping.
 
-When Mastering is enabled, you can choose from three quality levels:
+#### The New PhaseLimiter Interface
 
-| Level      | Engine              | Description                                      | Render Time |
+Access the standalone **PhaseLimiter AI** interface from the home screen to master multiple files at once. It features:
+
+- **Batch Processing**: Drop up to 50 files for automated mastering.
+- **Target LUFS**: Choose your loudness level (e.g., -14 for Streaming, -11 for Club).
+- **Bass Preservation**: Maintain low-end punch even during aggressive limiting.
+- **Zip Export**: Bundle all mastered tracks into a single ZIP archive.
+
+#### Mastering Quality Levels
+
+| Level      | Engine              | Description                                      | Processing Time |
 |------------|---------------------|--------------------------------------------------|-------------|
 | **Simple** | Soft Clipper        | Basic peak limiting. Prevents red-lining.       | Instant     |
-| **Lite**   | PhaseLimiter (Lite) | Single-band lookahead limiting. Transparent.     | Fast        |
-| **Pro**    | PhaseLimiter (Pro)  | Multi-stage auto-mastering with Phase optimization. | Slow        |
+| **Lite (L3)**| PhaseLimiter (Lite) | Single-band lookahead limiting with spectral balancing. | Fast        |
+| **Pro (L5)** | PhaseLimiter (Pro)  | **Multi-band AI optimization**. Uses heuristic search to find perfect DSP parameters for your specific audio. | Slow        |
 
-> **Note**: The "Pro" setting uses a complex DSP chain ported from the original C++ PhaseLimiter library. It provides the highest quality but takes significantly longer to render.
+> **Note**: The "Pro" mode (Level 5) runs a complex optimization loop directly in your browser. It provides the highest quality and most transparent loudness but may take 20-60 seconds per track.
 
-To enable mastering:
+To enable mastering in the editor:
 
 1. Open the editor screen.
 2. Toggle the "Mastering" switch in the unified bubble.
 3. Adjust the **Quality** slider to your preference.
 4. Regenerate your preview to hear the difference.
+
+For batch mastering, use the **PHASELIMITER** button on the home screen.
 
 ---
 
@@ -155,20 +174,20 @@ Slowverb includes **13 curated presets** to get you started quickly:
 
 | Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
 |--------------------|---------|----------|--------|-------|--------|-----------------------------------|
-| **Slowed + Reverb**| 0.95x   | -2 semi  | 70%    | 20%   | 40%    | Classic dreamy vaporwave.         |
-| **Slowed + Reverb 2**| 0.74x | -4.5 semi| 40%    | 15%   | 50%    | Precise -25.926% slowdown.        |
-| **Slowed + Reverb 3**| 0.81x | -3.2 semi| 50%    | 20%   | 50%    | -19% speed with balanced reverb.  |
-| **Slow Chill**     | 0.94x   | -3.5 semi| 85%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
-| **Vaporwave Chill**| 0.78x   | -3 semi  | 80%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
-| **Nightcore**      | 1.25x   | +4 semi  | 30%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
-| **Echo Slow**      | 0.65x   | -4 semi  | 60%    | 80%   | 50%    | Ultra slow with cascading echoes. |
-| **Lo-Fi**          | 0.92x   | -1 semi  | 50%    | 30%   | 80%    | Relaxed, warm, dusty sound.       |
-| **Ambient Space**  | 0.70x   | -2.5 semi| 90%    | 60%   | 30%    | Ethereal, floating atmosphere.    |
-| **Deep Bass**      | 0.80x   | -5 semi  | 40%    | 20%   | 90%    | Heavy low-end focus.              |
-| **Crystal Clear**  | 1.00x   | +2 semi  | 20%    | 10%   | 10%    | Crisp, bright, clean.             |
-| **Underwater**     | 0.72x   | -3.5 semi| 85%    | 50%   | 60%    | Muffled, submerged atmosphere.    |
-| **Synthwave**      | 1.05x   | +1 semi  | 60%    | 40%   | 40%    | Retro 80s vibes.                  |
-| **Slow Motion**    | 0.55x   | -6 semi  | 70%    | 60%   | 50%    | Extreme slow-down effect.         |
+| **Slowed + Reverb**| 0.95x   | -2 semi  | 49%    | 20%   | 40%    | Classic dreamy vaporwave.         |
+| **Slowed + Reverb 2**| 0.74x | -4.5 semi| 28%    | 15%   | 50%    | Precise -25.926% slowdown.        |
+| **Slowed + Reverb 3**| 0.81x | -3.2 semi| 35%    | 20%   | 50%    | -19% speed with balanced reverb.  |
+| **Slow Chill**     | 0.94x   | -3.5 semi| 59%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
+| **Vaporwave Chill**| 0.78x   | -3 semi  | 56%    | 40%   | 70%    | Warm, nostalgic, lo-fi.           |
+| **Nightcore**      | 1.25x   | +4 semi  | 21%    | 10%   | 20%    | Fast, high-pitched, energetic.    |
+| **Echo Slow**      | 0.65x   | -4 semi  | 42%    | 80%   | 50%    | Ultra slow with cascading echoes. |
+| **Lo-Fi**          | 0.92x   | -1 semi  | 35%    | 30%   | 80%    | Relaxed, warm, dusty sound.       |
+| **Ambient Space**  | 0.70x   | -2.5 semi| 63%    | 60%   | 30%    | Ethereal, floating atmosphere.    |
+| **Deep Bass**      | 0.80x   | -5 semi  | 28%    | 20%   | 90%    | Heavy low-end focus.              |
+| **Crystal Clear**  | 1.00x   | +2 semi  | 14%    | 10%   | 10%    | Crisp, bright, clean.             |
+| **Underwater**     | 0.72x   | -3.5 semi| 59%    | 50%   | 60%    | Muffled, submerged atmosphere.    |
+| **Synthwave**      | 1.05x   | +1 semi  | 42%    | 40%   | 40%    | Retro 80s vibes.                  |
+| **Slow Motion**    | 0.55x   | -6 semi  | 49%    | 60%   | 50%    | Extreme slow-down effect.         |
 | **Manual**         | 1.00x   | 0 semi   | 0%     | 0%    | 50%    | Start from scratch.               |
 
 ### 💾 Custom Presets
@@ -383,7 +402,17 @@ Slowverb uses [FFmpeg](https://ffmpeg.org) compiled to WebAssembly via `@ffmpeg/
 
 Slowverb features a custom WebAssembly port of the **PhaseLimiter** engine (originally by [Shin Fukuse](https://github.com/ai-mastering/phaselimiter)). This powers the **Lite** and **Pro** mastering qualities, providing transparent peak limiting and loudness maximization directly in the browser.
 
-The integration replaces the original Intel IPP dependencies with standard C++ and custom FFT implementations to ensure cross-platform compatibility.
+#### How It Works (Technical Breakdown)
+
+PhaseLimiter uses a multi-stage process to achieve professional loudness:
+
+1. **Multi-Band Analysis (FFT)**: The audio is split into multiple frequency bands using Fast Fourier Transforms.
+2. **Loudness Modeling**: The engine calculates multi-band loudness vectors, accounting for human hearing sensitivity (K-weighting/EBU R128 models).
+3. **Heuristic Optimization (AI)**: In **Pro (Level 5)** mode, the engine runs a global optimization algorithm (Differential Evolution or PSO). It tries thousands of parameter combinations for threshold, gain, and ratio across all bands to minimize the distance between your audio and a professional "gold standard" reference.
+4. **DSP Application**: Once optimized, multi-band compressors and a lookahead limiter are applied to the audio signal.
+5. **Soft Clipping**: A final soft clipper ensures that even with aggressive gain, the audio never exceeds 0 dBFS.
+
+The integration replaces heavy desktop dependencies (Intel IPP/TBB) with standard C++ and custom FFT implementations to ensure high performance in a single-threaded WebAssembly environment.
 
 ```
 PhaseLimiter - MIT License

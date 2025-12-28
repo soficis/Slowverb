@@ -6,6 +6,7 @@ import 'package:slowverb_web/features/import/import_screen.dart';
 import 'package:slowverb_web/features/editor/editor_screen.dart';
 import 'package:slowverb_web/features/export/export_screen.dart';
 import 'package:slowverb_web/features/batch/batch_export_screen.dart';
+import 'package:slowverb_web/features/mastering/mastering_screen.dart';
 import 'package:slowverb_web/features/about/about_screen.dart';
 import 'package:slowverb_web/features/library/library_screen.dart';
 import 'package:slowverb_web/features/settings/settings_screen.dart';
@@ -25,6 +26,7 @@ class AppRoutes {
   static const presets = '/presets';
   static const export = '/export';
   static const batchExport = '/batch-export';
+  static const mastering = '/mastering';
   static const about = '/about';
   static const library = '/library';
   static const settings = '/settings';
@@ -74,6 +76,11 @@ final appRouter = GoRouter(
       path: AppRoutes.batchExport,
       name: 'batch-export',
       builder: (context, state) => const BatchExportScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.mastering,
+      name: 'mastering',
+      builder: (context, state) => const MasteringScreen(),
     ),
     GoRoute(
       path: AppRoutes.about,

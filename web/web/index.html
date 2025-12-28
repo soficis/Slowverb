@@ -116,21 +116,56 @@
   </script>
 
   <!-- New TypeScript core bridge (worker-per-job FFmpeg, local assets) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script type="module" src="js/slowverb_bridge.js"></script>
-  <script src="flutter_bootstrap.js" async></script>
-
-  <!-- Vercel Web Analytics (optional, gracefully fails if blocked) -->
   <script>
-    // Initialize Vercel Web Analytics with event tracking
-    // This is optional - app works fine if blocked by ad blockers
-    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) };
+    // Ensure WebAudio is resumed after a user gesture (Chrome autoplay policy).
+    // This is best-effort and safe to call even if the bridge isn't ready yet.
+    (function () {
+      function resume() {
+        try {
+          window.SlowverbBridge?.resumeAudioContext?.();
+        } catch (_) {
+          // ignore
+        }
+      }
+      window.addEventListener("pointerdown", resume, { once: true, passive: true });
+      window.addEventListener("keydown", resume, { once: true });
+      window.addEventListener("touchstart", resume, { once: true, passive: true });
+    })();
   </script>
-  <script defer src="/_vercel/insights/script.js"
-    onerror="console.debug('Analytics blocked by browser extension')"></script>
+  <script src="flutter_bootstrap.js" defer></script>
 
-  <!-- Vercel Speed Insights (optional, gracefully fails if blocked) -->
-  <script defer src="https://cdn.vercel-analytics.com/v1/web.js"
-    onerror="console.debug('Speed insights blocked by browser extension')"></script>
+  <!-- Vercel Analytics (prod-only; avoid local dev MIME/DNS noise) -->
+  <script>
+    (function () {
+      const host = window.location.hostname;
+      const isLocal =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "[::1]" ||
+        host.endsWith(".local");
+      if (isLocal) return;
+
+      window.va =
+        window.va ||
+        function () {
+          (window.vaq = window.vaq || []).push(arguments);
+        };
+
+      const insights = document.createElement("script");
+      insights.defer = true;
+      insights.src = "/_vercel/insights/script.js";
+      insights.onerror = () => console.debug("Vercel insights blocked/unavailable");
+      document.head.appendChild(insights);
+
+      const speed = document.createElement("script");
+      speed.defer = true;
+      speed.src = "https://cdn.vercel-analytics.com/v1/web.js";
+      speed.onerror = () => console.debug("Vercel analytics blocked/unavailable");
+      document.head.appendChild(speed);
+    })();
+  </script>
 
   <script>
     if ('serviceWorker' in navigator) {

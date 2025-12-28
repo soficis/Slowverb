@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:js_interop';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/features/batch/widgets/batch_progress_widget.dart';
 import 'package:slowverb_web/providers/batch_export_provider.dart';
+import 'package:web/web.dart' as web;
 
 /// Screen for batch processing and exporting multiple audio files
 class BatchExportScreen extends ConsumerStatefulWidget {
@@ -181,6 +183,14 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
 
             // Preset selector
             _buildPresetSelector(context, ref, state),
+
+            const SizedBox(height: 24),
+
+            // ZIP export toggle (only for multiple files)
+            if (state.showZipOption) ...[
+              _buildZipExportToggle(context, ref, state),
+              const SizedBox(height: 24),
+            ],
 
             const SizedBox(height: 24),
 
@@ -880,13 +890,36 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
             const SizedBox(height: 24),
           ],
 
-          ElevatedButton.icon(
-            onPressed: () => ref.read(batchExportProvider.notifier).reset(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('START NEW BATCH'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-            ),
+          // Action buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (state.zipExportEnabled && state.zipResult != null)
+                ElevatedButton.icon(
+                  onPressed: () => _downloadZip(state),
+                  icon: const Icon(Icons.archive),
+                  label: const Text('DOWNLOAD ZIP'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              if (state.zipExportEnabled && state.zipResult != null)
+                const SizedBox(width: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.read(batchExportProvider.notifier).reset(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('START NEW BATCH'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 32,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -897,5 +930,88 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildZipExportToggle(
+    BuildContext context,
+    WidgetRef ref,
+    BatchExportState state,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: SlowverbColors.backgroundLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: state.zipExportEnabled
+              ? SlowverbColors.primaryPurple.withValues(alpha: 0.5)
+              : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.archive_outlined,
+            color: state.zipExportEnabled
+                ? SlowverbColors.primaryPurple
+                : SlowverbColors.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'EXPORT AS ZIP',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Bundle all exported files into a single zip archive',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: SlowverbColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: state.zipExportEnabled,
+            onChanged: (value) {
+              if (value) {
+                ref.read(batchExportProvider.notifier).enableZipExport();
+              } else {
+                ref.read(batchExportProvider.notifier).disableZipExport();
+              }
+            },
+            thumbColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return SlowverbColors.primaryPurple;
+              }
+              return null;
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadZip(BatchExportState state) {
+    if (state.zipResult == null) return;
+    _download(state.zipResult!, 'slowverb_batch_export.zip');
+  }
+
+  void _download(Uint8List bytes, String fileName) {
+    final blob = web.Blob([bytes.toJS].toJS);
+    final url = web.URL.createObjectURL(blob);
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
+      ..download = fileName;
+    web.document.body?.appendChild(anchor);
+    anchor.click();
+    web.document.body?.removeChild(anchor);
+    web.URL.revokeObjectURL(url);
   }
 }

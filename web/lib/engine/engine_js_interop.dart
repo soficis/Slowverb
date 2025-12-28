@@ -24,6 +24,9 @@ extension type SlowverbBridgeJS._(JSObject _) implements JSObject {
   external JSPromise<JSObject> renderFull(JSObject payload);
   external JSPromise<JSObject> waveform(JSObject payload);
   external JSPromise<JSObject> cancel(JSString jobId);
+  external JSPromise<JSObject> decodeToFloatPCM(JSObject source);
+  external JSPromise<JSObject> encodeFromFloatPCM(JSObject payload);
+  external JSPromise<JSObject> resumeAudioContext();
   external void setProgressHandler(JSFunction? callback);
   external void setLogHandler(JSFunction? callback);
 }
@@ -50,12 +53,26 @@ class BridgeInterop {
     return slowverbBridgeJS.cancel(jobId.toJS).toDart.ignore();
   }
 
+  static Future<JSObject> decodeToFloatPCM(JSObject payload) {
+    return slowverbBridgeJS.decodeToFloatPCM(payload).toDart;
+  }
+
+  static Future<JSObject> encodeFromFloatPCM(JSObject payload) {
+    return slowverbBridgeJS.encodeFromFloatPCM(payload).toDart;
+  }
+
   static void setProgressHandler(JSFunction? handler) {
     slowverbBridgeJS.setProgressHandler(handler);
   }
 
   static void setLogHandler(JSFunction? handler) {
     slowverbBridgeJS.setLogHandler(handler);
+  }
+
+  static Future<bool> resumeAudioContext() async {
+    final result = await slowverbBridgeJS.resumeAudioContext().toDart;
+    final type = result.getProperty<JSString?>('type'.toJS)?.toDart;
+    return type == 'audio-context-ok';
   }
 
   static JSObject toJsObject(Map<String, Object?> map) {

@@ -14,8 +14,13 @@ import type {
   WorkerLogLevel,
   WorkerRequest,
   WorkerResultPayload,
+  DecodePcmPayload,
+  EncodePcmPayload,
+  DecodePcmResultPayload,
+  EncodePcmResultPayload,
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
+import { Reverb, start as toneStart } from "tone";
 
 type WorkerFactory = () => Worker;
 
@@ -57,6 +62,7 @@ export class SlowverbEngine {
   private readonly workerFactory: WorkerFactory;
   private readonly initPayload: InitPayload;
   private readonly active = new Map<string, WorkerRunner>();
+  private readonly toneReverbIrCache = new Map<string, { pcm: ArrayBuffer; sampleRate: number }>();
 
   constructor(options: EngineInitOptions = {}) {
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
@@ -106,6 +112,29 @@ export class SlowverbEngine {
     }
   }
 
+  async decodeToFloatPCM(source: SourceData, callbacks?: RenderCallbacks): Promise<DecodePcmResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await this.prepareSource(runner, source);
+      return await runner.decodePCM({ fileId: source.fileId });
+    } finally {
+      runner.terminate();
+    }
+  }
+
+  async encodeFromFloatPCM(
+    payload: EncodePcmPayload,
+    callbacks?: RenderCallbacks
+  ): Promise<EncodePcmResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.encodePCM(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
+
   private async runRender(
     type: "RENDER_PREVIEW" | "RENDER_FULL",
     request: RenderRequest,
@@ -117,7 +146,7 @@ export class SlowverbEngine {
 
     try {
       await this.prepareSource(runner, request.source);
-      const payload = this.buildRenderPayload(request);
+      const payload = await this.buildRenderPayload(request);
       const result = await runner.render(type, payload, jobId);
       return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer };
     } finally {
@@ -143,11 +172,15 @@ export class SlowverbEngine {
     await runner.probe({ fileId: source.fileId });
   }
 
-  private buildRenderPayload(request: RenderRequest): RenderPayload {
+  private async buildRenderPayload(request: RenderRequest): Promise<RenderPayload> {
     const filterGraph = this.resolveFilterGraph(request);
+    const toneIr = await this.resolveToneReverbIR(request.dspSpec);
     return {
       fileId: request.source.fileId,
       filterGraph,
+      dspSpec: request.dspSpec,
+      reverbIR: toneIr?.pcm,
+      reverbIRSampleRate: toneIr?.sampleRate,
       mastering: request.dspSpec?.mastering,
       format: request.format ?? "mp3",
       bitrateKbps: request.bitrateKbps,
@@ -162,6 +195,35 @@ export class SlowverbEngine {
     return undefined;
   }
 
+  private async resolveToneReverbIR(
+    spec?: DspSpec
+  ): Promise<{ pcm: ArrayBuffer; sampleRate: number } | null> {
+    if (!spec) return null;
+    if ((spec.quality?.reverb ?? "ffmpeg") !== "tone") return null;
+    if (!spec.reverb) return null;
+    if (spec.reverb.mix <= 0) return null;
+
+    const key = JSON.stringify({
+      decay: spec.reverb.decay,
+      preDelayMs: spec.reverb.preDelayMs,
+      roomScale: spec.reverb.roomScale ?? null,
+    });
+
+    const cached = this.toneReverbIrCache.get(key);
+    if (cached) {
+      return { pcm: cached.pcm.slice(0), sampleRate: cached.sampleRate };
+    }
+
+    try {
+      const generated = await withTimeout(generateToneReverbIr(spec.reverb), 12_000, "Tone IR generation timed out");
+      this.toneReverbIrCache.set(key, generated);
+      return { pcm: generated.pcm.slice(0), sampleRate: generated.sampleRate };
+    } catch (error) {
+      console.warn("[SlowverbEngine] Tone reverb IR generation failed; falling back to FFmpeg reverb", error);
+      return null;
+    }
+  }
+
   async cancel(jobId: string): Promise<boolean> {
     const runner = this.active.get(jobId);
     if (!runner) return false;
@@ -172,6 +234,16 @@ export class SlowverbEngine {
       this.active.delete(jobId);
     }
     return true;
+  }
+
+  async resumeAudioContext(): Promise<boolean> {
+    try {
+      await toneStart();
+      return true;
+    } catch (error) {
+      console.debug("[SlowverbEngine] Tone.start() blocked or failed", error);
+      return false;
+    }
   }
 }
 
@@ -188,7 +260,7 @@ class WorkerRunner {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly callbacks?: RenderCallbacks;
   private requestCounter = 0;
-  private readonly requestTimeoutMs = 120_000;
+  private readonly requestTimeoutMs = 600_000; // 10 minutes for Level 5 mastering
 
   constructor(factory: WorkerFactory, callbacks?: RenderCallbacks) {
     this.worker = factory();
@@ -242,12 +314,25 @@ class WorkerRunner {
     jobId: string
   ): Promise<RenderResultPayload> {
     const requestId = this.nextRequestId();
-    return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer: [] });
+    const transfer: Transferable[] = [];
+    if (payload.reverbIR) transfer.push(payload.reverbIR);
+    return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer });
   }
 
   async waveform(payload: WaveformPayload, jobId: string): Promise<WorkerResultPayload> {
     const requestId = this.nextRequestId();
     return this.sendWithLog<WorkerResultPayload>({ type: "WAVEFORM", requestId, jobId, payload });
+  }
+
+  async decodePCM(payload: DecodePcmPayload): Promise<DecodePcmResultPayload> {
+    const requestId = this.nextRequestId();
+    return this.sendWithLog<DecodePcmResultPayload>({ type: "DECODE_PCM", requestId, payload });
+  }
+
+  async encodePCM(payload: EncodePcmPayload): Promise<EncodePcmResultPayload> {
+    const requestId = this.nextRequestId();
+    const transfer = [payload.left.buffer, payload.right.buffer];
+    return this.sendWithLog<EncodePcmResultPayload>({ type: "ENCODE_PCM", requestId, payload }, { transfer });
   }
 
   async cancel(jobId: string): Promise<void> {
@@ -380,6 +465,126 @@ class WorkerRunner {
       maybeGc();
     }
   }
+}
+
+async function generateToneReverbIr(
+  reverb: NonNullable<DspSpec["reverb"]>
+): Promise<{ pcm: ArrayBuffer; sampleRate: number }> {
+  // Ensure AudioContext is started (required for browser autoplay policy)
+  try {
+    await toneStart();
+  } catch (e) {
+    console.warn("[generateToneReverbIr] Tone.start() failed:", e);
+  }
+
+  const decaySeconds = clampNumber(0.1 + reverb.decay * 6.0, 0.1, 8.0);
+  const roomScale = clampNumber(reverb.roomScale ?? 0.5, 0.0, 1.0);
+  const scaledDecay = clampNumber(decaySeconds * (0.7 + roomScale * 0.2), 0.1, 8.0);
+  const preDelaySeconds = clampNumber(reverb.preDelayMs, 0, 500) / 1000;
+
+  const effect = new Reverb({ decay: scaledDecay, preDelay: preDelaySeconds });
+  try {
+    // Wait for the Reverb effect to be fully ready
+    await effect.ready;
+
+    // Give the internal convolver time to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Access the internal convolver - Tone.js v15 structure
+    const effectAny = effect as any;
+    let audioBuffer: AudioBuffer | undefined;
+
+    // Try multiple access patterns for different Tone.js versions
+    // Pattern 1: Tone.js v15+ with _convolver.buffer as a Tone Param
+    if (effectAny._convolver?.buffer) {
+      const bufferParam = effectAny._convolver.buffer;
+      if (typeof bufferParam?.get === "function") {
+        audioBuffer = bufferParam.get();
+      } else if (bufferParam instanceof AudioBuffer) {
+        audioBuffer = bufferParam;
+      } else if (typeof bufferParam === "object" && bufferParam?.value instanceof AudioBuffer) {
+        audioBuffer = bufferParam.value;
+      }
+    }
+
+    // Pattern 2: Direct _convolver access
+    if (!audioBuffer && effectAny._convolver) {
+      const convolver = effectAny._convolver;
+      if (convolver.buffer instanceof AudioBuffer) {
+        audioBuffer = convolver.buffer;
+      } else if (convolver._buffer instanceof AudioBuffer) {
+        audioBuffer = convolver._buffer;
+      }
+    }
+
+    // Pattern 3: Try accessing via the convolver's internal structure
+    if (!audioBuffer && effectAny.convolver) {
+      const convolver = effectAny.convolver;
+      if (typeof convolver.buffer?.get === "function") {
+        audioBuffer = convolver.buffer.get();
+      } else if (convolver.buffer instanceof AudioBuffer) {
+        audioBuffer = convolver.buffer;
+      }
+    }
+
+    // Pattern 4: Generate our own simple impulse response if Tone.js doesn't provide one
+    if (!audioBuffer) {
+      console.warn("[generateToneReverbIr] Could not access Tone Reverb buffer, generating synthetic IR");
+      const sampleRate = 44100;
+      const irLength = Math.floor(scaledDecay * sampleRate);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioBuffer = audioCtx.createBuffer(2, irLength, sampleRate);
+
+      // Generate exponential decay impulse response
+      for (let channel = 0; channel < 2; channel++) {
+        const data = audioBuffer.getChannelData(channel);
+        for (let i = 0; i < irLength; i++) {
+          const t = i / sampleRate;
+          const decay = Math.exp(-3 * t / scaledDecay);
+          // Add some randomness for natural reverb character
+          data[i] = (Math.random() * 2 - 1) * decay * 0.5;
+        }
+      }
+      audioCtx.close();
+    }
+
+    const channels = audioBuffer.numberOfChannels;
+    const frames = audioBuffer.length;
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(channels > 1 ? 1 : 0);
+
+    const interleaved = new Float32Array(frames * 2);
+    for (let i = 0; i < frames; i += 1) {
+      interleaved[i * 2] = left[i];
+      interleaved[i * 2 + 1] = right[i];
+    }
+
+    return { pcm: interleaved.buffer, sampleRate: audioBuffer.sampleRate };
+  } finally {
+    effect.dispose();
+  }
+}
+
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 const defaultWorkerFactory: WorkerFactory = () =>

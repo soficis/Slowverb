@@ -26,6 +26,15 @@ class WasmAudioEngine implements AudioEngine {
   bool _progressHandlerInstalled = false;
   bool _logHandlerInstalled = false;
 
+  // Preview progress callback for UI integration
+  void Function(double progress, String stage)? _previewProgressCallback;
+  String? _currentPreviewJobId;
+
+  /// Set a callback to receive preview progress updates
+  void setPreviewProgressCallback(void Function(double, String)? callback) {
+    _previewProgressCallback = callback;
+  }
+
   @override
   bool get isReady => _isInitialized;
 
@@ -87,6 +96,66 @@ class WasmAudioEngine implements AudioEngine {
   }
 
   @override
+  Future<({Float32List left, Float32List right, int sampleRate})>
+  decodeToFloatPCM(String fileId) async {
+    _ensureInitialized();
+    final payload = BridgeInterop.toJsObject({
+      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
+    });
+
+    final response = await BridgeInterop.decodeToFloatPCM(payload);
+    final type = _getProperty<String>(response, 'type');
+    if (type != 'decode-pcm-ok') {
+      throw StateError('Decode PCM failed: $type');
+    }
+
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final left = payloadObj.getProperty<JSFloat32Array>('left'.toJS).toDart;
+    final right = payloadObj.getProperty<JSFloat32Array>('right'.toJS).toDart;
+    final sampleRate = payloadObj
+        .getProperty<JSNumber>('sampleRate'.toJS)
+        .toDartInt;
+
+    return (left: left, right: right, sampleRate: sampleRate);
+  }
+
+  @override
+  Future<Uint8List> encodeFromFloatPCM({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required String format,
+    int? bitrateKbps,
+  }) async {
+    _ensureInitialized();
+    final payload = BridgeInterop.toJsObject({
+      'left': left.toJS,
+      'right': right.toJS,
+      'sampleRate': sampleRate,
+      'format': format,
+      if (bitrateKbps != null) 'bitrateKbps': bitrateKbps,
+    });
+
+    final response = await BridgeInterop.encodeFromFloatPCM(payload);
+    final type = _getProperty<String>(response, 'type');
+    if (type != 'encode-pcm-ok') {
+      throw StateError('Encode PCM failed: $type');
+    }
+
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
+    return BridgeInterop.bufferToUint8List(buffer);
+  }
+
+  /// Resume the audio context to allow Tone.js reverb IR generation.
+  ///
+  /// This must be called after a user gesture (e.g., clicking play button)
+  /// to comply with browser autoplay policies.
+  Future<bool> resumeAudioContext() async {
+    return BridgeInterop.resumeAudioContext();
+  }
+
+  @override
   Future<Float32List> getWaveform(
     String fileId, {
     int targetSamples = 1000,
@@ -129,30 +198,42 @@ class WasmAudioEngine implements AudioEngine {
       _currentPreviewUrl = null;
     }
 
-    final payload = BridgeInterop.toJsObject({
-      'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
-      'dspSpec': _toDspSpec(config),
-      'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
-      'durationSec': duration != null ? duration.inMilliseconds / 1000.0 : null,
-    });
+    // Generate a jobId to track progress for this preview
+    final jobId = 'preview-${DateTime.now().millisecondsSinceEpoch}';
+    _currentPreviewJobId = jobId;
 
-    final response = await BridgeInterop.renderPreview(payload);
-    final buffer = response
-        .getProperty<JSObject>('payload'.toJS)
-        .getProperty<JSObject>('buffer'.toJS);
-    final bytes = BridgeInterop.bufferToUint8List(buffer);
+    try {
+      final payload = BridgeInterop.toJsObject({
+        'source': {'fileId': fileId, 'data': _requireFileBytes(fileId).toJS},
+        'dspSpec': _toDspSpec(config),
+        'startSec': (startAt?.inMilliseconds ?? 0) / 1000.0,
+        'durationSec': duration != null
+            ? duration.inMilliseconds / 1000.0
+            : null,
+        'jobId': jobId,
+      });
 
-    final blob = web.Blob(
-      [bytes.toJS].toJS,
-      web.BlobPropertyBag(type: 'audio/mp3'),
-    );
-    final url = web.URL.createObjectURL(blob);
+      final response = await BridgeInterop.renderPreview(payload);
+      final buffer = response
+          .getProperty<JSObject>('payload'.toJS)
+          .getProperty<JSObject>('buffer'.toJS);
+      final bytes = BridgeInterop.bufferToUint8List(buffer);
 
-    // Track blob URL for cleanup
-    _currentPreviewUrl = url;
-    _activeBlobUrls.add(url);
+      final blob = web.Blob(
+        [bytes.toJS].toJS,
+        web.BlobPropertyBag(type: 'audio/mp3'),
+      );
+      final url = web.URL.createObjectURL(blob);
 
-    return Uri.parse(url);
+      // Track blob URL for cleanup
+      _currentPreviewUrl = url;
+      _activeBlobUrls.add(url);
+
+      return Uri.parse(url);
+    } finally {
+      // Clear the preview job ID after completion
+      _currentPreviewJobId = null;
+    }
   }
 
   @override
@@ -309,113 +390,112 @@ class WasmAudioEngine implements AudioEngine {
   // Batch processing state
   bool _batchCancelled = false;
   bool _batchPaused = false;
+  void Function(String fileName, Uint8List bytes)? _batchResultCallback;
 
   @override
   Stream<BatchRenderProgress> renderBatch({
     required List<BatchInputFile> files,
     required EffectPreset defaultPreset,
     required ExportOptions options,
-  }) async* {
-    _ensureInitialized();
+    void Function(String fileName, Uint8List bytes)? onResultReady,
+  }) {
+    final controller = StreamController<BatchRenderProgress>.broadcast();
 
-    // Enforce batch size limit for web (50 files max)
-    if (files.length > 50) {
-      throw ArgumentError(
-        'Batch size limit exceeded. Maximum 50 files allowed on web.',
-      );
-    }
-
-    if (files.isEmpty) {
-      yield BatchRenderProgress.completed(
-        totalFiles: 0,
-        completedFiles: 0,
-        failedFiles: 0,
-        completedFileNames: [],
-        errors: {},
-      );
-      return;
-    }
-
+    // Reset status flags
     _batchCancelled = false;
     _batchPaused = false;
+    _batchResultCallback = onResultReady;
 
-    // Track progress
+    // Start processing in the background
+    _runParallelBatch(files, defaultPreset, options, controller);
+
+    return controller.stream;
+  }
+
+  Future<void> _runParallelBatch(
+    List<BatchInputFile> files,
+    EffectPreset defaultPreset,
+    ExportOptions options,
+    StreamController<BatchRenderProgress> controller,
+  ) async {
+    final startTime = DateTime.now();
     int completedCount = 0;
     int failedCount = 0;
-    final completedFileNames = <String>[];
-    final errors = <String, String>{};
-    final startTime = DateTime.now();
+    final List<String> completedFileNames = [];
+    final Map<String, String> errors = {};
 
-    // Yield initial progress
-    yield BatchRenderProgress.initial(files.length);
+    controller.add(BatchRenderProgress.initial(files.length));
 
-    // Process files sequentially (concurrency = 1 for web)
-    for (int index = 0; index < files.length; index++) {
-      // Check for cancellation
-      if (_batchCancelled) break;
+    const int maxConcurrency = 3;
+    final int concurrency = files.length < maxConcurrency
+        ? files.length
+        : maxConcurrency;
+    int nextIndex = 0;
+    final activeJobs = <int, Future<void>>{};
 
-      // Wait while paused
-      while (_batchPaused && !_batchCancelled) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (_batchCancelled) break;
-
+    Future<void> processFile(int index) async {
       final file = files[index];
       final preset = file.presetOverride ?? defaultPreset;
 
       try {
-        // Load the file
         await loadSource(
           fileId: file.fileId,
           filename: file.fileName,
           bytes: file.bytes,
         );
 
-        // Create effect config from preset
         final config = EffectConfig.fromParams(preset.id, preset.parameters);
-
-        // Start render
         final jobId = await startRender(
           fileId: file.fileId,
           config: config,
           options: options,
         );
 
-        // Watch progress and yield updates
         await for (final progress in watchProgress(jobId)) {
           if (_batchCancelled) {
             await cancelRender(jobId);
             break;
           }
 
-          // Yield batch progress
-          yield BatchRenderProgress(
-            totalFiles: files.length,
-            completedFiles: completedCount,
-            failedFiles: failedCount,
-            currentFileIndex: index,
-            currentFileName: file.fileName,
-            currentFileProgress: progress.progress,
-            overallProgress:
-                (completedCount + progress.progress) / files.length,
-            estimatedTimeRemaining: _estimateTimeRemaining(
-              startTime,
-              completedCount,
-              files.length,
+          // Report progress for this specific file
+          controller.add(
+            BatchRenderProgress(
+              totalFiles: files.length,
+              completedFiles: completedCount,
+              failedFiles: failedCount,
+              currentFileIndex: index,
+              currentFileName: file.fileName,
+              currentFileProgress: progress.progress,
+              overallProgress:
+                  (completedCount + (progress.progress / concurrency)) /
+                  files.length, // Rough estimate
+              estimatedTimeRemaining: _estimateTimeRemaining(
+                startTime,
+                completedCount,
+                files.length,
+              ),
+              completedFileNames: completedFileNames,
+              errors: errors,
             ),
-            completedFileNames: completedFileNames,
-            errors: errors,
           );
         }
 
-        if (_batchCancelled) break;
+        if (_batchCancelled) return;
 
-        // Get result
         final result = await getResult(jobId);
-
         if (result.success && result.outputBytes != null) {
-          // Auto-download to free memory (web platform requirement)
-          _triggerDownload(result.outputBytes!, file.fileName, options.format);
+          final outputFileName =
+              '${_removeExtension(file.fileName)}_slowverb.${options.format}';
+          // Call the callback if provided, otherwise trigger download
+          if (_batchResultCallback != null) {
+            _batchResultCallback!(outputFileName, result.outputBytes!);
+          } else {
+            _triggerDownload(
+              result.outputBytes!,
+              file.fileName,
+              options.format,
+            );
+          }
           completedCount++;
           completedFileNames.add(file.fileName);
         } else {
@@ -423,39 +503,52 @@ class WasmAudioEngine implements AudioEngine {
           errors[file.fileName] = result.errorMessage ?? 'Unknown error';
         }
 
-        // Cleanup to free memory
         await cleanup(fileId: file.fileId);
-      } catch (e, stackTrace) {
-        // Robust error recovery: log, cleanup, delay, continue
+      } catch (e) {
         debugPrint('[Batch] Error processing ${file.fileName}: $e');
-        debugPrint('[Batch] Stack trace: $stackTrace');
-
         failedCount++;
         errors[file.fileName] = e.toString();
-
-        // Force cleanup before proceeding to next file
         try {
           await cleanup(fileId: file.fileId);
-        } catch (cleanupError) {
-          debugPrint('[Batch] Cleanup error: $cleanupError');
-        }
-
-        // Small delay to ensure worker state is clean
-        await Future.delayed(const Duration(milliseconds: 100));
-
-        // Continue with next file
-        continue;
+        } catch (_) {}
       }
     }
 
-    // Yield final progress
-    yield BatchRenderProgress.completed(
-      totalFiles: files.length,
-      completedFiles: completedCount,
-      failedFiles: failedCount,
-      completedFileNames: completedFileNames,
-      errors: errors,
+    while (nextIndex < files.length || activeJobs.isNotEmpty) {
+      if (_batchCancelled) break;
+
+      // Handle pausing
+      while (_batchPaused && !_batchCancelled) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      // Start new tasks if we have capacity
+      while (nextIndex < files.length && activeJobs.length < concurrency) {
+        final index = nextIndex++;
+        final job = processFile(index);
+        activeJobs[index] = job;
+        // ignore: unawaited_future
+        job.whenComplete(() => activeJobs.remove(index));
+      }
+
+      if (activeJobs.isEmpty) break;
+
+      // Wait for at least one job to finish before checking again
+      await Future.any(activeJobs.values);
+    }
+
+    // Finished
+    controller.add(
+      BatchRenderProgress.completed(
+        totalFiles: files.length,
+        completedFiles: completedCount,
+        failedFiles: failedCount,
+        completedFileNames: completedFileNames,
+        errors: errors,
+      ),
     );
+
+    await controller.close();
   }
 
   @override
@@ -558,6 +651,17 @@ class WasmAudioEngine implements AudioEngine {
       'normalize': false,
     };
 
+    final quality = <String, Object?>{};
+    if (config.hqTimeStretch > 0.5) {
+      quality['timeStretch'] = 'soundtouch';
+    }
+    if (config.hqReverb > 0.5 && config.reverbAmount > 0.0) {
+      quality['reverb'] = 'tone';
+    }
+    if (quality.isNotEmpty) {
+      spec['quality'] = quality;
+    }
+
     if (config.masteringEnabled > 0.5) {
       String algorithm = 'simple';
       if (config.masteringAlgorithm > 1.5) {
@@ -568,15 +672,24 @@ class WasmAudioEngine implements AudioEngine {
       spec['mastering'] = <String, Object?>{
         'enabled': true,
         'algorithm': algorithm,
+        if (config.masteringTargetLufs != null)
+          'targetLufs': config.masteringTargetLufs,
+        if (config.masteringBassPreservation != null)
+          'bassPreservation': config.masteringBassPreservation,
+        if (config.masteringMode != null) 'mode': config.masteringMode!.round(),
       };
+    } else {
+      // Explicitly mark mastering as disabled so normalization filter is applied
+      spec['mastering'] = <String, Object?>{'enabled': false};
     }
 
     if (config.reverbAmount > 0.0) {
+      final mix = config.reverbMix ?? 0.6;
       spec['reverb'] = <String, Object?>{
         'decay': config.reverbAmount,
-        'preDelayMs': (config.preDelayMs ?? 30).round(),
+        'preDelayMs': (config.preDelayMs ?? 60).round(),
         'roomScale': config.roomScale ?? 0.7,
-        'mix': 1.0,
+        'mix': mix,
       };
     }
 
@@ -611,15 +724,23 @@ class WasmAudioEngine implements AudioEngine {
             event.getProperty<JSNumber?>('value'.toJS)?.toDartDouble ?? 0.0;
         final stage =
             event.getProperty<JSString?>('stage'.toJS)?.toDart ?? 'processing';
+
+        // Handle preview progress callback
+        if (jobId == _currentPreviewJobId && _previewProgressCallback != null) {
+          _previewProgressCallback!(value, stage);
+        }
+
+        // Handle render job progress streams
         final controller = _progressControllers[jobId];
-        if (controller == null || controller.isClosed) return;
-        controller.add(
-          RenderProgress(
-            jobId: RenderJobId(jobId),
-            progress: value,
-            stage: stage,
-          ),
-        );
+        if (controller != null && !controller.isClosed) {
+          controller.add(
+            RenderProgress(
+              jobId: RenderJobId(jobId),
+              progress: value,
+              stage: stage,
+            ),
+          );
+        }
       }).toJS,
     );
   }

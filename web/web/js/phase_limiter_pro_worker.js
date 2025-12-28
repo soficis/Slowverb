@@ -4,11 +4,19 @@ async function ensureModule() {
     if (modulePromise) return modulePromise;
 
     modulePromise = (async () => {
-        importScripts("/js/phaselimiter_pro.js");
+        const cacheBust = Date.now();
+        importScripts("/js/phaselimiter_pro.js?v=" + cacheBust);
         if (typeof createPhaseLimiterProModule !== "function") {
             throw new Error("PhaseLimiter Pro loader missing: createPhaseLimiterProModule is not defined");
         }
-        return await createPhaseLimiterProModule();
+        return await createPhaseLimiterProModule({
+            locateFile: (path) => {
+                if (path.endsWith(".wasm") || path.endsWith(".data")) {
+                    return "/js/" + path + "?v=" + cacheBust;
+                }
+                return path;
+            }
+        });
     })();
 
     return modulePromise;
@@ -41,37 +49,73 @@ self.onmessage = async (event) => {
             throw new Error("Channel length mismatch");
         }
 
-        const leftPtr = Module._malloc(sampleCount * 4);
-        const rightPtr = Module._malloc(sampleCount * 4);
-        if (!leftPtr || !rightPtr) {
+        // In WASM32, malloc returns Number. In MEMORY64, it returns BigInt.
+        // BigInt pointers are safe to pass to ccall as "number" types in MEMORY64 mode,
+        // but in WASM32 mode, ccall expects regular Numbers for the "number" argument type.
+        const leftPtrRaw = Module._malloc(sampleCount * 4);
+        const rightPtrRaw = Module._malloc(sampleCount * 4);
+        console.log(`[PhaseLimiterWorker] leftPtrRaw: ${leftPtrRaw} (type: ${typeof leftPtrRaw})`);
+        console.log(`[PhaseLimiterWorker] rightPtrRaw: ${rightPtrRaw} (type: ${typeof rightPtrRaw})`);
+
+        if (!leftPtrRaw || !rightPtrRaw) {
             throw new Error("WASM malloc failed");
         }
+
+        // Convert to Number for heap indexing (always safe for 32-bit offset)
+        const leftPtr = Number(leftPtrRaw);
+        const rightPtr = Number(rightPtrRaw);
 
         Module.HEAPF32.set(leftChannel, leftPtr >> 2);
         Module.HEAPF32.set(rightChannel, rightPtr >> 2);
 
-        // int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length, int sample_rate, int mode)
+        // Create progress callback using Emscripten's addFunction
+        let progressPtr = 0;
+        if (typeof Module.addFunction === "function") {
+            try {
+                progressPtr = Module.addFunction((percent) => {
+                    self.postMessage({ type: "progress", percent });
+                }, "vf");  // "vf" = void function(float)
+            } catch (e) {
+                console.warn("[PhaseLimiterWorker] addFunction failed:", e);
+            }
+        }
+
+        // int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length, int sample_rate, int mode, void (*progress_cb)(float))
         const errorCode = Module.ccall(
             "phaselimiter_pro_process",
             "number",
-            ["number", "number", "number", "number", "number"],
-            [leftPtr, rightPtr, sampleCount, sampleRate, mode]
+            ["number", "number", "number", "number", "number", "number"],
+            [leftPtrRaw, rightPtrRaw, sampleCount, sampleRate, mode, progressPtr]
         );
 
-        if (errorCode !== 0) {
-            Module._free(leftPtr);
-            Module._free(rightPtr);
+        // Cleanup progress callback
+        if (progressPtr !== 0 && typeof Module.removeFunction === "function") {
+            Module.removeFunction(progressPtr);
+        }
+
+        console.log(`[PhaseLimiterWorker] errorCode: ${errorCode} (type: ${typeof errorCode})`);
+
+        if (errorCode !== 0 && errorCode !== 1) {
+            Module._free(leftPtrRaw);
+            Module._free(rightPtrRaw);
             throw new Error(`Processing failed with code ${errorCode}`);
         }
 
-        const processedLeft = new Float32Array(Module.HEAPF32.buffer, leftPtr, sampleCount).slice();
-        const processedRight = new Float32Array(Module.HEAPF32.buffer, rightPtr, sampleCount).slice();
+        const warning = errorCode === 1 ? "Level 5 failed, using Level 3 fallback" : null;
 
-        Module._free(leftPtr);
-        Module._free(rightPtr);
+        const processedLeft = Module.HEAPF32.slice(leftPtr >> 2, (leftPtr >> 2) + sampleCount);
+        const processedRight = Module.HEAPF32.slice(rightPtr >> 2, (rightPtr >> 2) + sampleCount);
+
+        Module._free(leftPtrRaw);
+        Module._free(rightPtrRaw);
 
         self.postMessage(
-            { type: "complete", leftChannel: processedLeft, rightChannel: processedRight },
+            {
+                type: "complete",
+                leftChannel: processedLeft,
+                rightChannel: processedRight,
+                warning
+            },
             [processedLeft.buffer, processedRight.buffer]
         );
     } catch (error) {

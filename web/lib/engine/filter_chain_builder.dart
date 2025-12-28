@@ -52,7 +52,8 @@ class FilterChainBuilder {
       filters.add(
         _buildReverbFilter(
           amount: config.reverbAmount,
-          preDelayMs: config.preDelayMs ?? 30,
+          mix: config.reverbMix ?? 0.6,
+          preDelayMs: config.preDelayMs ?? 60,
           roomScale: config.roomScale ?? 0.7,
         ),
       );
@@ -100,24 +101,30 @@ class FilterChainBuilder {
   String _buildPitchFilter(double semitones) {
     // Convert semitones to rate multiplier: rate = 2^(semitones/12)
     final multiplier = _semitonesToRate(semitones);
-    return 'asetrate=44100*$multiplier,aresample=44100';
+    return 'asetrate=44100*$multiplier,aresample=44100:filter_size=64:phase_shift=10';
   }
 
   /// Build reverb filter using aecho
   String _buildReverbFilter({
     required double amount,
+    required double mix,
     required double preDelayMs,
     required double roomScale,
   }) {
     final delay = preDelayMs.toInt();
-    final delay2 = (delay * (1 + roomScale * 0.5)).toInt();
-    final delay3 = (delay * (1 + roomScale)).toInt();
+    final scale = 1.0 + roomScale;
+    final delay2 = (delay * (1.0 + 0.35 * scale)).toInt();
+    final delay3 = (delay * (1.0 + 0.7 * scale)).toInt();
+    final delay4 = (delay * (1.4 + 0.6 * scale)).toInt();
+    final delay5 = (delay * (1.9 + 0.8 * scale)).toInt();
 
-    final decay1 = (amount * 0.9).toStringAsFixed(2);
-    final decay2 = (amount * 0.7).toStringAsFixed(2);
-    final decay3 = (amount * 0.4).toStringAsFixed(2);
+    final decay1 = (amount * 0.95).toStringAsFixed(2);
+    final decay2 = (amount * 0.82).toStringAsFixed(2);
+    final decay3 = (amount * 0.67).toStringAsFixed(2);
+    final decay4 = (amount * 0.52).toStringAsFixed(2);
+    final decay5 = (amount * 0.4).toStringAsFixed(2);
 
-    return 'aecho=0.8:0.88:$delay|$delay2|$delay3:$decay1|$decay2|$decay3';
+    return 'aecho=0.8:${mix.toStringAsFixed(2)}:$delay|$delay2|$delay3|$delay4|$delay5:$decay1|$decay2|$decay3|$decay4|$decay5';
   }
 
   /// Build echo filter (for super slow echo preset)

@@ -11,10 +11,14 @@ import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/project_repository_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
 import 'package:slowverb_web/providers/waveform_provider.dart';
+import 'package:slowverb_web/providers/processing_progress_provider.dart';
+import 'package:slowverb_web/services/logger_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// State for audio editor
 class AudioEditorState {
+  static const Object _noChange = Object();
+
   final String? audioFileName;
   final String? fileId;
   final AudioMetadata? metadata;
@@ -63,7 +67,7 @@ class AudioEditorState {
     double? playbackPosition,
     EffectPreset? selectedPreset,
     Map<String, double>? currentParameters,
-    String? error,
+    Object? error = _noChange,
     String? projectId,
     String? projectName,
     DateTime? projectCreatedAt,
@@ -81,7 +85,7 @@ class AudioEditorState {
       playbackPosition: playbackPosition ?? this.playbackPosition,
       selectedPreset: selectedPreset ?? this.selectedPreset,
       currentParameters: currentParameters ?? this.currentParameters,
-      error: error,
+      error: identical(error, _noChange) ? this.error : error as String?,
       projectId: projectId ?? this.projectId,
       projectName: projectName ?? this.projectName,
       projectCreatedAt: projectCreatedAt ?? this.projectCreatedAt,
@@ -99,6 +103,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   final Ref _ref;
   Timer? _previewDebounce;
   static const _debounceDuration = Duration(milliseconds: 400);
+  static const _log = SlowverbLogger('AudioEditor');
 
   AudioEditorNotifier(this._ref)
     : super(
@@ -114,8 +119,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
                 ? 1.0
                 : 0.0;
             params['masteringAlgorithm'] = masteringSettings.phaselimiterEnabled
-                ? 1.0
+                ? (masteringSettings.mode >= 5 ? 2.0 : 1.0)
                 : 0.0;
+            params['masteringTargetLufs'] = masteringSettings.targetLufs;
+            params['masteringBassPreservation'] =
+                masteringSettings.bassPreservation;
+            params['masteringMode'] = masteringSettings.mode.toDouble();
             return params;
           }(),
         ),
@@ -153,7 +162,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     _ref.listen<MasteringSettings>(masteringSettingsProvider, (_, next) {
       final newParams = Map<String, double>.from(state.currentParameters);
       newParams['masteringEnabled'] = next.masteringEnabled ? 1.0 : 0.0;
-      newParams['masteringAlgorithm'] = next.phaselimiterEnabled ? 1.0 : 0.0;
+      newParams['masteringAlgorithm'] = next.phaselimiterEnabled
+          ? (next.mode >= 5 ? 2.0 : 1.0)
+          : 0.0;
+      newParams['masteringTargetLufs'] = next.targetLufs;
+      newParams['masteringBassPreservation'] = next.bassPreservation;
+      newParams['masteringMode'] = next.mode.toDouble();
       state = state.copyWith(
         currentParameters: newParams,
         isPreviewDirty: true,
@@ -234,6 +248,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         state.currentParameters['masteringEnabled'] ?? 0.0;
     newParams['masteringAlgorithm'] =
         state.currentParameters['masteringAlgorithm'] ?? 0.0;
+    newParams['masteringTargetLufs'] =
+        state.currentParameters['masteringTargetLufs'] ?? -14.0;
+    newParams['masteringBassPreservation'] =
+        state.currentParameters['masteringBassPreservation'] ?? 0.5;
+    newParams['masteringMode'] =
+        state.currentParameters['masteringMode'] ?? 5.0;
 
     state = state.copyWith(
       selectedPreset: preset,
@@ -250,6 +270,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     // 1. Immediate UI update (optimistic update for slider responsiveness)
     final newParams = Map<String, double>.from(state.currentParameters);
     newParams[key] = value;
+    if (key == 'masteringAlgorithm') {
+      newParams['masteringMode'] = value >= 1.5 ? 5.0 : 3.0;
+    }
     state = state.copyWith(currentParameters: newParams, isPreviewDirty: true);
 
     // 2. Debounce expensive preview generation and persistence
@@ -264,19 +287,30 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   /// If the preview is already generated (isPreviewDirty=false) and cached,
   /// playback resumes instantly without re-rendering.
   Future<void> togglePlayback() async {
-    print(
-      '[AudioEditor] togglePlayback called. current fileId: ${state.fileId}, isPlaying: ${state.isPlaying}',
-    );
+    _log.debug('togglePlayback called', {
+      'fileId': state.fileId,
+      'isPlaying': state.isPlaying,
+    });
     if (state.fileId == null) {
-      print('[AudioEditor] No file loaded.');
+      final message = state.isLoading
+          ? 'Loading audio…'
+          : 'No file loaded. Import a track first.';
+      _log.debug(message);
+      state = state.copyWith(error: message);
+      return;
+    }
+
+    if (state.isLoading) {
+      const message = 'Still processing… Please wait.';
+      _log.debug(message);
+      state = state.copyWith(error: message);
       return;
     }
 
     final playback = _ref.read(audioPlaybackProvider.notifier);
 
     if (state.isPlaying) {
-      // Stop playback
-      print('[AudioEditor] Stopping playback.');
+      _log.debug('Stopping playback');
       await playback.stop();
       state = state.copyWith(isPlaying: false);
       return;
@@ -284,15 +318,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     // Check if we can use cached preview (no re-rendering needed)
     if (!state.isPreviewDirty && state.currentPreviewUri != null) {
-      print(
-        '[AudioEditor] Reusing cached preview (instant resume): ${state.currentPreviewUri}',
-      );
+      _log.debug('Reusing cached preview', state.currentPreviewUri);
       try {
         await playback.playPreview(state.currentPreviewUri!);
         state = state.copyWith(isPlaying: true);
-        print('[AudioEditor] Cached playback started.');
+        _log.debug('Cached playback started');
       } catch (e, stack) {
-        print('[AudioEditor] Cached playback failed: $e\n$stack');
+        _log.error('Cached playback failed', e, stack);
         state = state.copyWith(isPlaying: false, error: 'Playback failed: $e');
       }
       return;
@@ -302,13 +334,15 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     try {
       state = state.copyWith(isLoading: true, error: null);
 
-      print(
-        '[AudioEditor] Generating preview (dirty=${state.isPreviewDirty})...',
-      );
+      // Resume AudioContext to allow Tone.js reverb IR generation
+      final engine = _ref.read(audioEngineProvider);
+      await engine.resumeAudioContext();
+
+      _log.debug('Generating preview', {'dirty': state.isPreviewDirty});
 
       final previewUri = await generatePreview();
       if (previewUri != null) {
-        print('[AudioEditor] Preview generated successfully: $previewUri');
+        _log.debug('Preview generated successfully', previewUri);
         // Track whether this preview was rendered with mastering
         final currentMasteringEnabled =
             (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
@@ -318,19 +352,19 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
           previewMasteringApplied: currentMasteringEnabled,
         );
 
-        print('[AudioEditor] Playing preview URI...');
+        _log.debug('Playing preview URI');
         await playback.playPreview(previewUri);
         state = state.copyWith(isPlaying: true, isLoading: false);
-        print('[AudioEditor] Playback started.');
+        _log.debug('Playback started');
       } else {
-        print('[AudioEditor] generatePreview returned null.');
+        _log.warning('generatePreview returned null');
         state = state.copyWith(
           isLoading: false,
           error: 'Failed to generate audio preview',
         );
       }
     } catch (e, stack) {
-      print('[AudioEditor] Playback failed with error: $e\n$stack');
+      _log.error('Playback failed', e, stack);
       state = state.copyWith(
         isLoading: false,
         isPlaying: false,
@@ -344,17 +378,15 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   ///
   /// If [resumeAtPosition] is true, seeks to the previous playback position after regeneration.
   Future<void> regenerate({bool resumeAtPosition = false}) async {
-    print(
-      '[AudioEditor] Regenerate called (resumeAtPosition=$resumeAtPosition).',
-    );
+    _log.debug('Regenerate called', {'resumeAtPosition': resumeAtPosition});
     if (state.fileId == null) {
-      print('[AudioEditor] No file loaded.');
+      _log.debug('No file loaded');
       return;
     }
 
     // Capture current position before stopping
     final previousPosition = resumeAtPosition ? state.playbackPosition : 0.0;
-    print('[AudioEditor] Previous position: $previousPosition');
+    _log.debug('Previous position', previousPosition);
 
     // Stop playback if currently playing
     if (state.isPlaying) {
@@ -367,10 +399,14 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     state = state.copyWith(isPreviewDirty: true, isLoading: true, error: null);
 
     try {
-      print('[AudioEditor] Generating fresh preview...');
+      // Resume AudioContext to allow Tone.js reverb IR generation
+      final engine = _ref.read(audioEngineProvider);
+      await engine.resumeAudioContext();
+
+      _log.debug('Generating fresh preview');
       final previewUri = await generatePreview();
       if (previewUri != null) {
-        print('[AudioEditor] Preview regenerated successfully: $previewUri');
+        _log.debug('Preview regenerated successfully', previewUri);
         // Track whether this preview was rendered with mastering
         final currentMasteringEnabled =
             (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
@@ -381,29 +417,27 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         );
 
         // Automatically start playback of new preview
-        print('[AudioEditor] Playing regenerated preview...');
+        _log.debug('Playing regenerated preview');
         final playback = _ref.read(audioPlaybackProvider.notifier);
         await playback.playPreview(previewUri);
         state = state.copyWith(isPlaying: true, isLoading: false);
 
         // Seek to previous position if requested
         if (resumeAtPosition && previousPosition > 0.0) {
-          print(
-            '[AudioEditor] Seeking to previous position: $previousPosition',
-          );
+          _log.debug('Seeking to previous position', previousPosition);
           seek(previousPosition);
         }
 
-        print('[AudioEditor] Regenerated playback started.');
+        _log.debug('Regenerated playback started');
       } else {
-        print('[AudioEditor] Regeneration failed - preview URI is null.');
+        _log.warning('Regeneration failed - preview URI is null');
         state = state.copyWith(
           isLoading: false,
           error: 'Failed to regenerate audio preview',
         );
       }
     } catch (e, stack) {
-      print('[AudioEditor] Regeneration failed with error: $e\n$stack');
+      _log.error('Regeneration failed', e, stack);
       state = state.copyWith(
         isLoading: false,
         isPlaying: false,
@@ -437,18 +471,31 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     state = state.copyWith(isLoading: true, error: null);
 
+    // Check if this is Level 5 mastering
+    final masteringMode = state.currentParameters['masteringMode'] ?? 3.0;
+    final masteringEnabled =
+        (state.currentParameters['masteringEnabled'] ?? 0.0) > 0.5;
+    final isLevel5 = masteringEnabled && masteringMode >= 5;
+
+    // Start progress tracking
+    final progressNotifier = _ref.read(processingProgressProvider.notifier);
+    progressNotifier.startProcessing(isLevel5: isLevel5);
+
     try {
       final engine = _ref.read(audioEngineProvider);
-      print('[AudioEditor] Reading engine provider: $engine');
+      _log.debug('Reading engine provider', engine.runtimeType);
+
+      // Set up progress callback to update the progress provider
+      engine.setPreviewProgressCallback((progress, stage) {
+        progressNotifier.updateProgress(progress, stage);
+      });
 
       // Build effect config from current parameters
       final config = EffectConfig.fromParams(
         state.selectedPreset.id,
         state.currentParameters,
       );
-      print(
-        '[AudioEditor] Calling engine.renderPreview with config: ${state.currentParameters}',
-      );
+      _log.debug('Calling engine.renderPreview', state.currentParameters);
 
       // Render full audio with effects applied
       final previewUri = await engine.renderPreview(
@@ -457,13 +504,26 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
         duration: state.metadata?.duration, // Process entire file
       );
 
-      print('[AudioEditor] Engine returned preview URI: $previewUri');
+      _log.debug('Engine returned preview URI', previewUri);
 
       state = state.copyWith(isLoading: false);
 
+      // Complete progress tracking
+      progressNotifier.complete();
+
+      // Clear the progress callback
+      engine.setPreviewProgressCallback(null);
+
       return previewUri;
     } catch (e, stack) {
-      print('[AudioEditor] generatePreview failed: $e\n$stack');
+      _log.error('generatePreview failed', e, stack);
+
+      // Cancel progress tracking on error
+      _ref.read(processingProgressProvider.notifier).cancel();
+
+      // Clear the progress callback
+      _ref.read(audioEngineProvider).setPreviewProgressCallback(null);
+
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to generate preview: $e',
@@ -475,6 +535,13 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   /// Clear error
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  /// Force stop all running tasks immediately
+  void forceStop() {
+    _previewDebounce?.cancel();
+    state = state.copyWith(isLoading: false, isPlaying: false, error: null);
+    _ref.read(audioPlaybackProvider.notifier).stop();
   }
 
   /// Persist export metadata for the current project.
@@ -548,8 +615,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
       return false;
     }
     if (preflight.isWarning && preflight.message != null) {
-      // ignore: avoid_print
-      print('[AudioEditor] ${preflight.message}');
+      _log.info(preflight.message!);
     }
     return true;
   }
