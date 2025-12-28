@@ -136,9 +136,11 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
   void _initPlaybackListener() {
     final player = _ref.read(audioPlayerProvider);
     player.positionStream.listen((pos) {
-      final audioDuration = state.metadata?.duration;
-      if (audioDuration != null && audioDuration.inMilliseconds > 0) {
-        final totalMs = audioDuration.inMilliseconds;
+      // Use player duration if available (correct for processed audio), otherwise fall back to metadata
+      final totalDuration = player.duration ?? state.metadata?.duration;
+
+      if (totalDuration != null && totalDuration.inMilliseconds > 0) {
+        final totalMs = totalDuration.inMilliseconds;
         final normalized = (pos.inMilliseconds / totalMs).clamp(0.0, 1.0);
 
         // Only update if changed significantly to avoid spamming state updates

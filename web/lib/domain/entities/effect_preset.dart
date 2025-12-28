@@ -28,7 +28,7 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.95,
       'pitch': -2.0,
-      'reverbAmount': 0.22, // Reduced from 0.49 for HQ reverb
+      'reverbAmount': 0.20, // Reduced from 0.49 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
       'reverbMix': 0.35, // Reduced from 0.63
@@ -37,8 +37,8 @@ abstract final class Presets {
       'hfDamping': 0.25, // Increased from 0.15 to soften highs
       'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.4,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -59,8 +59,8 @@ abstract final class Presets {
       'hfDamping': 0.3, // Increased from 0.2
       'echoAmount': 0.06, // Reduced from 0.15
       'eqWarmth': 0.5, // Balanced warmth
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -80,8 +80,8 @@ abstract final class Presets {
       'roomScale': 0.5, // Reduced from 0.7
       'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.5, // 50% tone balance
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -103,8 +103,8 @@ abstract final class Presets {
       'stereoWidth': 1.2,
       'echoAmount': 0.15, // Reduced from 0.38
       'eqWarmth': 0.83,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -126,8 +126,8 @@ abstract final class Presets {
       'stereoWidth': 1.3,
       'echoAmount': 0.15, // Reduced from 0.4
       'eqWarmth': 0.7,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -145,8 +145,8 @@ abstract final class Presets {
       'reverbMix': 0.28,
       'echoAmount': 0.04, // Reduced from 0.1
       'eqWarmth': 0.2,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -164,8 +164,8 @@ abstract final class Presets {
       'reverbMix': 0.35,
       'echoAmount': 0.45, // Reduced from 0.8 - still emphasized for this preset
       'eqWarmth': 0.5,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -184,8 +184,8 @@ abstract final class Presets {
       'hfDamping': 0.4, // Added - soften highs for lo-fi feel
       'echoAmount': 0.12, // Reduced from 0.3
       'eqWarmth': 0.8,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -207,8 +207,8 @@ abstract final class Presets {
       'stereoWidth': 1.4,
       'echoAmount': 0.25, // Reduced from 0.6
       'eqWarmth': 0.3,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -227,8 +227,8 @@ abstract final class Presets {
       'hfDamping': 0.5, // Added - keep focus on low end
       'echoAmount': 0.08, // Reduced from 0.2
       'eqWarmth': 0.9,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -246,8 +246,8 @@ abstract final class Presets {
       'reverbMix': 0.22,
       'echoAmount': 0.04, // Reduced from 0.1
       'eqWarmth': 0.1,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -269,8 +269,8 @@ abstract final class Presets {
       'stereoWidth': 1.1,
       'echoAmount': 0.20, // Reduced from 0.5
       'eqWarmth': 0.6,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -291,8 +291,8 @@ abstract final class Presets {
       'stereoWidth': 1.2,
       'echoAmount': 0.15, // Reduced from 0.4
       'eqWarmth': 0.4,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -310,8 +310,8 @@ abstract final class Presets {
       'reverbMix': 0.35,
       'echoAmount': 0.25, // Reduced from 0.6
       'eqWarmth': 0.5,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 
@@ -328,8 +328,8 @@ abstract final class Presets {
       'hqReverb': 1.0,
       'echoAmount': 0.0,
       'eqWarmth': 0.5,
-      'masteringEnabled': 0.0,
-      'masteringAlgorithm': 0.0,
+      'masteringEnabled': 1.0,
+      'masteringAlgorithm': 1.0,
     },
   );
 

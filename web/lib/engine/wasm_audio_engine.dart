@@ -96,6 +96,11 @@ class WasmAudioEngine implements AudioEngine {
   }
 
   @override
+<<<<<<< HEAD
+=======
+<<<<<<< Updated upstream
+=======
+>>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<({Float32List left, Float32List right, int sampleRate})>
   decodeToFloatPCM(String fileId) async {
     _ensureInitialized();
@@ -151,11 +156,19 @@ class WasmAudioEngine implements AudioEngine {
   ///
   /// This must be called after a user gesture (e.g., clicking play button)
   /// to comply with browser autoplay policies.
+<<<<<<< HEAD
+=======
+  @override
+>>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<bool> resumeAudioContext() async {
     return BridgeInterop.resumeAudioContext();
   }
 
   @override
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
+>>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<Float32List> getWaveform(
     String fileId, {
     int targetSamples = 1000,

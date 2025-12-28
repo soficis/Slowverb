@@ -61,6 +61,7 @@ flutter:
     - shaders/time_gate.frag
     - shaders/rainy_window_3d.frag
     - shaders/fractal_dreams_3d.frag
+    - shaders/vortex.frag
 
   # WASM assets and worker scripts
   assets:

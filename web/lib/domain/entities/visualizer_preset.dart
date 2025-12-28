@@ -129,6 +129,7 @@ abstract final class VisualizerPresets {
     rainyWindow,
     rainyWindow3d,
     timeGate,
+    vortex,
   ];
 
   static const mystify = VisualizerPreset(
@@ -176,6 +177,15 @@ abstract final class VisualizerPresets {
     defaultIntensity: 0.8,
   );
 
+  static const vortex = VisualizerPreset(
+    id: 'vortex',
+    name: 'Vortex',
+    description: 'Psychedelic black and white time vortex.',
+    type: VisualizerType.screensaver,
+    colorScheme: 'bw',
+    defaultIntensity: 0.9,
+  );
+
   /// Visualizers eligible for random selection (excludes WMP Retro and DVD Bounce)
   static const randomSelectable = [
     pipesVaporwave,
@@ -188,6 +198,7 @@ abstract final class VisualizerPresets {
     rainyWindow,
     rainyWindow3d,
     timeGate,
+    vortex,
   ];
 
   /// Returns a random visualizer from the selectable list

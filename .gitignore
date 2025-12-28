@@ -152,3 +152,6 @@ wasm/phaselimiter/src_original/**/.clang-format
 
 # User specific (requested to be ignored)
 .gitignore
+full_reflog.txt
+.gitignore
+reflog_simple.txt

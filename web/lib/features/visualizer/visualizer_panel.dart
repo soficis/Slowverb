@@ -23,6 +23,7 @@ final webShaderProvider = FutureProvider<Map<String, ui.FragmentProgram>>((
     'time_gate': 'shaders/time_gate.frag',
     'rainy_window_3d': 'shaders/rainy_window_3d.frag',
     'fractal_dreams_3d': 'shaders/fractal_dreams_3d.frag',
+    'vortex': 'shaders/vortex.frag',
   };
 
   for (final entry in shaderPaths.entries) {
@@ -999,7 +1000,7 @@ class _DvdBouncePainter extends CustomPainter {
         fontFamily: 'Courier',
         shadows: [
           Shadow(
-            color: color.withOpacity(0.5),
+            color: color.withValues(alpha: 0.5),
             blurRadius: dataFromAmp(frame.bass).toDouble(),
           ),
         ],
@@ -1063,7 +1064,7 @@ class _RainyWindowPainter extends CustomPainter {
     if (isPlaying && frame.bass > 0.65) {
       final flashIntensity = (frame.bass - 0.65) / 0.35;
       final flashPaint = Paint()
-        ..color = Colors.white.withOpacity(flashIntensity * 0.3);
+        ..color = Colors.white.withValues(alpha: flashIntensity * 0.3);
       canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), flashPaint);
 
       // Lightning bolt
@@ -1097,7 +1098,7 @@ class _RainyWindowPainter extends CustomPainter {
 
   void _drawLightning(Canvas canvas, Size size, double intensity) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.7 + intensity * 0.3)
+      ..color = Colors.white.withValues(alpha: 0.7 + intensity * 0.3)
       ..strokeWidth = 2 + intensity * 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -1245,7 +1246,7 @@ class _RainyWindowPainter extends CustomPainter {
     // LED indicator - glows green, pulses with RMS
     final ledIntensity = isPlaying ? 0.5 + frame.rms * 0.5 : 0.3;
     final ledPaint = Paint()
-      ..color = const Color(0xFF00ff00).withOpacity(ledIntensity)
+      ..color = const Color(0xFF00ff00).withValues(alpha: ledIntensity)
       ..style = PaintingStyle.fill;
 
     final ledX = pcX + pcWidth * 0.5;
@@ -1260,7 +1261,7 @@ class _RainyWindowPainter extends CustomPainter {
 
     // Edge highlights for 3D effect
     final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -1282,7 +1283,7 @@ class _RainyWindowPainter extends CustomPainter {
       ..shader =
           RadialGradient(
             colors: [
-              const Color(0xFFffb347).withOpacity(0.15),
+              const Color(0xFFffb347).withValues(alpha: 0.15),
               Colors.transparent,
             ],
             stops: const [0.0, 1.0],
@@ -1316,7 +1317,7 @@ class _RainyWindowPainter extends CustomPainter {
 
     // Wood grain texture (subtle lines)
     final grainPaint = Paint()
-      ..color = const Color(0xFF6d5d47).withOpacity(0.3)
+      ..color = const Color(0xFF6d5d47).withValues(alpha: 0.3)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
@@ -1384,7 +1385,9 @@ class _RainyWindowPainter extends CustomPainter {
         ..shader =
             RadialGradient(
               colors: [
-                const Color(0xFF00ff88).withOpacity(screenGlowIntensity * 0.4),
+                const Color(
+                  0xFF00ff88,
+                ).withValues(alpha: screenGlowIntensity * 0.4),
                 Colors.transparent,
               ],
             ).createShader(
@@ -1423,7 +1426,7 @@ class _RainyWindowPainter extends CustomPainter {
 
     // CRT scanlines
     final scanlinePaint = Paint()
-      ..color = Colors.black.withOpacity(0.1)
+      ..color = Colors.black.withValues(alpha: 0.1)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
@@ -1442,9 +1445,9 @@ class _RainyWindowPainter extends CustomPainter {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.white.withOpacity(0.15),
+              Colors.white.withValues(alpha: 0.15),
               Colors.transparent,
-              Colors.black.withOpacity(0.1),
+              Colors.black.withValues(alpha: 0.1),
             ],
           ).createShader(
             Rect.fromLTWH(screenX, screenY, screenWidth, screenHeight),
@@ -1472,7 +1475,7 @@ class _RainyWindowPainter extends CustomPainter {
     // Power LED
     final powerLedPaint = Paint()
       ..color = isPlaying
-          ? const Color(0xFF00ff00).withOpacity(0.8)
+          ? const Color(0xFF00ff00).withValues(alpha: 0.8)
           : const Color(0xFF333333)
       ..style = PaintingStyle.fill;
 
@@ -1522,12 +1525,12 @@ class _RainyWindowPainter extends CustomPainter {
       final barY = y + height - barHeight - 4;
 
       // Green phosphor glow
-      barPaint.color = const Color(0xFF00ff88).withOpacity(0.9);
+      barPaint.color = const Color(0xFF00ff88).withValues(alpha: 0.9);
 
       canvas.drawRect(Rect.fromLTWH(barX, barY, barWidth, barHeight), barPaint);
 
       // Phosphor glow effect
-      barPaint.color = const Color(0xFF00ff88).withOpacity(0.3);
+      barPaint.color = const Color(0xFF00ff88).withValues(alpha: 0.3);
       barPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
       canvas.drawRect(
         Rect.fromLTWH(barX - 1, barY - 1, barWidth + 2, barHeight + 2),
@@ -1605,7 +1608,7 @@ class _RainyWindowPainter extends CustomPainter {
 
   void _drawSteam(Canvas canvas, double x, double y, double intensity) {
     final steamPaint = Paint()
-      ..color = Colors.white.withOpacity(intensity * 0.4)
+      ..color = Colors.white.withValues(alpha: intensity * 0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
@@ -1669,7 +1672,7 @@ class _RainyWindowPainter extends CustomPainter {
       ..shader =
           RadialGradient(
             colors: [
-              const Color(0xFFffcc66).withOpacity(lightIntensity),
+              const Color(0xFFffcc66).withValues(alpha: lightIntensity),
               Colors.transparent,
             ],
           ).createShader(
@@ -1683,7 +1686,7 @@ class _RainyWindowPainter extends CustomPainter {
 
     // Bulb (subtle)
     final bulbPaint = Paint()
-      ..color = const Color(0xFFffffcc).withOpacity(lightIntensity * 0.8)
+      ..color = const Color(0xFFffffcc).withValues(alpha: lightIntensity * 0.8)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(Offset(lampX + 25, lampBaseY - 42), 6, bulbPaint);

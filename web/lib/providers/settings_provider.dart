@@ -77,11 +77,11 @@ class MasteringSettings {
   final int mode;
 
   const MasteringSettings({
-    this.masteringEnabled = false,
-    this.phaselimiterEnabled = false,
+    this.masteringEnabled = true,
+    this.phaselimiterEnabled = true,
     this.targetLufs = -14.0,
     this.bassPreservation = 0.5,
-    this.mode = 5, // Level 5 (HNSW Pro)
+    this.mode = 3, // Level 3 (Standard)
   });
 
   MasteringSettings copyWith({
@@ -110,11 +110,11 @@ class MasteringSettings {
 
   factory MasteringSettings.fromJson(Map<String, dynamic> json) {
     return MasteringSettings(
-      masteringEnabled: json['masteringEnabled'] as bool? ?? false,
-      phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? false,
+      masteringEnabled: json['masteringEnabled'] as bool? ?? true,
+      phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? true,
       targetLufs: (json['targetLufs'] as num?)?.toDouble() ?? -14.0,
       bassPreservation: (json['bassPreservation'] as num?)?.toDouble() ?? 0.5,
-      mode: json['mode'] as int? ?? 5, // Level 5 (HNSW Pro)
+      mode: json['mode'] as int? ?? 3, // Level 3 (Standard)
     );
   }
 }

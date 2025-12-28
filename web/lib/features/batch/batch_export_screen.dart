@@ -544,57 +544,52 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     final isEnabled = state.isFlacEnabled;
     final isSelected = state.selectedFormat == 'flac';
 
-    final button = Expanded(
+    return Expanded(
       child: Opacity(
         opacity: isEnabled ? 1.0 : 0.5,
-        child: InkWell(
-          onTap: isEnabled
-              ? () => ref.read(batchExportProvider.notifier).setFormat('flac')
-              : null,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: isSelected && isEnabled
-                  ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
-                  : SlowverbColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
+        child: Tooltip(
+          message: !isEnabled && state.queuedFiles.isNotEmpty
+              ? 'FLAC export requires all files to be lossless sources (WAV, FLAC, AIFF).'
+              : '',
+          child: InkWell(
+            onTap: isEnabled
+                ? () => ref.read(batchExportProvider.notifier).setFormat('flac')
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
                 color: isSelected && isEnabled
-                    ? SlowverbColors.primaryPurple
-                    : Colors.transparent,
-                width: 2,
-              ),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.high_quality,
+                    ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
+                    : SlowverbColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
                   color: isSelected && isEnabled
                       ? SlowverbColors.primaryPurple
-                      : null,
+                      : Colors.transparent,
+                  width: 2,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'FLAC',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.high_quality,
+                    color: isSelected && isEnabled
+                        ? SlowverbColors.primaryPurple
+                        : null,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'FLAC',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
-
-    if (!isEnabled && state.queuedFiles.isNotEmpty) {
-      return Tooltip(
-        message:
-            'FLAC export requires all files to be lossless sources (WAV, FLAC, AIFF).',
-        child: button,
-      );
-    }
-
-    return button;
   }
 
   Widget _buildFormatSettings(

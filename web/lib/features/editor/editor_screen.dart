@@ -1760,8 +1760,8 @@ class _EffectColumn extends ConsumerWidget {
                                       'masteringEnabled',
                                       v ? 1.0 : 0.0,
                                     );
-                                    if (!v) {
-                                      onUpdateParam('masteringAlgorithm', 0.0);
+                                    if (v) {
+                                      onUpdateParam('masteringAlgorithm', 1.0);
                                     }
                                   },
                                   activeThumbColor: SlowverbColors.hotPink,
@@ -1788,12 +1788,8 @@ class _EffectColumn extends ConsumerWidget {
                                         ),
                                   ),
                                   Text(
-                                    (parameters['masteringAlgorithm'] ?? 0.0) <
-                                            0.5
-                                        ? 'Simple'
-                                        : (parameters['masteringAlgorithm'] ??
-                                                  0.0) <
-                                              1.5
+                                    (parameters['masteringAlgorithm'] ?? 1.0) <
+                                            1.5
                                         ? 'Level 3'
                                         : 'Level 5',
                                     style: Theme.of(context)
@@ -1825,11 +1821,11 @@ class _EffectColumn extends ConsumerWidget {
                                 ),
                                 child: Slider(
                                   value:
-                                      (parameters['masteringAlgorithm'] ?? 0.0)
-                                          .clamp(0.0, 2.0),
-                                  min: 0.0,
+                                      (parameters['masteringAlgorithm'] ?? 1.0)
+                                          .clamp(1.0, 2.0),
+                                  min: 1.0,
                                   max: 2.0,
-                                  divisions: 2,
+                                  divisions: 1,
                                   onChanged: (v) =>
                                       onUpdateParam('masteringAlgorithm', v),
                                 ),
@@ -1991,8 +1987,8 @@ class _EffectColumn extends ConsumerWidget {
                           value: masteringOn,
                           onChanged: (v) {
                             onUpdateParam('masteringEnabled', v ? 1.0 : 0.0);
-                            if (!v) {
-                              onUpdateParam('masteringAlgorithm', 0.0);
+                            if (v) {
+                              onUpdateParam('masteringAlgorithm', 1.0);
                             }
                           },
                           activeThumbColor: SlowverbColors.hotPink,
@@ -2015,10 +2011,7 @@ class _EffectColumn extends ConsumerWidget {
                                 ?.copyWith(color: SlowverbColors.textSecondary),
                           ),
                           Text(
-                            (parameters['masteringAlgorithm'] ?? 0.0) < 0.5
-                                ? 'Simple'
-                                : (parameters['masteringAlgorithm'] ?? 0.0) <
-                                      1.5
+                            (parameters['masteringAlgorithm'] ?? 1.0) < 1.5
                                 ? 'Level 3'
                                 : 'Level 5',
                             style: Theme.of(context).textTheme.bodyMedium
@@ -2047,11 +2040,11 @@ class _EffectColumn extends ConsumerWidget {
                           ),
                         ),
                         child: Slider(
-                          value: (parameters['masteringAlgorithm'] ?? 0.0)
-                              .clamp(0.0, 2.0),
-                          min: 0.0,
+                          value: (parameters['masteringAlgorithm'] ?? 1.0)
+                              .clamp(1.0, 2.0),
+                          min: 1.0,
                           max: 2.0,
-                          divisions: 2,
+                          divisions: 1,
                           onChanged: (v) =>
                               onUpdateParam('masteringAlgorithm', v),
                         ),
