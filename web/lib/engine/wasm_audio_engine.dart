@@ -96,11 +96,6 @@ class WasmAudioEngine implements AudioEngine {
   }
 
   @override
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<({Float32List left, Float32List right, int sampleRate})>
   decodeToFloatPCM(String fileId) async {
     _ensureInitialized();
@@ -156,19 +151,12 @@ class WasmAudioEngine implements AudioEngine {
   ///
   /// This must be called after a user gesture (e.g., clicking play button)
   /// to comply with browser autoplay policies.
-<<<<<<< HEAD
-=======
   @override
->>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<bool> resumeAudioContext() async {
     return BridgeInterop.resumeAudioContext();
   }
 
   @override
-<<<<<<< HEAD
-=======
->>>>>>> Stashed changes
->>>>>>> fa6fc1c23 (feat: Vortex Visualizer: Added as a new GPU-accelerated option (vortex.frag).)
   Future<Float32List> getWaveform(
     String fileId, {
     int targetSamples = 1000,
@@ -806,11 +794,11 @@ class WasmAudioEngine implements AudioEngine {
         }
         return value as T;
       }
-      // ignore: invalid_runtime_check_with_js_interop_types
       final value = object.getProperty<JSAny?>(property.toJS);
       if (value == null) {
         throw StateError('Expected value for "$property" but got null');
       }
+      // ignore: invalid_runtime_check_with_js_interop_types
       return value as T;
     } catch (e) {
       throw StateError('Failed to get property "$property" from JS object: $e');

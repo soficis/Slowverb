@@ -31,6 +31,9 @@ class _ImportScreenState extends State<ImportScreen> {
   ];
 
   Future<void> _pickFile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
     try {
       // Try File System Access API first for handle reuse.
       final fsaFile = await FileSystemAccess.pickAudioFile();
@@ -39,7 +42,7 @@ class _ImportScreenState extends State<ImportScreen> {
         await Future.delayed(const Duration(milliseconds: 150));
         if (mounted) {
           setState(() => _isLoading = false);
-          context.push(
+          router.push(
             AppRoutes.editor,
             extra: EditorScreenArgs(fileData: fsaFile),
           );
@@ -59,7 +62,7 @@ class _ImportScreenState extends State<ImportScreen> {
         // Ensure we have file bytes
         if (file.bytes == null) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            messenger.showSnackBar(
               const SnackBar(
                 content: Text('Failed to read file data'),
                 backgroundColor: SlowverbColors.error,
@@ -84,7 +87,7 @@ class _ImportScreenState extends State<ImportScreen> {
             bytes: file.bytes!,
           );
 
-          context.push(
+          router.push(
             AppRoutes.editor,
             extra: EditorScreenArgs(fileData: fileData),
           );
@@ -93,7 +96,7 @@ class _ImportScreenState extends State<ImportScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Error picking file: $e'),
             backgroundColor: SlowverbColors.error,
@@ -153,12 +156,14 @@ class _ImportScreenState extends State<ImportScreen> {
                       onDragDone: (details) async {
                         if (details.files.isEmpty) return;
                         final file = details.files.first;
+                        final messenger = ScaffoldMessenger.of(context);
+                        final router = GoRouter.of(context);
 
                         // Check extension
                         final ext = file.name.split('.').last.toLowerCase();
                         if (!_supportedExtensions.contains(ext)) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                 content: Text('Unsupported file format: .$ext'),
                                 backgroundColor: SlowverbColors.error,
@@ -179,7 +184,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               bytes: bytes,
                             );
 
-                            context.push(
+                            router.push(
                               AppRoutes.editor,
                               extra: EditorScreenArgs(fileData: fileData),
                             );
@@ -187,7 +192,7 @@ class _ImportScreenState extends State<ImportScreen> {
                         } catch (e) {
                           if (mounted) {
                             setState(() => _isLoading = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                 content: Text('Error reading file: $e'),
                                 backgroundColor: SlowverbColors.error,
