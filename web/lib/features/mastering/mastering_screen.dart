@@ -1,8 +1,8 @@
-import 'dart:typed_data';
 import 'dart:js_interop';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
@@ -280,8 +280,7 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
         final bytes = await xFile.readAsBytes();
         files.add((fileName: xFile.name as String, bytes: bytes as Uint8List));
       } catch (e) {
-        // ignore: avoid_print
-        print('[Mastering] Failed to read dropped file: $e');
+        debugPrint('[Mastering] Failed to read dropped file: $e');
       }
     }
 

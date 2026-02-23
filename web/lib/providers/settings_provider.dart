@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web/web.dart' as web;
 
@@ -42,8 +43,8 @@ class ExperimentalFeaturesNotifier extends StateNotifier<ExperimentalFeatures> {
         final json = jsonDecode(stored) as Map<String, dynamic>;
         state = ExperimentalFeatures.fromJson(json);
       }
-    } catch (_) {
-      // Ignore malformed data
+    } catch (error) {
+      debugPrint('Experimental settings load failed: $error');
     }
   }
 
@@ -134,8 +135,8 @@ class MasteringSettingsNotifier extends StateNotifier<MasteringSettings> {
         final json = jsonDecode(stored) as Map<String, dynamic>;
         state = MasteringSettings.fromJson(json);
       }
-    } catch (_) {
-      // Ignore malformed data
+    } catch (error) {
+      debugPrint('Mastering settings load failed: $error');
     }
   }
 

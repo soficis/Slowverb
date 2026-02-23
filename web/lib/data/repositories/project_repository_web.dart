@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:idb_shim/idb_browser.dart';
+import 'package:slowverb_web/domain/exceptions/app_exceptions.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/project_repository.dart';
 import 'package:web/web.dart' as web;
@@ -27,6 +29,7 @@ class ProjectRepositoryWeb implements ProjectRepository {
 
     try {
       if (_factory == null) {
+        debugPrint('IndexedDB unavailable, using localStorage for projects');
         _useLocalStorage = true;
         return;
       }
@@ -44,8 +47,10 @@ class ProjectRepositoryWeb implements ProjectRepository {
           }
         },
       );
-    } catch (_) {
-      // IndexedDB not available; fall back to localStorage.
+    } catch (error) {
+      debugPrint(
+        'IndexedDB unavailable, using localStorage for projects: $error',
+      );
       _useLocalStorage = true;
       _db = null;
     }
@@ -174,7 +179,8 @@ class ProjectRepositoryWeb implements ProjectRepository {
       final handle = await store.getObject(id);
       await txn.completed;
       return handle;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Failed to load project handle for $id: $error');
       _handlesSupported = false;
       return null;
     }
@@ -190,15 +196,8 @@ class ProjectRepositoryWeb implements ProjectRepository {
     final handle = await getProjectHandle(id);
     if (handle == null) return false;
 
-    // Try to verify permission on the handle
-    try {
-      // The handle is opaque; we'll check if it's truthy.
-      // In a full implementation, we'd call handle.queryPermission()
-      // via JS interop, but for now, presence of handle is sufficient.
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // The handle is opaque in Dart; presence means it can be attempted.
+    return true;
   }
 
   Map<String, dynamic> _projectToJson(Project project) {
@@ -235,8 +234,8 @@ class ProjectRepositoryWeb implements ProjectRepository {
             .toList()
           ..sort(_sortByUpdatedAt);
       }
-    } catch (_) {
-      // Ignore malformed data and reset.
+    } catch (error) {
+      debugPrint('Malformed project storage payload, resetting cache: $error');
     }
     return [];
   }
@@ -253,8 +252,9 @@ class ProjectRepositoryWeb implements ProjectRepository {
       final store = txn.objectStore(_handleStoreName);
       await store.put(handle, projectId);
       await txn.completed;
-    } catch (_) {
+    } catch (error) {
       _handlesSupported = false;
+      throw StorageException('saveProjectHandle', projectId, error);
     }
   }
 
@@ -265,8 +265,9 @@ class ProjectRepositoryWeb implements ProjectRepository {
       final store = txn.objectStore(_handleStoreName);
       await store.delete(projectId);
       await txn.completed;
-    } catch (_) {
+    } catch (error) {
       _handlesSupported = false;
+      throw StorageException('deleteProjectHandle', projectId, error);
     }
   }
 

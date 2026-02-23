@@ -79,7 +79,7 @@ flutter build web --wasm --release
 
 The audio engine is implemented in `lib/engine/wasm_audio_engine.dart`. It communicates with two **Web Workers**:
 
-- `web/js/audio_worker.js`: FFmpeg processing (decoding, filtering, encoding).
+- `web/js/ts/worker.js`: FFmpeg processing (decoding, filtering, encoding).
 - `web/js/phase_limiter_pro_worker.js`: PhaseLimiter Pro engine (mastering).
 
 ### Message Flow
@@ -87,7 +87,7 @@ The audio engine is implemented in `lib/engine/wasm_audio_engine.dart`. It commu
 ```
 ┌────────────────────┐          ┌────────────────────┐
 │  Dart (UI Thread)  │  ─────►  │  Web Worker        │
-│  WasmAudioEngine   │  JS      │  audio_worker.js   │
+│  WasmAudioEngine   │  JS      │  ts/worker.js      │
 │                    │  Interop │                    │
 │                    │  ◄─────  │  FFmpeg.wasm       │
 └────────────────────┘          └────────────────────┘

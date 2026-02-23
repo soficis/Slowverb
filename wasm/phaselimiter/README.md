@@ -77,7 +77,7 @@ PhaseLimiter Level 5 treats mastering as a mathematical optimization problem:
 
 - **Filter Bank**: Uses FIR bandpass filters (via `CalculateBandPassFir`) to split the audio into highly specific frequency regions.
 - **Parallel Processing**: Optimization is followed by a parallelized application of the best parameters to each band using `tbb::parallel_for` (or standard loops in single-threaded WASM).
-- **Fallback Mechanism**: If Level 5 optimization fails or throws an exception, the system automatically falls back to Level 3 to ensure the user always gets a mastered file.
+- **Fallback Mechanism**: Only recoverable runtime failures (for example missing cache/resource errors) fall back from Level 5 to Level 3. Unexpected failures now propagate as hard errors.
 
 #### Hard Limiter
 
@@ -85,10 +85,20 @@ A standard memoryless hard limiter with a ceiling of **-0.5 dB** (0.95 linear) p
 
 ## Build (Emscripten)
 
+### Requirements
+
+- Emscripten SDK (`emcc`) available in `PATH` **or** `EMSDK` set.
+- For Pro builds, source bootstrap/validation runs automatically:
+  - PhaseLimiter repo is fetched at pinned commit `3c951f40ea7e95e08c23c7b5654430f333939698`.
+  - Tree checksum is verified against pinned tree hash `ae5bf02a1380ac1edbff9ada0fee6d9bc32c78ea`.
+  - Boost 1.89.0 archive SHA-256 is verified (`9de758db755e8330a01d995b0a24d09798048400ac25c03fc5ea9be364b13c93`).
+
 Artifacts are copied into the web app:
 
 - `web/web/js/phaselimiter.js`
 - `web/web/js/phaselimiter.wasm`
+- `web/web/js/phaselimiter_pro.js`
+- `web/web/js/phaselimiter_pro.wasm`
 
 ### Windows (PowerShell)
 
@@ -97,11 +107,32 @@ cd wasm/phaselimiter
 ./build.ps1
 ```
 
+Pro build (parameterized):
+
+```powershell
+cd wasm/phaselimiter
+./build_pro.ps1 -EmsdkRoot $env:EMSDK -SourceRoot "$PWD/src_original"
+```
+
+Bootstrap source only (without building):
+
+```powershell
+cd wasm/phaselimiter
+./fetch_sources.ps1
+```
+
 ### macOS/Linux (bash)
 
 ```bash
 cd wasm/phaselimiter
 ./build.sh
+```
+
+Bootstrap source only (without building):
+
+```bash
+cd wasm/phaselimiter
+./fetch_sources.sh
 ```
 
 If you don’t have Emscripten in PATH, source your emsdk environment first (e.g., `emsdk_env.ps1` or `emsdk_env.sh`).

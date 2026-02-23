@@ -34,8 +34,7 @@ class SlowverbLogger {
   void error(String message, [Object? error, StackTrace? stackTrace]) {
     _log(LogLevel.error, message, error);
     if (stackTrace != null && kDebugMode) {
-      // ignore: avoid_print
-      print(stackTrace);
+      debugPrint(stackTrace.toString());
     }
   }
 
@@ -51,7 +50,6 @@ class SlowverbLogger {
     final fullMessage = data != null ? '$logMessage: $data' : logMessage;
 
     // Using debugPrint for proper Flutter integration
-    // ignore: avoid_print
     debugPrint(fullMessage);
   }
 }

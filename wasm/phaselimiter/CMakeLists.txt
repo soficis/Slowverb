@@ -1,4 +1,13 @@
 cmake_minimum_required(VERSION 3.13)
+
+if(NOT CMAKE_TOOLCHAIN_FILE AND DEFINED ENV{EMSDK})
+  set(
+    CMAKE_TOOLCHAIN_FILE
+    "$ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+    CACHE FILEPATH "Emscripten toolchain file"
+  )
+endif()
+
 project(phaselimiter_wasm)
 
 set(CMAKE_CXX_STANDARD 17)

@@ -125,7 +125,7 @@ class BatchExportNotifier extends StateNotifier<BatchExportState> {
   static const _log = SlowverbLogger('BatchExport');
 
   BatchExportNotifier(this._ref)
-    : super(BatchExportState(selectedPreset: Presets.slowedReverb));
+    : super(const BatchExportState(selectedPreset: Presets.slowedReverb));
 
   /// Add files to the batch queue (probes each file for metadata)
   Future<void> addFiles(

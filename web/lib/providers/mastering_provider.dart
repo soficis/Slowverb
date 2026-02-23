@@ -276,10 +276,6 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
   }
 
   /// Start mastering all queued files
-  ///
-  /// NOTE: Full audio pipeline integration (decode → master → encode) requires
-  /// adding decodeToFloatPCM and encodeFromFloatPCM methods to WasmAudioEngine.
-  /// This implementation demonstrates state management and PhaseLimiter integration.
   Future<void> startMastering() async {
     if (!state.canStart) {
       throw StateError('Cannot start: no files or already running');

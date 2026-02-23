@@ -175,6 +175,7 @@ export class SlowverbEngine {
   private async buildRenderPayload(request: RenderRequest): Promise<RenderPayload> {
     const filterGraph = this.resolveFilterGraph(request);
     const toneIr = await this.resolveToneReverbIR(request.dspSpec);
+    const format = ensureExportFormat(request.format);
     return {
       fileId: request.source.fileId,
       filterGraph,
@@ -182,7 +183,7 @@ export class SlowverbEngine {
       reverbIR: toneIr?.pcm,
       reverbIRSampleRate: toneIr?.sampleRate,
       mastering: request.dspSpec?.mastering,
-      format: request.format ?? "mp3",
+      format,
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec,
@@ -282,14 +283,15 @@ class WorkerRunner {
   }
 
   async loadSource(source: SourceData): Promise<void> {
+    const dataCopy = source.data.slice(0);
     const payload: LoadSourcePayload = {
       fileId: source.fileId,
       filename: source.filename,
-      data: source.data,
+      data: dataCopy,
     };
     await this.sendWithLog(
       { type: "LOAD_SOURCE", requestId: this.nextRequestId(), payload },
-      { transfer: [source.data] }
+      { transfer: [dataCopy] }
     );
   }
 
@@ -494,7 +496,8 @@ async function generateToneReverbIr(
     const effectAny = effect as any;
     let audioBuffer: AudioBuffer | undefined;
 
-    // Try multiple access patterns for different Tone.js versions
+    // Tone.js changed internal Reverb buffer layout across major versions.
+    // We probe several access patterns to support Tone 14.x and 15+ safely.
     // Pattern 1: Tone.js v15+ with _convolver.buffer as a Tone Param
     if (effectAny._convolver?.buffer) {
       const bufferParam = effectAny._convolver.buffer;
@@ -585,6 +588,14 @@ function clampNumber(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function ensureExportFormat(format?: ExportFormat): ExportFormat {
+  if (!format) return "mp3";
+  if (format === "mp3" || format === "wav" || format === "flac" || format === "aac") {
+    return format;
+  }
+  throw new Error(`Unsupported export format: ${String(format)}`);
 }
 
 const defaultWorkerFactory: WorkerFactory = () =>

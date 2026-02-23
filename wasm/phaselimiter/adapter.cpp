@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <vector>
 
 namespace {
@@ -118,7 +119,7 @@ int run_phase_limiter(uintptr_t leftChannelPtr, uintptr_t rightChannelPtr, int s
     return static_cast<int>(ErrorCode::Success);
   } catch (const std::bad_alloc&) {
     return static_cast<int>(ErrorCode::OutOfMemory);
-  } catch (...) {
+  } catch (const std::exception&) {
     return static_cast<int>(ErrorCode::ProcessingFailed);
   }
 }

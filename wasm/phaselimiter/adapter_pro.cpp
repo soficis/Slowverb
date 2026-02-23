@@ -2,6 +2,7 @@
 #include <cmath>
 #include <emscripten.h>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -10,6 +11,15 @@
 // Forward declare gflags variables or use DECLARE_string if you prefer macros
 #include "gflags/gflags.h"
 DECLARE_string(sound_quality2_cache);
+
+namespace {
+bool IsRecoverableLevel5Failure(const std::runtime_error &error) {
+  const std::string message = error.what();
+  return message.find("sound_quality2_cache") != std::string::npos ||
+         message.find("cache") != std::string::npos ||
+         message.find("resource") != std::string::npos;
+}
+} // namespace
 
 extern "C" {
 
@@ -60,7 +70,7 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
     } else if (mode == 3) {
       std::cerr << "[adapter_pro] Calling AutoMastering3" << std::endl;
       phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
-    } else {
+    } else if (mode == 5) {
       std::cerr << "[adapter_pro] Calling AutoMastering5" << std::endl;
 
       // Set the cache path
@@ -71,18 +81,19 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
 
       try {
         phase_limiter::AutoMastering5(&wave, sample_rate, report_progress);
-      } catch (const std::exception &e) {
-        std::cerr << "[adapter_pro] Level 5 failed: " << e.what()
+      } catch (const std::runtime_error &e) {
+        if (!IsRecoverableLevel5Failure(e)) {
+          throw;
+        }
+        std::cerr << "[adapter_pro] Recoverable Level 5 failure: " << e.what()
                   << ". Falling back to Level 3..." << std::endl;
         phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
         fallback_occurred = true;
-      } catch (...) {
-        std::cerr << "[adapter_pro] Level 5 failed with unknown error. Falling "
-                     "back to Level 3..."
-                  << std::endl;
-        phase_limiter::AutoMastering3(&wave, sample_rate, report_progress);
-        fallback_occurred = true;
       }
+    } else {
+      std::cerr << "[adapter_pro] Unsupported mastering mode: " << mode
+                << std::endl;
+      return -2;
     }
 
     std::cerr << "[adapter_pro] Mastering finished. Copying back..."
@@ -120,10 +131,6 @@ int phaselimiter_pro_process(float *left_ptr, float *right_ptr, int length,
   } catch (const char *c) {
     std::cerr << "[adapter_pro] CRITICAL Char* exception: " << c << std::endl;
     return -5;
-  } catch (...) {
-    std::cerr << "[adapter_pro] CRITICAL Unknown exception caught!"
-              << std::endl;
-    return -6;
   }
 }
 }

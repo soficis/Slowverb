@@ -18079,6 +18079,7 @@ var SlowverbEngine = class {
   async buildRenderPayload(request) {
     const filterGraph = this.resolveFilterGraph(request);
     const toneIr = await this.resolveToneReverbIR(request.dspSpec);
+    const format = ensureExportFormat(request.format);
     return {
       fileId: request.source.fileId,
       filterGraph,
@@ -18086,7 +18087,7 @@ var SlowverbEngine = class {
       reverbIR: toneIr?.pcm,
       reverbIRSampleRate: toneIr?.sampleRate,
       mastering: request.dspSpec?.mastering,
-      format: request.format ?? "mp3",
+      format,
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec
@@ -18168,14 +18169,15 @@ var WorkerRunner = class {
     );
   }
   async loadSource(source) {
+    const dataCopy = source.data.slice(0);
     const payload = {
       fileId: source.fileId,
       filename: source.filename,
-      data: source.data
+      data: dataCopy
     };
     await this.sendWithLog(
       { type: "LOAD_SOURCE", requestId: this.nextRequestId(), payload },
-      { transfer: [source.data] }
+      { transfer: [dataCopy] }
     );
   }
   async probe(payload) {
@@ -18408,6 +18410,13 @@ function clampNumber(value, min, max) {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+function ensureExportFormat(format) {
+  if (!format) return "mp3";
+  if (format === "mp3" || format === "wav" || format === "flac" || format === "aac") {
+    return format;
+  }
+  throw new Error(`Unsupported export format: ${String(format)}`);
 }
 var defaultWorkerFactory = () => new Worker(new URL("../core-worker/dist/worker.js", import.meta.url), { type: "module" });
 function createJobId() {

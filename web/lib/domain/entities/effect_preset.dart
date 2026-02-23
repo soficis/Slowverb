@@ -354,10 +354,9 @@ abstract final class Presets {
 
   /// Get preset by ID, or null if not found.
   static EffectPreset? getById(String id) {
-    try {
-      return all.firstWhere((p) => p.id == id);
-    } catch (_) {
-      return null;
+    for (final preset in all) {
+      if (preset.id == id) return preset;
     }
+    return null;
   }
 }

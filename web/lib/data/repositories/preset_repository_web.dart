@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:idb_shim/idb_browser.dart';
+import 'package:slowverb_web/domain/exceptions/app_exceptions.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/preset_repository.dart';
 import 'package:web/web.dart' as web;
@@ -25,6 +27,7 @@ class PresetRepositoryWeb implements PresetRepository {
 
     try {
       if (_factory == null) {
+        debugPrint('IndexedDB unavailable, using localStorage for presets');
         _useLocalStorage = true;
         return;
       }
@@ -49,8 +52,10 @@ class PresetRepositoryWeb implements PresetRepository {
           }
         },
       );
-    } catch (_) {
-      // IndexedDB not available; fall back to localStorage
+    } catch (error) {
+      debugPrint(
+        'IndexedDB unavailable, using localStorage for presets: $error',
+      );
       _useLocalStorage = true;
       _db = null;
     }
@@ -119,10 +124,14 @@ class PresetRepositoryWeb implements PresetRepository {
       return;
     }
 
-    final txn = _db!.transaction(_storeName, idbModeReadWrite);
-    final store = txn.objectStore(_storeName);
-    await store.put(presetJson);
-    await txn.completed;
+    try {
+      final txn = _db!.transaction(_storeName, idbModeReadWrite);
+      final store = txn.objectStore(_storeName);
+      await store.put(presetJson);
+      await txn.completed;
+    } catch (error) {
+      throw StorageException('saveCustomPreset', preset.id, error);
+    }
   }
 
   @override
@@ -135,10 +144,14 @@ class PresetRepositoryWeb implements PresetRepository {
       return;
     }
 
-    final txn = _db!.transaction(_storeName, idbModeReadWrite);
-    final store = txn.objectStore(_storeName);
-    await store.delete(id);
-    await txn.completed;
+    try {
+      final txn = _db!.transaction(_storeName, idbModeReadWrite);
+      final store = txn.objectStore(_storeName);
+      await store.delete(id);
+      await txn.completed;
+    } catch (error) {
+      throw StorageException('deleteCustomPreset', id, error);
+    }
   }
 
   @override
@@ -189,8 +202,8 @@ class PresetRepositoryWeb implements PresetRepository {
             .toList()
           ..sort(_sortByUpdatedAt);
       }
-    } catch (_) {
-      // Ignore malformed data
+    } catch (error) {
+      debugPrint('Malformed preset storage payload, resetting cache: $error');
     }
     return [];
   }

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 
 import { compileFilterChain, PRESETS } from "../dist/index.js";
 
-test("returns anull when no parameters are provided", () => {
+test("returns normalization chain when no parameters are provided", () => {
   const chain = compileFilterChain({ specVersion: "1.0.0" });
-  assert.equal(chain, "anull");
+  assert.equal(chain, "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1");
 });
 
 test("clamps tempo and pitch to DSP limits", () => {
@@ -15,7 +15,10 @@ test("clamps tempo and pitch to DSP limits", () => {
     pitch: 24, // clamps to +12
   });
 
-  assert.equal(chain, "atempo=0.5000,asetrate=44100*2.0000,aresample=44100");
+  assert.equal(
+    chain,
+    "atempo=0.5000,asetrate=44100*2.0000,aresample=44100:filter_size=64:phase_shift=10,volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1"
+  );
 });
 
 test("eqWarmth and low-pass priority are respected", () => {
@@ -26,7 +29,10 @@ test("eqWarmth and low-pass priority are respected", () => {
     hfDamping: 1,
   });
 
-  assert.equal(chain, "equalizer=f=300:t=h:width=200:g=6.0,lowpass=f=200");
+  assert.equal(
+    chain,
+    "equalizer=f=300:t=h:width=200:g=6.0,lowpass=f=200,volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1"
+  );
 });
 
 test("reverb and echo clamp values to safe ranges", () => {
@@ -44,7 +50,10 @@ test("reverb and echo clamp values to safe ranges", () => {
     },
   });
 
-  assert.equal(chain, "aecho=0.8:1.00:500|750|975:0.89|0.69|0.40,aecho=0.8:0.5:1000:0.90");
+  assert.equal(
+    chain,
+    "aecho=0.8:1.00:500|850|1200|1300|1750:0.79|0.59|0.40|0.25|0.10,aecho=0.8:0.2:1000:0.6,volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1"
+  );
 });
 
 test("composite chain preserves filter order", () => {
@@ -61,9 +70,11 @@ test("composite chain preserves filter order", () => {
     "asetrate=",
     "equalizer=",
     "aecho=0.8:0.30:",
-    "aecho=0.8:0.5:",
+    "aecho=0.8:0.2:",
     "lowpass=f=",
     "stereotools=",
+    "volume=6dB,",
+    "alimiter=limit=0.95:level_in=1:level_out=1",
   ];
 
   const positions = markers.map((marker) => {
@@ -77,14 +88,14 @@ test("composite chain preserves filter order", () => {
   }
 });
 
-test("mastering disabled does not append mastering filters", () => {
+test("mastering disabled applies normalization chain", () => {
   const chain = compileFilterChain({
     specVersion: "1.0.0",
     mastering: { enabled: false, algorithm: "simple" },
   });
 
-  assert.equal(chain, "anull");
-  assert.ok(!chain.includes("alimiter="));
+  assert.equal(chain, "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1");
+  assert.ok(chain.includes("alimiter="));
 });
 
 test("mastering enabled appends limiter at end", () => {

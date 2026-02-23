@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 
 @JS('JSZip')
 extension type JSZip._(JSObject _) implements JSObject {
@@ -30,8 +31,7 @@ class ZipExportService {
 
       return (result as JSUint8Array).toDart;
     } catch (e) {
-      // ignore: avoid_print
-      print('[ZipExportService] Error creating ZIP: $e');
+      debugPrint('[ZipExportService] Error creating ZIP: $e');
       rethrow;
     }
   }

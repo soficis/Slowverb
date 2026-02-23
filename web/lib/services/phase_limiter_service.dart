@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
 class PhaseLimiterConfig {
@@ -44,8 +44,7 @@ class PhaseLimiterService {
     _worker = web.Worker('/js/phase_limiter_pro_worker.js?v=$timestamp'.toJS);
 
     _worker?.onerror = ((web.ErrorEvent event) {
-      // ignore: avoid_print
-      print('[PhaseLimiterService] Worker error: ${event.message}');
+      debugPrint('[PhaseLimiterService] Worker error: ${event.message}');
     }).toJS;
   }
 

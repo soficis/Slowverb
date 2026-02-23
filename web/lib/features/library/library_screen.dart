@@ -303,7 +303,7 @@ class _ProjectCard extends StatelessWidget {
                   Row(
                     children: [
                       if (project.updatedAt != null) ...[
-                        Icon(
+                        const Icon(
                           Icons.update,
                           size: 12,
                           color: SlowverbColors.textHint,
@@ -320,7 +320,7 @@ class _ProjectCard extends StatelessWidget {
                       ],
                       if (project.lastExportDate != null) ...[
                         const SizedBox(width: 12),
-                        Icon(
+                        const Icon(
                           Icons.download_done,
                           size: 12,
                           color: SlowverbColors.textHint,

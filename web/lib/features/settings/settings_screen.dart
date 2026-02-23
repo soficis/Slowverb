@@ -31,9 +31,9 @@ class SettingsScreen extends ConsumerWidget {
                 context,
                 title: 'About',
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.info_outline),
-                    title: const Text('Slowverb'),
+                  const ListTile(
+                    leading: Icon(Icons.info_outline),
+                    title: Text('Slowverb'),
                     subtitle: Text('Version ${AppConfig.version}'),
                   ),
                 ],

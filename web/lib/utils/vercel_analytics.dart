@@ -25,6 +25,7 @@ void trackEvent(String eventName, [Map<String, dynamic>? properties]) {
   } catch (e) {
     // Silently fail if analytics is not available
     // This can happen during development or if the script fails to load
+    // Intentionally ignored: analytics must never break app behavior.
   }
 }
 

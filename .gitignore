@@ -1,157 +1,94 @@
-# Slowverb - Gitignore
+# Slowverb ignore rules
 
-# Build artifacts
-web/packages/**/dist/
+# JavaScript/TypeScript dependencies and build outputs
 node_modules/
 web/node_modules/
+web/packages/**/dist/
+web/playwright-report/
+web/blob-report/
+.eslintcache
+
+# Flutter/Dart build outputs
+.dart_tool/
+.flutter_sdk/
+.flutter-plugins
+.flutter-plugins-dependencies
+.fvm/
+.packages
+.pub/
+.pub-cache/
 build/
+web/build/
+
+# Native build artifacts
 *.exe
 *.dll
 *.so
 *.dylib
+*.js.mem
+
+# Ignore generated wasm by default, but keep deploy assets under web/web/js
 *.wasm
-# BUT include production WASM files needed for deployment
 !web/web/js/*.wasm
 !web/web/js/vendor/*.wasm
+
+# Source maps/logs/temp
 *.js.map
-*.js.mem
-.flutter_sdk
-# Flutter/Dart
-.dart_tool/
-.packages
-.pub-cache/
-.pub/
-pubspec.lock
-*.iml
-# IDE
+*.log
+logs/
+.cache/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# IDE/OS clutter
 .idea/
 .vscode/
+*.iml
 *.swp
 *.swo
 *~
-
-# macOS
 .DS_Store
-.AppleDouble
-.LSOverride
-
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# FFmpeg binaries (downloaded at runtime)
-**/ffmpeg.exe
-**/ffmpeg
-**/ffprobe.exe
-**/ffprobe
+# Test outputs (tests themselves are versioned)
+coverage/
+*.lcov
+web/test-results/
 
-# Personal/sensitive
+# Environment/secrets
 *.env
 .env.*
 secrets/
 credentials/
 
-# Logs
-*.log
-logs/
-
-# Test coverage
-coverage/
-*.lcov
-tests/
-#web/test-results/
-# Documentation
-docs/
-# Specific large binaries to ignore in docs/
-docs/*.zip
-docs/*.tar
-docs/*.tar.xz
-docs/emsdk/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
-# Debug and Analysis output
+# Generated diagnostics
 **/analysis_*.txt
 **/app_analyze.txt
 **/test_output.txt
 **/test.json
-**/.flutter-plugins-dependencies
-run_with_logging.bat
 lints.txt
 lints_utf8.txt
-export_crash_test.dart
-web/test
-web/test-results
-web/outdated.txt
-web/npm_outdated.txt
-web/outdated_utf8.txt
-web/batch_errors.txt
 
-# Scattered scripts and temp files
-check_table.js
-emcc_paths.txt
-extract_mapping.js
-lints.txt
-lints_utf8.txt
-run_with_logging.bat
-export_crash_test.dart
-wasm/phaselimiter/extract_sources.py
-wasm/phaselimiter/extract_sources_v2.py
-wasm/phaselimiter/run_conversion.ps1
-wasm/phaselimiter/verify_src.ps1
+# Local agent temp markers
+tmpclaude-*-cwd
+**/tmpclaude-*-cwd
 
-# WASM build artifacts and logs
+# Documentation (ignored by request)
+docs/
+
+# PhaseLimiter third-party vendored source; fetch separately when needed
+wasm/phaselimiter/src_original/
 wasm/phaselimiter/build_*.txt
 wasm/phaselimiter/build_*.log
 wasm/phaselimiter/conv_*.txt
 wasm/phaselimiter/test*.wasm
 wasm/phaselimiter/test*.js
 wasm/phaselimiter/test_sizes*
-wasm/phaselimiter/src_original/**/bin/
-wasm/phaselimiter/src_original/**/obj/
-wasm/phaselimiter/src_original/**/.vs/
-wasm/phaselimiter/src_original/**/x64/
-wasm/phaselimiter/src_original/**/Debug/
-wasm/phaselimiter/src_original/**/Release/
 
-# Aggressive dependency clean-up (Ignore non-build files in src_original)
-wasm/phaselimiter/src_original/**/doc/
-wasm/phaselimiter/src_original/**/docs/
-wasm/phaselimiter/src_original/**/test/
-wasm/phaselimiter/src_original/**/tests/
-wasm/phaselimiter/src_original/**/example/
-wasm/phaselimiter/src_original/**/examples/
-wasm/phaselimiter/src_original/**/bench/
-wasm/phaselimiter/src_original/**/benchmarks/
-wasm/phaselimiter/src_original/**/ci/
-wasm/phaselimiter/src_original/**/scripts/
-wasm/phaselimiter/src_original/**/tools/
-wasm/phaselimiter/src_original/**/samples/
-wasm/phaselimiter/src_original/**/debug/
-wasm/phaselimiter/src_original/**/demos/
-wasm/phaselimiter/src_original/**/blas/
-wasm/phaselimiter/src_original/**/lapack/
-wasm/phaselimiter/src_original/**/unsupported/
-wasm/phaselimiter/src_original/**/*.pdf
-wasm/phaselimiter/src_original/**/*.html
-wasm/phaselimiter/src_original/**/*.htm
-wasm/phaselimiter/src_original/**/*.png
-wasm/phaselimiter/src_original/**/*.css
-wasm/phaselimiter/src_original/**/*.jam
-wasm/phaselimiter/src_original/**/CMakeLists.txt
-wasm/phaselimiter/src_original/**/Makefile
-wasm/phaselimiter/src_original/**/configure
-wasm/phaselimiter/src_original/**/Jamroot
-wasm/phaselimiter/src_original/**/.github/
-wasm/phaselimiter/src_original/**/.gitlab/
-wasm/phaselimiter/src_original/**/.clang-format
-
-# User specific (requested to be ignored)
-.gitignore
-full_reflog.txt
-.gitignore
-reflog_simple.txt
+# Optional local archive of phaselimiter source bundle
+wasm/phaselimiter/phaselimiter.zip

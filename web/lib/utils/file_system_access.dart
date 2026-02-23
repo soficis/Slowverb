@@ -1,7 +1,7 @@
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:web/web.dart' as web;
 
@@ -55,7 +55,8 @@ class FileSystemAccess {
         bytes: Uint8List.fromList(bytes),
         fileHandle: handle,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('File picker failed: $error');
       return null;
     }
   }
@@ -82,7 +83,8 @@ class FileSystemAccess {
         bytes: Uint8List.fromList(bytes),
         fileHandle: handle,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('File handle load failed: $error');
       return null;
     }
   }

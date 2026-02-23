@@ -1,43 +1,109 @@
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$boostDir = "v:\Slowverb\wasm\phaselimiter\src_original\boost_1_90_0-bin-msvc-all-32-64\boost_1_90_0"
-$boostInclude = $boostDir
-$boostLib = "$boostDir\lib32-msvc-14.3"
+param(
+  [string]$SourceRoot = (Join-Path $PSScriptRoot "src_original"),
+  [string]$OutputExe = (Join-Path $PSScriptRoot "converter_win32.exe"),
+  [string]$OutputCacheText = (Join-Path $PSScriptRoot "sound_quality2_cache.txt"),
+  [string]$ClPath = "cl.exe",
+  [switch]$AutoFetchSource = $true,
+  [switch]$ForceFetchSource = $false
+)
 
-# We'll use the environment's cl.exe if available, otherwise we'll try to find it.
-# Assuming typical VS 2022 Community install if not in path.
-$cl = "cl.exe"
+$ErrorActionPreference = "Stop"
 
-$src = "v:\Slowverb\wasm\phaselimiter\converter.cpp"
-$out = "v:\Slowverb\wasm\phaselimiter\converter_win32.exe"
+function Ensure-SourceRoot {
+  param(
+    [string]$PathValue,
+    [switch]$AutoFetch,
+    [switch]$ForceFetch
+  )
+
+  $fetchScript = Join-Path $PSScriptRoot "fetch_sources.ps1"
+  if ($AutoFetch) {
+    if (-not (Test-Path $fetchScript)) {
+      throw "Auto-fetch requested but missing script: $fetchScript"
+    }
+
+    Write-Host "Validating pinned PhaseLimiter sources..."
+    $fetchArgs = @("-SourceRoot", $PathValue)
+    if ($ForceFetch) {
+      $fetchArgs += "-Force"
+    }
+    & $fetchScript @fetchArgs
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to fetch pinned PhaseLimiter sources."
+    }
+  }
+
+  if (-not (Test-Path $PathValue)) {
+    throw "Source root not found: $PathValue"
+  }
+}
+
+function Resolve-BoostLib {
+  param(
+    [string]$BoostRoot,
+    [string]$Pattern
+  )
+
+  $candidate = Get-ChildItem -Path (Join-Path $BoostRoot "lib32-msvc-14.3") -Filter $Pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $candidate) {
+    throw "Missing Boost library matching pattern '$Pattern' under $BoostRoot\lib32-msvc-14.3"
+  }
+  return $candidate.FullName
+}
+
+Ensure-SourceRoot -PathValue $SourceRoot -AutoFetch:$AutoFetchSource -ForceFetch:$ForceFetchSource
+
+$boostRoot = Join-Path $SourceRoot "boost_1_89_0"
+if (-not (Test-Path $boostRoot)) {
+  throw "Missing Boost sources at: $boostRoot"
+}
+
+$boostInclude = $boostRoot
+$boostLibSerialization = Resolve-BoostLib -BoostRoot $boostRoot -Pattern "libboost_serialization-*.lib"
+$boostLibFilesystem = Resolve-BoostLib -BoostRoot $boostRoot -Pattern "libboost_filesystem-*.lib"
+
+$src = Join-Path $PSScriptRoot "converter.cpp"
+if (-not (Test-Path $src)) {
+  throw "Missing converter source: $src"
+}
 
 $includePaths = @(
-    "/I v:\Slowverb\wasm\phaselimiter",
-    "/I v:\Slowverb\wasm\phaselimiter\stubs",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\src",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\deps\bakuage\include",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\deps\bakuage\include\bakuage",
-    "/I $boostInclude",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\armadillo-15.2.3\include",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\eigen-master",
-    "/I v:\Slowverb\wasm\phaselimiter\src_original\prebuilt\win64\optim\header_only_version"
+  "/I $PSScriptRoot",
+  "/I $(Join-Path $PSScriptRoot 'stubs')",
+  "/I $SourceRoot",
+  "/I $(Join-Path $SourceRoot 'src')",
+  "/I $(Join-Path $SourceRoot 'deps\bakuage\include')",
+  "/I $(Join-Path $SourceRoot 'deps\bakuage\include\bakuage')",
+  "/I $boostInclude",
+  "/I $(Join-Path $SourceRoot 'deps\eigen')",
+  "/I $(Join-Path $SourceRoot 'deps\hnsw')",
+  "/I $(Join-Path $SourceRoot 'prebuilt\win64\optim\header_only_version')"
 )
 
 $libs = @(
-    "$boostLib\libboost_serialization-vc143-mt-s-x32-1_90.lib",
-    "$boostLib\libboost_filesystem-vc143-mt-s-x32-1_90.lib"
+  $boostLibSerialization,
+  $boostLibFilesystem
 )
 
-Write-Host "Compiling Native Win32 Converter..."
-# Using /MT for static runtime, /O2 for optimization, /std:c++17
-# /DBOOST_ALL_NO_LIB and /DARMA_DONT_USE_WRAPPER
-& $cl /nologo /O2 /MT /std:c++17 $includePaths $src /Fe:$out /DBOOST_ALL_NO_LIB /DARMA_DONT_USE_WRAPPER $libs /link /MACHINE:X86
+Write-Host "Compiling native Win32 converter..."
+& $ClPath /nologo /O2 /MT /std:c++17 $includePaths $src /Fe:$OutputExe /DBOOST_ALL_NO_LIB /DARMA_DONT_USE_WRAPPER $libs /link /MACHINE:X86
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Build complete: $out"
-    Write-Host "Running conversion..."
-    & $out "v:\Slowverb\wasm\phaselimiter\src_original\phaselimiter-win\phaselimiter\resource\sound_quality2_cache" "v:\Slowverb\wasm\phaselimiter\sound_quality2_cache.txt"
+if ($LASTEXITCODE -ne 0) {
+  throw "Build failed for converter executable."
 }
-else {
-    Write-Host "Build FAILED"
+
+Write-Host "Build complete: $OutputExe"
+
+$cacheInput = Join-Path $SourceRoot "resource\sound_quality2_cache"
+if (-not (Test-Path $cacheInput)) {
+  throw "Missing cache input file: $cacheInput"
 }
+
+Write-Host "Running conversion..."
+& $OutputExe $cacheInput $OutputCacheText
+
+if ($LASTEXITCODE -ne 0) {
+  throw "Conversion failed."
+}
+
+Write-Host "Conversion finished: $OutputCacheText"

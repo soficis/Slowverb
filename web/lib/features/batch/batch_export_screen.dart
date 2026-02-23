@@ -432,7 +432,7 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
             Text('FORMAT', style: Theme.of(context).textTheme.labelLarge),
             const Spacer(),
             if (!state.allFilesLossless && state.queuedFiles.isNotEmpty)
-              Tooltip(
+              const Tooltip(
                 message:
                     'Some files are lossy. FLAC export requires all lossless sources.',
                 child: Row(
@@ -443,7 +443,7 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
                       size: 14,
                       color: SlowverbColors.warning,
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Text(
                       'Mixed formats',
                       style: TextStyle(
