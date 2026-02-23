@@ -5698,6 +5698,391 @@ async function processWithPhaseLimiter(options) {
   });
 }
 
+// src/soundtouch_pipeline.ts
+function runSoundTouchStage(ffmpeg2, payload, inputFile, outputFile, jobId, progress, postProgress) {
+  const { tempo, pitchSemitones } = resolveTimeStretchParams(payload);
+  postProgress(jobId, progress.offset, "time-stretch");
+  const input = readInterleavedF32(ffmpeg2.FS, inputFile);
+  const stretched = applySoundTouch(input, tempo, pitchSemitones, (percent) => {
+    postProgress(jobId, progress.offset + percent * progress.scale, "time-stretch");
+  });
+  writeInterleavedF32(ffmpeg2.FS, outputFile, stretched);
+  postProgress(jobId, progress.offset + progress.scale, "time-stretch");
+  return outputFile;
+}
+
+// src/mastering_pipeline.ts
+function isSimpleMasteringWithToneReverb(mastering, toneReverbEnabled) {
+  return mastering?.enabled === true && mastering?.algorithm === "simple" && toneReverbEnabled;
+}
+async function applyPhaseLimiterStage(input) {
+  const {
+    ffmpeg: ffmpeg2,
+    fileId,
+    jobId,
+    sampleRate,
+    inputFile,
+    algorithm,
+    mastering,
+    progressRange,
+    isToneReverbEnabled: isToneReverbEnabled2,
+    withProgressStage: withProgressStage2,
+    postProgress
+  } = input;
+  const masteredFile = `${fileId}-${jobId}-mastered.f32`;
+  const { left, right } = readAndSplitF32Stereo(ffmpeg2.FS, inputFile);
+  postProgress(jobId, progressRange.offset, "mastering");
+  const processed = await processWithPhaseLimiter({
+    leftChannel: left,
+    rightChannel: right,
+    sampleRate,
+    algorithm,
+    mastering,
+    progressRange,
+    onProgress: (value) => postProgress(jobId, value, "mastering")
+  });
+  writeInterleavedF32Stereo(ffmpeg2.FS, masteredFile, processed.left, processed.right);
+  const tempFiles = [masteredFile];
+  let currentFile = masteredFile;
+  if (algorithm === "phaselimiter_pro") {
+    const boostValue = isToneReverbEnabled2 ? "6dB" : "4dB";
+    const boostedFile = `${fileId}-${jobId}-pro-boosted.f32`;
+    const boostArgs = buildPcmFilterPlan(currentFile, boostedFile, `volume=${boostValue}`, sampleRate);
+    withProgressStage2("mastering-boost", 0.9, 0, () => ffmpeg2.exec(...boostArgs));
+    tempFiles.push(boostedFile);
+    currentFile = boostedFile;
+  }
+  if (algorithm === "phaselimiter") {
+    const reducedFile = `${fileId}-${jobId}-lite-reduced.f32`;
+    const reduceArgs = buildPcmFilterPlan(currentFile, reducedFile, "volume=-2dB", sampleRate);
+    withProgressStage2("mastering-reduction", 0.9, 0, () => ffmpeg2.exec(...reduceArgs));
+    tempFiles.push(reducedFile);
+    currentFile = reducedFile;
+  }
+  return { outputFile: currentFile, tempFiles };
+}
+function applySimpleMasteringBoostStage(input) {
+  const { ffmpeg: ffmpeg2, fileId, jobId, sampleRate, inputFile, withProgressStage: withProgressStage2 } = input;
+  const boostedFile = `${fileId}-${jobId}-simple-boosted.f32`;
+  const boostArgs = buildPcmFilterPlan(inputFile, boostedFile, "volume=12dB", sampleRate);
+  withProgressStage2("simple-mastering-boost", 0.9, 0, () => ffmpeg2.exec(...boostArgs));
+  return { outputFile: boostedFile, tempFile: boostedFile };
+}
+
+// src/ffmpeg_pipeline.ts
+function buildRenderPlan(payload, jobId, isPreview) {
+  const args = [];
+  addTrimArgs(args, payload, isPreview);
+  addInputArgs(args, payload);
+  addCodecArgs(args, payload.format, payload.bitrateKbps);
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+  args.push("-y", outputFile);
+  return { args, outputFile };
+}
+function readOutput(ffmpeg2, path) {
+  const bytes = ffmpeg2.FS.readFile(path);
+  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary output from FFmpeg");
+  const copy = bytes.slice();
+  return copy.buffer;
+}
+async function renderWithPhaseLimiter(ffmpeg2, payload, jobId, isPreview, callbacks) {
+  const sampleRate = 44100;
+  const decodeFile = `${payload.fileId}-${jobId}-decode.f32`;
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+  try {
+    const decodeArgs = buildDecodePlan(payload, decodeFile, sampleRate, isPreview);
+    callbacks.postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
+    callbacks.withProgressStage("decoding", 0, 0.2, () => ffmpeg2.exec(...decodeArgs));
+    const mastering = payload.mastering;
+    if (!mastering?.enabled) {
+      throw new Error("PhaseLimiter pipeline requires mastering.enabled=true");
+    }
+    const algorithm = mastering.algorithm;
+    if (algorithm !== "phaselimiter" && algorithm !== "phaselimiter_pro") {
+      throw new Error(`Unsupported PhaseLimiter algorithm: ${String(algorithm)}`);
+    }
+    const mastered = await applyPhaseLimiterStage({
+      ffmpeg: ffmpeg2,
+      fileId: payload.fileId,
+      jobId,
+      sampleRate,
+      inputFile: decodeFile,
+      algorithm,
+      mastering,
+      progressRange: { offset: 0.2, scale: 0.6 },
+      isToneReverbEnabled: false,
+      withProgressStage: callbacks.withProgressStage,
+      postProgress: (id, value, stage) => callbacks.postEvent({ type: "PROGRESS", jobId: id, value, stage })
+    });
+    const encodeArgs = buildEncodePlan(mastered.outputFile, outputFile, payload, sampleRate);
+    callbacks.postEvent({ type: "PROGRESS", jobId, value: 0.8, stage: "encoding" });
+    callbacks.withProgressStage("encoding", 0.8, 0.2, () => ffmpeg2.exec(...encodeArgs));
+    const buffer = readOutput(ffmpeg2, outputFile);
+    return { buffer, outputFile, tempFiles: [decodeFile, ...mastered.tempFiles] };
+  } catch (error) {
+    callbacks.postMasteringWarning(
+      jobId,
+      payload.fileId,
+      "PhaseLimiter mastering failed. Render aborted to prevent silent degradation.",
+      error
+    );
+    throw error;
+  }
+}
+async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options, callbacks) {
+  const sampleRate = 44100;
+  const rawFile = `${payload.fileId}-${jobId}-raw.f32`;
+  const stretchedFile = `${payload.fileId}-${jobId}-stretched.f32`;
+  const effectsFile = `${payload.fileId}-${jobId}-effects.f32`;
+  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
+  const tempFiles = [rawFile];
+  let currentPcmFile = rawFile;
+  const decodeArgs = buildRawDecodePlan(payload, rawFile, sampleRate, isPreview);
+  callbacks.postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
+  callbacks.withProgressStage("decoding", 0, 0.15, () => ffmpeg2.exec(...decodeArgs));
+  if (options.useSoundTouch) {
+    currentPcmFile = runSoundTouchStage(
+      ffmpeg2,
+      payload,
+      rawFile,
+      stretchedFile,
+      jobId,
+      { offset: 0.15, scale: 0.2 },
+      (id, value, stage) => callbacks.postEvent({ type: "PROGRESS", jobId: id, value, stage })
+    );
+    tempFiles.push(stretchedFile);
+  }
+  if (options.useToneReverb) {
+    if (!payload.dspSpec?.reverb) {
+      throw new Error("Tone reverb enabled but dspSpec.reverb missing");
+    }
+    if (!payload.reverbIR) {
+      callbacks.postMasteringWarning(
+        jobId,
+        payload.fileId,
+        "Tone reverb IR generation failed. Render aborted to avoid fallback audio."
+      );
+      throw new Error("Tone reverb enabled but reverbIR was not provided");
+    }
+    const irFile = `${payload.fileId}-${jobId}-ir.f32`;
+    ffmpeg2.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
+    tempFiles.push(irFile);
+    const { pre, post } = compileFilterChainParts(payload.dspSpec);
+    const mix = clampNumber(payload.dspSpec.reverb.mix, 0, 1);
+    const dry = (1 - mix).toFixed(4);
+    const wet = mix.toFixed(4);
+    const irSampleRate = typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
+    const args = [];
+    args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile);
+    args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
+    const chains = [];
+    chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
+    chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
+    chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
+    chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
+    args.push("-filter_complex", chains.join(";"));
+    args.push("-map", "[out]");
+    args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", effectsFile);
+    callbacks.postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+    callbacks.withProgressStage("effects", 0.35, 0.35, () => ffmpeg2.exec(...args));
+    tempFiles.push(effectsFile);
+    currentPcmFile = effectsFile;
+  } else if (payload.filterGraph && payload.filterGraph !== "anull") {
+    const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, payload.filterGraph, sampleRate);
+    callbacks.postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
+    callbacks.withProgressStage("effects", 0.35, 0.35, () => ffmpeg2.exec(...filterArgs));
+    tempFiles.push(effectsFile);
+    currentPcmFile = effectsFile;
+  }
+  if (options.applyPhaseLimiter) {
+    const mastering = payload.mastering;
+    if (!mastering?.enabled) {
+      throw new Error("PhaseLimiter pipeline requires mastering.enabled=true");
+    }
+    const algorithm = mastering.algorithm;
+    if (algorithm !== "phaselimiter" && algorithm !== "phaselimiter_pro") {
+      throw new Error(`Unsupported PhaseLimiter algorithm: ${String(algorithm)}`);
+    }
+    const mastered = await applyPhaseLimiterStage({
+      ffmpeg: ffmpeg2,
+      fileId: payload.fileId,
+      jobId,
+      sampleRate,
+      inputFile: currentPcmFile,
+      algorithm,
+      mastering,
+      progressRange: { offset: 0.7, scale: 0.2 },
+      isToneReverbEnabled: options.useToneReverb,
+      withProgressStage: callbacks.withProgressStage,
+      postProgress: (id, value, stage) => callbacks.postEvent({ type: "PROGRESS", jobId: id, value, stage })
+    });
+    tempFiles.push(...mastered.tempFiles);
+    currentPcmFile = mastered.outputFile;
+  }
+  if (isSimpleMasteringWithToneReverb(payload.mastering, options.useToneReverb)) {
+    const boosted = applySimpleMasteringBoostStage({
+      ffmpeg: ffmpeg2,
+      fileId: payload.fileId,
+      jobId,
+      sampleRate,
+      inputFile: currentPcmFile,
+      withProgressStage: callbacks.withProgressStage});
+    tempFiles.push(boosted.tempFile);
+    currentPcmFile = boosted.outputFile;
+  }
+  const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
+  callbacks.postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });
+  callbacks.withProgressStage("encoding", 0.9, 0.1, () => ffmpeg2.exec(...encodeArgs));
+  const buffer = readOutput(ffmpeg2, outputFile);
+  return { buffer, outputFile, tempFiles };
+}
+async function probeWithFfmpeg(ffmpeg2, fileId, callbacks) {
+  const capture = callbacks.startLogCapture(250);
+  try {
+    callbacks.postEvent({ type: "LOG", level: "debug", message: "probe:exec start" });
+    const ret = ffmpeg2.exec(
+      "-hide_banner",
+      "-t",
+      "0.01",
+      "-i",
+      fileId,
+      "-vn",
+      "-sn",
+      "-dn",
+      "-f",
+      "null",
+      "-"
+    );
+    callbacks.postEvent({ type: "LOG", level: "debug", message: `probe:exec done ret=${ret}` });
+  } catch (error) {
+    callbacks.postEvent({
+      type: "LOG",
+      level: "debug",
+      message: `probe:exec threw ${String(error?.message ?? error)}`
+    });
+  } finally {
+    callbacks.stopLogCapture(capture);
+  }
+  const parsed = parseProbeLogs(capture.lines);
+  return {
+    fileId,
+    durationMs: parsed.durationMs,
+    sampleRate: parsed.sampleRate ?? 44100,
+    channels: parsed.channels ?? 2,
+    format: parsed.format ?? "unknown"
+  };
+}
+function ensureFileExists(ffmpeg2, path) {
+  const analyzed = ffmpeg2.FS.analyzePath(path);
+  if (!analyzed?.exists) {
+    throw new Error(`FFmpeg FS missing input: ${path}`);
+  }
+}
+async function buildWaveform(ffmpeg2, fileId, points, jobId, callbacks, cleanupFiles2) {
+  ensureFileExists(ffmpeg2, fileId);
+  const probe = await probeWithFfmpeg(ffmpeg2, fileId, callbacks);
+  const durationSec = probe.durationMs != null ? probe.durationMs / 1e3 : void 0;
+  const sampleRate = chooseWaveformSampleRate(points, durationSec);
+  const outputFile = `waveform_${jobId}.f32`;
+  try {
+    ffmpeg2.exec(
+      "-hide_banner",
+      "-i",
+      fileId,
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      `${sampleRate}`,
+      "-f",
+      "f32le",
+      outputFile
+    );
+    const bytes = ffmpeg2.FS.readFile(outputFile);
+    if (!(bytes instanceof Uint8Array)) throw new Error("Waveform output is not binary");
+    const sampleCount = Math.floor(bytes.byteLength / 4);
+    const floatSamples = new Float32Array(bytes.buffer, bytes.byteOffset, sampleCount);
+    const peaks = computePeaks(floatSamples, points);
+    normalizeInPlace(peaks);
+    return { fileId, samples: peaks };
+  } finally {
+    cleanupFiles2(fileId, outputFile);
+  }
+}
+async function decodePcm(ffmpeg2, fileId, cleanupFiles2) {
+  const sampleRate = 44100;
+  const tempFile = `${fileId}-decode.f32`;
+  try {
+    ffmpeg2.exec("-i", fileId, "-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", tempFile);
+    const { left, right } = readAndSplitF32Stereo(ffmpeg2.FS, tempFile);
+    return { left, right, sampleRate };
+  } finally {
+    cleanupFiles2(tempFile);
+  }
+}
+async function encodePcm(ffmpeg2, payload, cleanupFiles2) {
+  const inputFile = "raw-input.f32";
+  const outputFile = `output.${payload.format}`;
+  try {
+    writeInterleavedF32Stereo(ffmpeg2.FS, inputFile, payload.left, payload.right);
+    const args = ["-f", "f32le", "-ac", "2", "-ar", `${payload.sampleRate}`, "-i", inputFile];
+    addCodecArgs(args, payload.format, payload.bitrateKbps);
+    args.push("-y", outputFile);
+    ffmpeg2.exec(...args);
+    return readOutput(ffmpeg2, outputFile);
+  } finally {
+    cleanupFiles2(inputFile, outputFile);
+  }
+}
+
+// src/worker_render_rules.ts
+function isPhaseLimiterEnabled(payload) {
+  const mastering = payload.mastering;
+  if (!mastering) return false;
+  return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
+}
+function isSoundTouchEnabled(payload) {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.timeStretch ?? "ffmpeg";
+  if (algorithm !== "soundtouch") return false;
+  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1;
+  const pitch = typeof spec?.pitch === "number" ? spec.pitch : 0;
+  return tempo !== 1 || pitch !== 0;
+}
+function isToneReverbEnabled(payload) {
+  const spec = payload.dspSpec;
+  const algorithm = spec?.quality?.reverb ?? "ffmpeg";
+  return algorithm === "tone" && spec?.reverb != null;
+}
+function isSimpleMasteringEnabled(payload) {
+  return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
+}
+function validateRenderPayload(payload) {
+  if (payload.mastering?.enabled === true) {
+    const algorithm = payload.mastering.algorithm;
+    if (algorithm !== "simple" && algorithm !== "phaselimiter" && algorithm !== "phaselimiter_pro") {
+      throw new Error(`Unsupported mastering algorithm: ${String(algorithm)}`);
+    }
+  }
+}
+
+// src/worker_progress_state.ts
+function withProgressStageState(state, stage, offset, scale, run) {
+  const prevStage = state.stage;
+  const prevOffset = state.offset;
+  const prevScale = state.scale;
+  state.stage = stage;
+  state.offset = offset;
+  state.scale = scale;
+  try {
+    run();
+  } finally {
+    state.stage = prevStage;
+    state.offset = prevOffset;
+    state.scale = prevScale;
+  }
+}
+
 // src/worker.ts
 var ctx = self;
 ctx.addEventListener("error", (event) => {
@@ -5715,9 +6100,7 @@ var DEFAULT_WORKER_URL = void 0;
 var ffmpeg = null;
 var isReady = false;
 var activeJobId;
-var activeStage;
-var activeProgressOffset = 0;
-var activeProgressScale = 1;
+var progressState = { stage: void 0, offset: 0, scale: 1 };
 var loadedFiles = /* @__PURE__ */ new Set();
 var logCapture = null;
 ctx.onmessage = (event) => {
@@ -5761,12 +6144,7 @@ async function runWithEngine(task, requestId) {
   await task();
 }
 async function handleCancel(request) {
-  postEvent({
-    type: "CANCELLED",
-    requestId: request.requestId,
-    jobId: request.jobId,
-    reason: "Worker terminated"
-  });
+  postEvent({ type: "CANCELLED", requestId: request.requestId, jobId: request.jobId, reason: "Worker terminated" });
   log("warn", "cancel:terminate", { jobId: request.jobId });
   cleanupFiles(...loadedFiles);
   loadedFiles.clear();
@@ -5793,15 +6171,15 @@ async function createCore(payload) {
   const core = await ffmpeg_core_default({
     mainScriptUrlOrBlob
   });
-  core.setLogger(({ type, message }) => {
+  core.setLogger?.(({ type, message }) => {
     postEvent({ type: "LOG", level: mapLogLevel(type), message });
     recordLog(message);
   });
-  core.setProgress(({ progress }) => {
+  core.setProgress?.(({ progress }) => {
     if (!activeJobId) return;
     const value = typeof progress === "number" ? progress : 0;
-    const scaled = activeProgressOffset + value * activeProgressScale;
-    postEvent({ type: "PROGRESS", jobId: activeJobId, value: scaled, stage: activeStage });
+    const scaled = progressState.offset + value * progressState.scale;
+    postEvent({ type: "PROGRESS", jobId: activeJobId, value: scaled, stage: progressState.stage });
   });
   return core;
 }
@@ -5837,13 +6215,17 @@ async function handleProbe(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const fileId = request.payload.fileId;
   postEvent({ type: "LOG", level: "info", message: `probe:start (${fileId})` });
-  ensureFileExists(fileId);
+  ensureFileExists(ffmpeg, fileId);
   postEvent({ type: "LOG", level: "debug", message: `probe:exists (${fileId})` });
   const warnTimeout = setTimeout(() => {
     postEvent({ type: "LOG", level: "warn", message: `probe:still-running (${fileId})` });
   }, 1e4);
   try {
-    const metadata = await probeWithFfmpeg(fileId);
+    const metadata = await probeWithFfmpeg(ffmpeg, fileId, {
+      postEvent,
+      startLogCapture,
+      stopLogCapture
+    });
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
     postResult(request.requestId, metadata);
   } finally {
@@ -5852,6 +6234,7 @@ async function handleProbe(request) {
 }
 async function handleRender(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const engine = ffmpeg;
   const { payload, jobId, type } = request;
   validateRenderPayload(payload);
   const isPreview = type === "RENDER_PREVIEW";
@@ -5867,7 +6250,7 @@ async function handleRender(request) {
       filesToCleanup.add(outputFile);
       log("info", "render:start", { jobId, fileId: payload.fileId, format: payload.format });
       try {
-        withProgressStage("processing", 0, 1, () => ffmpeg.exec(...args));
+        withProgressStage("processing", 0, 1, () => engine.exec(...args));
       } catch (error) {
         if (isSimpleMasteringEnabled(payload)) {
           postMasteringWarning(
@@ -5879,14 +6262,18 @@ async function handleRender(request) {
         }
         throw error;
       }
-      const buffer = await readOutput(outputFile);
+      const buffer = readOutput(engine, outputFile);
       log("info", "render:ok", { jobId, outputFile });
       postRenderResult(request, buffer);
       return;
     }
     if (shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
       log("info", "render:start(phaselimiter)", { jobId, fileId: payload.fileId, format: payload.format });
-      const result2 = await renderWithPhaseLimiter(payload, jobId, isPreview);
+      const result2 = await renderWithPhaseLimiter(engine, payload, jobId, isPreview, {
+        postEvent,
+        withProgressStage,
+        postMasteringWarning
+      });
       filesToCleanup.add(result2.outputFile);
       for (const temp of result2.tempFiles) filesToCleanup.add(temp);
       log("info", "render:ok(phaselimiter)", { jobId, outputFile: result2.outputFile });
@@ -5901,9 +6288,18 @@ async function handleRender(request) {
       toneReverb: shouldUseToneReverb,
       phaselimiter: shouldUsePhaseLimiter
     });
-    const result = await renderWithPcmPipeline(payload, jobId, isPreview, {
-      applyPhaseLimiter: shouldUsePhaseLimiter
-    });
+    const result = await renderWithPcmPipeline(
+      engine,
+      payload,
+      jobId,
+      isPreview,
+      {
+        applyPhaseLimiter: shouldUsePhaseLimiter,
+        useSoundTouch: shouldUseSoundTouch,
+        useToneReverb: shouldUseToneReverb
+      },
+      { postEvent, withProgressStage, postMasteringWarning }
+    );
     filesToCleanup.add(result.outputFile);
     for (const temp of result.tempFiles) filesToCleanup.add(temp);
     log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
@@ -5911,214 +6307,15 @@ async function handleRender(request) {
     return;
   } finally {
     activeJobId = void 0;
-    activeStage = void 0;
-    activeProgressOffset = 0;
-    activeProgressScale = 1;
+    progressState.stage = void 0;
+    progressState.offset = 0;
+    progressState.scale = 1;
     log("debug", "render:cleanup", { jobId });
     cleanupFiles(...filesToCleanup);
   }
 }
-function isPhaseLimiterEnabled(payload) {
-  const mastering = payload.mastering;
-  if (!mastering) return false;
-  return mastering.enabled === true && (mastering.algorithm === "phaselimiter" || mastering.algorithm === "phaselimiter_pro");
-}
-function isSoundTouchEnabled(payload) {
-  const spec = payload.dspSpec;
-  const algorithm = spec?.quality?.timeStretch ?? "ffmpeg";
-  if (algorithm !== "soundtouch") return false;
-  const tempo = typeof spec?.tempo === "number" ? spec.tempo : 1;
-  const pitch = typeof spec?.pitch === "number" ? spec.pitch : 0;
-  return tempo !== 1 || pitch !== 0;
-}
-function isToneReverbEnabled(payload) {
-  const spec = payload.dspSpec;
-  const algorithm = spec?.quality?.reverb ?? "ffmpeg";
-  return algorithm === "tone" && spec?.reverb != null;
-}
-function isSimpleMasteringEnabled(payload) {
-  return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
-}
-function validateRenderPayload(payload) {
-  if (payload.mastering?.enabled === true) {
-    const algorithm = payload.mastering.algorithm;
-    if (algorithm !== "simple" && algorithm !== "phaselimiter" && algorithm !== "phaselimiter_pro") {
-      throw new Error(`Unsupported mastering algorithm: ${String(algorithm)}`);
-    }
-  }
-}
 function withProgressStage(stage, offset, scale, run) {
-  const prevStage = activeStage;
-  const prevOffset = activeProgressOffset;
-  const prevScale = activeProgressScale;
-  activeStage = stage;
-  activeProgressOffset = offset;
-  activeProgressScale = scale;
-  try {
-    run();
-  } finally {
-    activeStage = prevStage;
-    activeProgressOffset = prevOffset;
-    activeProgressScale = prevScale;
-  }
-}
-async function renderWithPhaseLimiter(payload, jobId, isPreview) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const sampleRate = 44100;
-  const decodeFile = `${payload.fileId}-${jobId}-decode.f32`;
-  const masteredFile = `${payload.fileId}-${jobId}-mastered.f32`;
-  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
-  try {
-    const decodeArgs = buildDecodePlan(payload, decodeFile, sampleRate, isPreview);
-    postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
-    withProgressStage("decoding", 0, 0.2, () => ffmpeg.exec(...decodeArgs));
-    const { left, right } = readAndSplitF32Stereo(ffmpeg.FS, decodeFile);
-    postEvent({ type: "PROGRESS", jobId, value: 0.2, stage: "mastering" });
-    const algorithm = payload.mastering.algorithm;
-    const processed = await processWithPhaseLimiter({
-      leftChannel: left,
-      rightChannel: right,
-      sampleRate,
-      algorithm,
-      mastering: payload.mastering,
-      progressRange: { offset: 0.2, scale: 0.6 },
-      onProgress: (value) => postEvent({ type: "PROGRESS", jobId, value, stage: "mastering" })
-    });
-    writeInterleavedF32Stereo(ffmpeg.FS, masteredFile, processed.left, processed.right);
-    const encodeArgs = buildEncodePlan(masteredFile, outputFile, payload, sampleRate);
-    postEvent({ type: "PROGRESS", jobId, value: 0.8, stage: "encoding" });
-    withProgressStage("encoding", 0.8, 0.2, () => ffmpeg.exec(...encodeArgs));
-    const buffer = await readOutput(outputFile);
-    return { buffer, outputFile, tempFiles: [decodeFile, masteredFile] };
-  } catch (error) {
-    postMasteringWarning(
-      jobId,
-      payload.fileId,
-      "PhaseLimiter mastering failed. Render aborted to prevent silent degradation.",
-      error
-    );
-    log("error", "render:phaselimiter-failed", {
-      jobId,
-      fileId: payload.fileId,
-      error: error?.message ?? String(error)
-    });
-    throw error;
-  }
-}
-async function renderWithPcmPipeline(payload, jobId, isPreview, options) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const sampleRate = 44100;
-  const rawFile = `${payload.fileId}-${jobId}-raw.f32`;
-  const stretchedFile = `${payload.fileId}-${jobId}-stretched.f32`;
-  const effectsFile = `${payload.fileId}-${jobId}-effects.f32`;
-  const masteredFile = `${payload.fileId}-${jobId}-mastered.f32`;
-  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
-  const tempFiles = [rawFile];
-  let currentPcmFile = rawFile;
-  const decodeArgs = buildRawDecodePlan(payload, rawFile, sampleRate, isPreview);
-  postEvent({ type: "PROGRESS", jobId, value: 0, stage: "decoding" });
-  withProgressStage("decoding", 0, 0.15, () => ffmpeg.exec(...decodeArgs));
-  if (isSoundTouchEnabled(payload)) {
-    const { tempo, pitchSemitones } = resolveTimeStretchParams(payload);
-    postEvent({ type: "PROGRESS", jobId, value: 0.15, stage: "time-stretch" });
-    const input = readInterleavedF32(ffmpeg.FS, rawFile);
-    const stretched = applySoundTouch(input, tempo, pitchSemitones, (percent) => {
-      postEvent({ type: "PROGRESS", jobId, value: 0.15 + percent * 0.2, stage: "time-stretch" });
-    });
-    writeInterleavedF32(ffmpeg.FS, stretchedFile, stretched);
-    tempFiles.push(stretchedFile);
-    currentPcmFile = stretchedFile;
-    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "time-stretch" });
-  }
-  if (isToneReverbEnabled(payload)) {
-    if (!payload.dspSpec || !payload.dspSpec.reverb) {
-      throw new Error("Tone reverb enabled but dspSpec.reverb missing");
-    }
-    if (!payload.reverbIR) {
-      postMasteringWarning(
-        jobId,
-        payload.fileId,
-        "Tone reverb IR generation failed. Render aborted to avoid fallback audio."
-      );
-      throw new Error("Tone reverb enabled but reverbIR was not provided");
-    } else {
-      const irFile = `${payload.fileId}-${jobId}-ir.f32`;
-      ffmpeg.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
-      tempFiles.push(irFile);
-      const { pre, post } = compileFilterChainParts(payload.dspSpec);
-      const mix = clampNumber(payload.dspSpec.reverb.mix, 0, 1);
-      const dry = (1 - mix).toFixed(4);
-      const wet = mix.toFixed(4);
-      const irSampleRate = typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
-      const args = [];
-      args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile);
-      args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
-      const chains = [];
-      chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
-      chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
-      chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
-      chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
-      args.push("-filter_complex", chains.join(";"));
-      args.push("-map", "[out]");
-      args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", effectsFile);
-      postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
-      withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...args));
-      tempFiles.push(effectsFile);
-      currentPcmFile = effectsFile;
-    }
-  } else if (payload.filterGraph && payload.filterGraph !== "anull") {
-    const filterArgs = buildPcmFilterPlan(currentPcmFile, effectsFile, payload.filterGraph, sampleRate);
-    postEvent({ type: "PROGRESS", jobId, value: 0.35, stage: "effects" });
-    withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
-    tempFiles.push(effectsFile);
-    currentPcmFile = effectsFile;
-  }
-  if (options.applyPhaseLimiter) {
-    const { left, right } = readAndSplitF32Stereo(ffmpeg.FS, currentPcmFile);
-    postEvent({ type: "PROGRESS", jobId, value: 0.7, stage: "mastering" });
-    const algorithm = payload.mastering.algorithm;
-    const processed = await processWithPhaseLimiter({
-      leftChannel: left,
-      rightChannel: right,
-      sampleRate,
-      algorithm,
-      mastering: payload.mastering,
-      progressRange: { offset: 0.7, scale: 0.2 },
-      onProgress: (value) => postEvent({ type: "PROGRESS", jobId, value, stage: "mastering" })
-    });
-    writeInterleavedF32Stereo(ffmpeg.FS, masteredFile, processed.left, processed.right);
-    tempFiles.push(masteredFile);
-    currentPcmFile = masteredFile;
-    if (algorithm === "phaselimiter_pro") {
-      const isHqReverb = isToneReverbEnabled(payload);
-      const boostValue = isHqReverb ? "6dB" : "4dB";
-      const boostedFile = `${payload.fileId}-${jobId}-pro-boosted.f32`;
-      const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, `volume=${boostValue}`, sampleRate);
-      withProgressStage("mastering-boost", 0.9, 0, () => ffmpeg.exec(...boostArgs));
-      tempFiles.push(boostedFile);
-      currentPcmFile = boostedFile;
-    }
-    if (algorithm === "phaselimiter") {
-      const reducedFile = `${payload.fileId}-${jobId}-lite-reduced.f32`;
-      const reduceArgs = buildPcmFilterPlan(currentPcmFile, reducedFile, "volume=-2dB", sampleRate);
-      withProgressStage("mastering-reduction", 0.9, 0, () => ffmpeg.exec(...reduceArgs));
-      tempFiles.push(reducedFile);
-      currentPcmFile = reducedFile;
-    }
-  }
-  const isSimpleMastering = payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
-  if (isSimpleMastering && isToneReverbEnabled(payload)) {
-    const boostedFile = `${payload.fileId}-${jobId}-simple-boosted.f32`;
-    const boostArgs = buildPcmFilterPlan(currentPcmFile, boostedFile, "volume=12dB", sampleRate);
-    withProgressStage("simple-mastering-boost", 0.9, 0, () => ffmpeg.exec(...boostArgs));
-    tempFiles.push(boostedFile);
-    currentPcmFile = boostedFile;
-  }
-  const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
-  postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });
-  withProgressStage("encoding", 0.9, 0.1, () => ffmpeg.exec(...encodeArgs));
-  const buffer = await readOutput(outputFile);
-  return { buffer, outputFile, tempFiles };
+  withProgressStageState(progressState, stage, offset, scale, run);
 }
 async function handleWaveform(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
@@ -6127,7 +6324,11 @@ async function handleWaveform(request) {
   const jobId = request.jobId;
   activeJobId = jobId;
   try {
-    const waveform = await buildWaveform(fileId, points, jobId);
+    const waveform = await buildWaveform(ffmpeg, fileId, points, jobId, {
+      postEvent,
+      startLogCapture,
+      stopLogCapture
+    }, cleanupFiles);
     postResult(request.requestId, waveform, [waveform.samples.buffer]);
   } finally {
     activeJobId = void 0;
@@ -6136,57 +6337,16 @@ async function handleWaveform(request) {
 async function handleDecodePCM(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const { fileId } = request.payload;
-  const sampleRate = 44100;
-  const tempFile = `${fileId}-decode.f32`;
-  try {
-    const args = ["-i", fileId, "-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", tempFile];
-    await ffmpeg.exec(...args);
-    const { left, right } = readAndSplitF32Stereo(ffmpeg.FS, tempFile);
-    postResult(request.requestId, { type: "DECODE_PCM_RESULT", left, right, sampleRate }, [
-      left.buffer,
-      right.buffer
-    ]);
-  } finally {
-    cleanupFiles(tempFile);
-  }
+  const { left, right, sampleRate } = await decodePcm(ffmpeg, fileId, cleanupFiles);
+  postResult(request.requestId, { type: "DECODE_PCM_RESULT", left, right, sampleRate }, [
+    left.buffer,
+    right.buffer
+  ]);
 }
 async function handleEncodePCM(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const { left, right, sampleRate, format } = request.payload;
-  const inputFile = `raw-input.f32`;
-  const outputFile = `output.${format}`;
-  try {
-    writeInterleavedF32Stereo(ffmpeg.FS, inputFile, left, right);
-    const args = ["-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", inputFile];
-    const dummyPayload = {
-      fileId: "dummy",
-      format,
-      bitrateKbps: request.payload.bitrateKbps
-    };
-    addCodecArgs(args, dummyPayload.format, dummyPayload.bitrateKbps);
-    args.push("-y", outputFile);
-    await ffmpeg.exec(...args);
-    const buffer = await readOutput(outputFile);
-    postResult(request.requestId, { fileId: "encoded", format, buffer }, [buffer]);
-  } finally {
-    cleanupFiles(inputFile, outputFile);
-  }
-}
-function buildRenderPlan(payload, jobId, isPreview) {
-  const args = [];
-  addTrimArgs(args, payload, isPreview);
-  addInputArgs(args, payload);
-  addCodecArgs(args, payload.format, payload.bitrateKbps);
-  const outputFile = buildOutputName(payload.fileId, jobId, payload.format, isPreview);
-  args.push("-y", outputFile);
-  return { args, outputFile };
-}
-async function readOutput(path) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const bytes = ffmpeg.FS.readFile(path);
-  if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary output from FFmpeg");
-  const copy = bytes.slice();
-  return copy.buffer;
+  const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
 }
 function cleanupFiles(...paths) {
   if (!ffmpeg) return;
@@ -6228,97 +6388,17 @@ function postMasteringWarning(jobId, fileId, message, cause) {
   });
 }
 function mapLogLevel(level) {
-  if (level === "error" || level === "warn" || level === "debug") return level;
-  return "info";
+  return level === "error" || level === "warn" || level === "debug" ? level : "info";
 }
 function recordLog(message) {
-  if (!logCapture?.active) return;
-  if (logCapture.lines.length >= logCapture.limit) return;
-  logCapture.lines.push(message);
-}
-async function probeWithFfmpeg(fileId) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const capture = startLogCapture(250);
-  try {
-    postEvent({ type: "LOG", level: "debug", message: "probe:exec start" });
-    const ret = ffmpeg.exec(
-      "-hide_banner",
-      "-t",
-      "0.01",
-      "-i",
-      fileId,
-      "-vn",
-      "-sn",
-      "-dn",
-      "-f",
-      "null",
-      "-"
-    );
-    postEvent({ type: "LOG", level: "debug", message: `probe:exec done ret=${ret}` });
-  } catch (error) {
-    postEvent({
-      type: "LOG",
-      level: "debug",
-      message: `probe:exec threw ${String(error?.message ?? error)}`
-    });
-  } finally {
-    stopLogCapture(capture);
-  }
-  const parsed = parseProbeLogs(capture.lines);
-  return {
-    fileId,
-    durationMs: parsed.durationMs,
-    sampleRate: parsed.sampleRate ?? 44100,
-    channels: parsed.channels ?? 2,
-    format: parsed.format ?? "unknown"
-  };
+  if (logCapture?.active && logCapture.lines.length < logCapture.limit) logCapture.lines.push(message);
 }
 function startLogCapture(limit) {
-  logCapture = { active: true, lines: [], limit };
-  return logCapture;
+  return logCapture = { active: true, lines: [], limit };
 }
 function stopLogCapture(capture) {
   if (logCapture === capture) {
     logCapture.active = false;
     logCapture = null;
-  }
-}
-async function buildWaveform(fileId, points, jobId) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  ensureFileExists(fileId);
-  const probe = await probeWithFfmpeg(fileId);
-  const durationSec = probe.durationMs != null ? probe.durationMs / 1e3 : void 0;
-  const sampleRate = chooseWaveformSampleRate(points, durationSec);
-  const outputFile = `waveform_${jobId}.f32`;
-  try {
-    ffmpeg.exec(
-      "-hide_banner",
-      "-i",
-      fileId,
-      "-vn",
-      "-ac",
-      "1",
-      "-ar",
-      `${sampleRate}`,
-      "-f",
-      "f32le",
-      outputFile
-    );
-    const bytes = ffmpeg.FS.readFile(outputFile);
-    if (!(bytes instanceof Uint8Array)) throw new Error("Waveform output is not binary");
-    const sampleCount = Math.floor(bytes.byteLength / 4);
-    const floatSamples = new Float32Array(bytes.buffer, bytes.byteOffset, sampleCount);
-    const peaks = computePeaks(floatSamples, points);
-    normalizeInPlace(peaks);
-    return { fileId, samples: peaks };
-  } finally {
-    cleanupFiles(fileId, outputFile);
-  }
-}
-function ensureFileExists(path) {
-  if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const analyzed = ffmpeg.FS.analyzePath(path);
-  if (!analyzed?.exists) {
-    throw new Error(`FFmpeg FS missing input: ${path}`);
   }
 }
