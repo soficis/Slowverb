@@ -67,20 +67,34 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   // Skip non-http/https requests
   if (!event.request.url.startsWith('http')) return;
+  const requestUrl = event.request.url;
+
+  // Never intercept analytics/insights scripts. Ad blockers often block them.
+  if (
+    requestUrl.includes("cdn.vercel-analytics.com") ||
+    requestUrl.includes("/_vercel/insights/")
+  ) {
+    event.respondWith(
+      fetch(event.request).catch(() => new Response("", { status: 204 }))
+    );
+    return;
+  }
 
   // Stale-while-revalidate for WASM files (important for initial load)
-  if (WASM_FILES.some(path => event.request.url.includes(path))) {
+  if (WASM_FILES.some(path => requestUrl.includes(path))) {
     event.respondWith(
       caches.open(WASM_CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(event.request);
-        const fetchPromise = fetch(event.request).then((response) => {
-          if (response && response.status === 200) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
-        });
+        const fetchPromise = fetch(event.request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              cache.put(event.request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => null);
         // Return cached version immediately if available, otherwise wait for network
-        return cached || fetchPromise;
+        return cached || fetchPromise || new Response("", { status: 504 });
       })
     );
     return;
@@ -110,8 +124,7 @@ self.addEventListener("fetch", (event) => {
         return response;
       });
     }).catch(() => {
-      // Fallback to network on match error
-      return fetch(event.request);
+      return new Response("", { status: 504 });
     })
   );
 });
