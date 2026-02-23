@@ -31,7 +31,7 @@ install_flutter() {
     exit 1
   fi
 
-  tar -xf "${archive_path}" -C "${tmp_dir}"
+  tar --no-same-owner -xf "${archive_path}" -C "${tmp_dir}"
   rm -rf "${FLUTTER_SDK_ROOT}"
   mv "${tmp_dir}/flutter" "${FLUTTER_SDK_ROOT}"
 }
@@ -41,6 +41,9 @@ if ! command -v flutter >/dev/null 2>&1; then
   export PATH="${FLUTTER_SDK_ROOT}/bin:${PATH}"
 fi
 
+if [[ -d "${FLUTTER_SDK_ROOT}" ]]; then
+  git config --global --add safe.directory "${FLUTTER_SDK_ROOT}"
+fi
 flutter --version
 flutter config --no-analytics
 flutter pub get --enforce-lockfile
