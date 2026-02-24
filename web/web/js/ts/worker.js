@@ -1,7 +1,7 @@
 // ../../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js
 var createFFmpegCore = (() => {
   var _scriptDir = import.meta.url;
-  return (async function(createFFmpegCore2 = {}) {
+  return (function(createFFmpegCore2 = {}) {
     var Module = typeof createFFmpegCore2 != "undefined" ? createFFmpegCore2 : {};
     var readyPromiseResolve, readyPromiseReject;
     Module["ready"] = new Promise((resolve, reject) => {
@@ -11,9 +11,11 @@ var createFFmpegCore = (() => {
     const NULL = 0;
     const SIZE_I32 = Uint32Array.BYTES_PER_ELEMENT;
     const DEFAULT_ARGS = ["./ffmpeg", "-nostdin", "-y"];
+    const DEFAULT_ARGS_FFPROBE = ["./ffprobe"];
     Module["NULL"] = NULL;
     Module["SIZE_I32"] = SIZE_I32;
     Module["DEFAULT_ARGS"] = DEFAULT_ARGS;
+    Module["DEFAULT_ARGS_FFPROBE"] = DEFAULT_ARGS_FFPROBE;
     Module["ret"] = -1;
     Module["timeout"] = -1;
     Module["logger"] = () => {
@@ -44,6 +46,17 @@ var createFFmpegCore = (() => {
       const args = [...Module["DEFAULT_ARGS"], ..._args];
       try {
         Module["_ffmpeg"](args.length, stringsToPtr(args));
+      } catch (e) {
+        if (!e.message.startsWith("Aborted")) {
+          throw e;
+        }
+      }
+      return Module["ret"];
+    }
+    function ffprobe(..._args) {
+      const args = [...Module["DEFAULT_ARGS_FFPROBE"], ..._args];
+      try {
+        Module["_ffprobe"](args.length, stringsToPtr(args));
       } catch (e) {
         if (!e.message.startsWith("Aborted")) {
           throw e;
@@ -82,6 +95,7 @@ var createFFmpegCore = (() => {
     Module["printErr"] = printErr;
     Module["locateFile"] = _locateFile;
     Module["exec"] = exec;
+    Module["ffprobe"] = ffprobe;
     Module["setLogger"] = setLogger;
     Module["setTimeout"] = setTimeout2;
     Module["setProgress"] = setProgress;
@@ -92,9 +106,7 @@ var createFFmpegCore = (() => {
     var quit_ = (status, toThrow) => {
       throw toThrow;
     };
-    var ENVIRONMENT_IS_WEB = typeof window == "object";
-    var ENVIRONMENT_IS_WORKER = typeof importScripts == "function";
-    var ENVIRONMENT_IS_NODE = typeof process == "object" && typeof process.versions == "object" && typeof process.versions.node == "string";
+    var ENVIRONMENT_IS_WORKER = true;
     var scriptDirectory = "";
     function locateFile(path) {
       if (Module["locateFile"]) {
@@ -103,48 +115,9 @@ var createFFmpegCore = (() => {
       return scriptDirectory + path;
     }
     var read_, readAsync, readBinary;
-    if (ENVIRONMENT_IS_NODE) {
-      const { createRequire } = await import('module');
-      var require2 = createRequire(import.meta.url);
-      var fs = require2("fs");
-      var nodePath = require2("path");
-      if (ENVIRONMENT_IS_WORKER) {
-        scriptDirectory = nodePath.dirname(scriptDirectory) + "/";
-      } else {
-        scriptDirectory = require2("url").fileURLToPath(new URL("./", import.meta.url));
-      }
-      read_ = (filename, binary) => {
-        filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-        return fs.readFileSync(filename, binary ? void 0 : "utf8");
-      };
-      readBinary = (filename) => {
-        var ret = read_(filename, true);
-        if (!ret.buffer) {
-          ret = new Uint8Array(ret);
-        }
-        return ret;
-      };
-      readAsync = (filename, onload, onerror, binary = true) => {
-        filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-        fs.readFile(filename, binary ? void 0 : "utf8", (err2, data) => {
-          if (err2) onerror(err2);
-          else onload(binary ? data.buffer : data);
-        });
-      };
-      if (!Module["thisProgram"] && process.argv.length > 1) {
-        thisProgram = process.argv[1].replace(/\\/g, "/");
-      }
-      process.argv.slice(2);
-      quit_ = (status, toThrow) => {
-        process.exitCode = status;
-        throw toThrow;
-      };
-      Module["inspect"] = () => "[Emscripten Module object]";
-    } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
-      if (ENVIRONMENT_IS_WORKER) {
+    {
+      {
         scriptDirectory = self.location.href;
-      } else if (typeof document != "undefined" && document.currentScript) {
-        scriptDirectory = document.currentScript.src;
       }
       if (_scriptDir) {
         scriptDirectory = _scriptDir;
@@ -161,7 +134,7 @@ var createFFmpegCore = (() => {
           xhr.send(null);
           return xhr.responseText;
         };
-        if (ENVIRONMENT_IS_WORKER) {
+        {
           readBinary = (url) => {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, false);
@@ -185,7 +158,7 @@ var createFFmpegCore = (() => {
           xhr.send(null);
         };
       }
-    } else ;
+    }
     var out = Module["print"] || console.log.bind(console);
     var err = Module["printErr"] || console.error.bind(console);
     Object.assign(Module, moduleOverrides);
@@ -297,9 +270,6 @@ var createFFmpegCore = (() => {
     function isDataURI(filename) {
       return filename.startsWith(dataURIPrefix);
     }
-    function isFileURI(filename) {
-      return filename.startsWith("file://");
-    }
     var wasmBinaryFile;
     if (Module["locateFile"]) {
       wasmBinaryFile = "ffmpeg-core.wasm";
@@ -323,20 +293,14 @@ var createFFmpegCore = (() => {
       }
     }
     function getBinaryPromise(binaryFile) {
-      if (!wasmBinary && (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER)) {
-        if (typeof fetch == "function" && !isFileURI(binaryFile)) {
+      if (!wasmBinary && (ENVIRONMENT_IS_WORKER)) {
+        if (typeof fetch == "function") {
           return fetch(binaryFile, { credentials: "same-origin" }).then((response) => {
             if (!response["ok"]) {
               throw "failed to load wasm binary file at '" + binaryFile + "'";
             }
             return response["arrayBuffer"]();
           }).catch(() => getBinary(binaryFile));
-        } else {
-          if (readAsync) {
-            return new Promise((resolve, reject) => {
-              readAsync(binaryFile, (response) => resolve(new Uint8Array(response)), reject);
-            });
-          }
         }
       }
       return Promise.resolve().then(() => getBinary(binaryFile));
@@ -352,7 +316,7 @@ var createFFmpegCore = (() => {
       });
     }
     function instantiateAsync(binary, binaryFile, imports, callback) {
-      if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && !isFileURI(binaryFile) && !ENVIRONMENT_IS_NODE && typeof fetch == "function") {
+      if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && typeof fetch == "function") {
         return fetch(binaryFile, { credentials: "same-origin" }).then((response) => {
           var result = WebAssembly.instantiateStreaming(response, imports);
           return result.then(callback, function(reason) {
@@ -392,7 +356,7 @@ var createFFmpegCore = (() => {
       instantiateAsync(wasmBinary, wasmBinaryFile, info, receiveInstantiationResult).catch(readyPromiseReject);
       return {};
     }
-    var ASM_CONSTS = { 6059608: ($0) => {
+    var ASM_CONSTS = { 6077464: ($0) => {
       Module.ret = $0;
     } };
     function send_progress(progress, time) {
@@ -637,19 +601,7 @@ var createFFmpegCore = (() => {
     function initRandomFill() {
       if (typeof crypto == "object" && typeof crypto["getRandomValues"] == "function") {
         return (view) => crypto.getRandomValues(view);
-      } else if (ENVIRONMENT_IS_NODE) {
-        try {
-          var crypto_module = require2("crypto");
-          var randomFillSync = crypto_module["randomFillSync"];
-          if (randomFillSync) {
-            return (view) => crypto_module["randomFillSync"](view);
-          }
-          var randomBytes = crypto_module["randomBytes"];
-          return (view) => (view.set(randomBytes(view.byteLength)), view);
-        } catch (e) {
-        }
-      }
-      abort("initRandomDevice");
+      } else abort("initRandomDevice");
     }
     function randomFill(view) {
       return (randomFill = initRandomFill())(view);
@@ -814,22 +766,7 @@ var createFFmpegCore = (() => {
     } }, default_tty_ops: { get_char: function(tty) {
       if (!tty.input.length) {
         var result = null;
-        if (ENVIRONMENT_IS_NODE) {
-          var BUFSIZE = 256;
-          var buf = Buffer.alloc(BUFSIZE);
-          var bytesRead = 0;
-          try {
-            bytesRead = fs.readSync(process.stdin.fd, buf, 0, BUFSIZE, -1);
-          } catch (e) {
-            if (e.toString().includes("EOF")) bytesRead = 0;
-            else throw e;
-          }
-          if (bytesRead > 0) {
-            result = buf.slice(0, bytesRead).toString("utf-8");
-          } else {
-            result = null;
-          }
-        } else if (typeof window != "undefined" && typeof window.prompt == "function") {
+        if (typeof window != "undefined" && typeof window.prompt == "function") {
           result = window.prompt("Input: ");
           if (result !== null) {
             result += "\n";
@@ -2395,7 +2332,6 @@ var createFFmpegCore = (() => {
         this.lengthKnown = true;
       };
       if (typeof XMLHttpRequest != "undefined") {
-        if (!ENVIRONMENT_IS_WORKER) throw "Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc";
         var lazyArray = new LazyUint8Array();
         Object.defineProperties(lazyArray, { length: { get: function() {
           if (!this.lengthKnown) {
@@ -2693,9 +2629,7 @@ var createFFmpegCore = (() => {
             opts = void 0;
           }
           var WebSocketConstructor;
-          if (ENVIRONMENT_IS_NODE) {
-            WebSocketConstructor = require2("ws");
-          } else {
+          {
             WebSocketConstructor = WebSocket;
           }
           ws = new WebSocketConstructor(url, opts);
@@ -2754,22 +2688,7 @@ var createFFmpegCore = (() => {
         sock.recv_queue.push({ addr: peer.addr, port: peer.port, data });
         Module["websocket"].emit("message", sock.stream.fd);
       }
-      if (ENVIRONMENT_IS_NODE) {
-        peer.socket.on("open", handleOpen);
-        peer.socket.on("message", function(data, isBinary) {
-          if (!isBinary) {
-            return;
-          }
-          handleMessage(new Uint8Array(data).buffer);
-        });
-        peer.socket.on("close", function() {
-          Module["websocket"].emit("close", sock.stream.fd);
-        });
-        peer.socket.on("error", function(error) {
-          sock.error = 14;
-          Module["websocket"].emit("error", [sock.stream.fd, sock.error, "ECONNREFUSED: Connection refused"]);
-        });
-      } else {
+      {
         peer.socket.onopen = handleOpen;
         peer.socket.onclose = function() {
           Module["websocket"].emit("close", sock.stream.fd);
@@ -2865,37 +2784,9 @@ var createFFmpegCore = (() => {
       sock.dport = peer.port;
       throw new FS.ErrnoError(26);
     }, listen: function(sock, backlog) {
-      if (!ENVIRONMENT_IS_NODE) {
+      {
         throw new FS.ErrnoError(138);
       }
-      if (sock.server) {
-        throw new FS.ErrnoError(28);
-      }
-      var WebSocketServer = require2("ws").Server;
-      var host = sock.saddr;
-      sock.server = new WebSocketServer({ host, port: sock.sport });
-      Module["websocket"].emit("listen", sock.stream.fd);
-      sock.server.on("connection", function(ws) {
-        if (sock.type === 1) {
-          var newsock = SOCKFS.createSocket(sock.family, sock.type, sock.protocol);
-          var peer = SOCKFS.websocket_sock_ops.createPeer(newsock, ws);
-          newsock.daddr = peer.addr;
-          newsock.dport = peer.port;
-          sock.pending.push(newsock);
-          Module["websocket"].emit("connection", newsock.stream.fd);
-        } else {
-          SOCKFS.websocket_sock_ops.createPeer(sock, ws);
-          Module["websocket"].emit("connection", sock.stream.fd);
-        }
-      });
-      sock.server.on("close", function() {
-        Module["websocket"].emit("close", sock.stream.fd);
-        sock.server = null;
-      });
-      sock.server.on("error", function(error) {
-        sock.error = 23;
-        Module["websocket"].emit("error", [sock.stream.fd, sock.error, "EHOSTUNREACH: Host is unreachable"]);
-      });
     }, accept: function(listensock) {
       if (!listensock.server || !listensock.pending.length) {
         throw new FS.ErrnoError(28);
@@ -3790,9 +3681,6 @@ var createFFmpegCore = (() => {
       return getHeapMax();
     }
     var _emscripten_get_now;
-    if (ENVIRONMENT_IS_NODE) {
-      global.performance = require2("perf_hooks").performance;
-    }
     _emscripten_get_now = () => performance.now();
     function _emscripten_memcpy_big(dest, src, num) {
       HEAPU8.copyWithin(dest, src, src + num);
@@ -4365,7 +4253,7 @@ var createFFmpegCore = (() => {
     FS.FSNode = FSNode;
     FS.createPreloadedFile = FS_createPreloadedFile;
     FS.staticInit();
-    var wasmImports = { "b": ___assert_fail, "f": ___cxa_throw, "ka": ___dlsym, "R": ___syscall__newselect, "L": ___syscall_accept4, "K": ___syscall_bind, "J": ___syscall_connect, "la": ___syscall_faccessat, "g": ___syscall_fcntl64, "ha": ___syscall_fstat64, "U": ___syscall_getdents64, "I": ___syscall_getpeername, "H": ___syscall_getsockname, "G": ___syscall_getsockopt, "y": ___syscall_ioctl, "F": ___syscall_listen, "ea": ___syscall_lstat64, "$": ___syscall_mkdirat, "fa": ___syscall_newfstatat, "w": ___syscall_openat, "V": ___syscall_poll, "E": ___syscall_recvfrom, "T": ___syscall_renameat, "S": ___syscall_rmdir, "D": ___syscall_sendto, "v": ___syscall_socket, "ga": ___syscall_stat64, "O": ___syscall_unlinkat, "ia": __emscripten_get_now_is_monotonic, "M": __emscripten_throw_longjmp, "Y": __gmtime_js, "Z": __localtime_js, "_": __mktime_js, "W": __mmap_js, "X": __munmap_js, "P": __tzset_js, "a": _abort, "t": _dlopen, "oa": _emscripten_asm_const_int, "l": _emscripten_date_now, "Q": _emscripten_get_heap_max, "p": _emscripten_get_now, "ja": _emscripten_memcpy_big, "N": _emscripten_resize_heap, "ca": _environ_get, "da": _environ_sizes_get, "o": _exit, "m": _fd_close, "ba": _fd_fdstat_get, "x": _fd_read, "aa": _fd_seek, "q": _fd_write, "k": _getaddrinfo, "i": _getnameinfo, "pa": invoke_i, "na": invoke_ii, "c": invoke_iii, "n": invoke_iiii, "s": invoke_iiiii, "z": invoke_iiiiii, "r": invoke_iiiiiiiii, "B": invoke_iiiijj, "qa": invoke_iij, "h": invoke_vi, "j": invoke_vii, "d": invoke_viiii, "ma": invoke_viiiiii, "A": invoke_viiiiiiii, "C": is_timeout, "u": send_progress, "e": _strftime };
+    var wasmImports = { "b": ___assert_fail, "f": ___cxa_throw, "ka": ___dlsym, "R": ___syscall__newselect, "L": ___syscall_accept4, "K": ___syscall_bind, "J": ___syscall_connect, "la": ___syscall_faccessat, "g": ___syscall_fcntl64, "ha": ___syscall_fstat64, "U": ___syscall_getdents64, "I": ___syscall_getpeername, "H": ___syscall_getsockname, "G": ___syscall_getsockopt, "y": ___syscall_ioctl, "F": ___syscall_listen, "ea": ___syscall_lstat64, "$": ___syscall_mkdirat, "fa": ___syscall_newfstatat, "w": ___syscall_openat, "V": ___syscall_poll, "E": ___syscall_recvfrom, "T": ___syscall_renameat, "S": ___syscall_rmdir, "D": ___syscall_sendto, "v": ___syscall_socket, "ga": ___syscall_stat64, "O": ___syscall_unlinkat, "ia": __emscripten_get_now_is_monotonic, "M": __emscripten_throw_longjmp, "Y": __gmtime_js, "Z": __localtime_js, "_": __mktime_js, "W": __mmap_js, "X": __munmap_js, "P": __tzset_js, "a": _abort, "t": _dlopen, "oa": _emscripten_asm_const_int, "m": _emscripten_date_now, "Q": _emscripten_get_heap_max, "p": _emscripten_get_now, "ja": _emscripten_memcpy_big, "N": _emscripten_resize_heap, "ca": _environ_get, "da": _environ_sizes_get, "l": _exit, "n": _fd_close, "ba": _fd_fdstat_get, "x": _fd_read, "aa": _fd_seek, "q": _fd_write, "k": _getaddrinfo, "i": _getnameinfo, "pa": invoke_i, "na": invoke_ii, "c": invoke_iii, "o": invoke_iiii, "s": invoke_iiiii, "z": invoke_iiiiii, "r": invoke_iiiiiiiii, "B": invoke_iiiijj, "qa": invoke_iij, "h": invoke_vi, "j": invoke_vii, "d": invoke_viiii, "ma": invoke_viiiiii, "A": invoke_viiiiiiii, "C": is_timeout, "u": send_progress, "e": _strftime };
     createWasm();
     var _malloc = Module["_malloc"] = function() {
       return (_malloc = Module["_malloc"] = Module["asm"]["ta"]).apply(null, arguments);
@@ -4382,27 +4270,30 @@ var createFFmpegCore = (() => {
     Module["_ffmpeg"] = function() {
       return (Module["_ffmpeg"] = Module["asm"]["ya"]).apply(null, arguments);
     };
+    Module["_ffprobe"] = function() {
+      return (Module["_ffprobe"] = Module["asm"]["za"]).apply(null, arguments);
+    };
     var _htonl = function() {
-      return (_htonl = Module["asm"]["za"]).apply(null, arguments);
+      return (_htonl = Module["asm"]["Aa"]).apply(null, arguments);
     };
     var _emscripten_builtin_memalign = function() {
-      return (_emscripten_builtin_memalign = Module["asm"]["Aa"]).apply(null, arguments);
+      return (_emscripten_builtin_memalign = Module["asm"]["Ba"]).apply(null, arguments);
     };
     var _setThrew = function() {
-      return (_setThrew = Module["asm"]["Ba"]).apply(null, arguments);
+      return (_setThrew = Module["asm"]["Ca"]).apply(null, arguments);
     };
     var stackSave = function() {
-      return (stackSave = Module["asm"]["Ca"]).apply(null, arguments);
+      return (stackSave = Module["asm"]["Da"]).apply(null, arguments);
     };
     var stackRestore = function() {
-      return (stackRestore = Module["asm"]["Da"]).apply(null, arguments);
+      return (stackRestore = Module["asm"]["Ea"]).apply(null, arguments);
     };
     var ___cxa_is_pointer_type = function() {
-      return (___cxa_is_pointer_type = Module["asm"]["Ea"]).apply(null, arguments);
+      return (___cxa_is_pointer_type = Module["asm"]["Fa"]).apply(null, arguments);
     };
-    Module["_ff_h264_cabac_tables"] = 1537004;
-    Module["___start_em_js"] = 6059629;
-    Module["___stop_em_js"] = 6059806;
+    Module["_ff_h264_cabac_tables"] = 1546732;
+    Module["___start_em_js"] = 6077485;
+    Module["___stop_em_js"] = 6077662;
     function invoke_iiiii(index, a1, a2, a3, a4) {
       var sp = stackSave();
       try {
@@ -4982,8 +4873,9 @@ var FifoSampleBuffer = class {
     return (this._position + this._frameCount) * 2;
   }
   clear() {
-    this.receive(this._frameCount);
-    this.rewind();
+    this._vector.fill(0);
+    this._position = 0;
+    this._frameCount = 0;
   }
   put(numFrames) {
     this._frameCount += numFrames;
@@ -5085,6 +4977,10 @@ var RateTransposer = class _RateTransposer extends AbstractFifoSamplePipe {
     this.slopeCount = 0;
     this.prevSampleL = 0;
     this.prevSampleR = 0;
+  }
+  clear() {
+    super.clear();
+    this.reset();
   }
   clone() {
     const result = new _RateTransposer();
@@ -5233,8 +5129,8 @@ var USE_AUTO_SEEKWINDOW_LEN = 0;
 var DEFAULT_SEEKWINDOW_MS = USE_AUTO_SEEKWINDOW_LEN;
 var DEFAULT_OVERLAP_MS = 8;
 var _SCAN_OFFSETS = [[124, 186, 248, 310, 372, 434, 496, 558, 620, 682, 744, 806, 868, 930, 992, 1054, 1116, 1178, 1240, 1302, 1364, 1426, 1488, 0], [-100, -75, -50, -25, 25, 50, 75, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-20, -15, -10, -5, 5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-4, -3, -2, -1, 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
-var AUTOSEQ_TEMPO_LOW = 0.5;
-var AUTOSEQ_TEMPO_TOP = 2;
+var AUTOSEQ_TEMPO_LOW = 0.25;
+var AUTOSEQ_TEMPO_TOP = 4;
 var AUTOSEQ_AT_MIN = 125;
 var AUTOSEQ_AT_MAX = 50;
 var AUTOSEQ_K = (AUTOSEQ_AT_MAX - AUTOSEQ_AT_MIN) / (AUTOSEQ_TEMPO_TOP - AUTOSEQ_TEMPO_LOW);
@@ -5260,10 +5156,12 @@ var Stretch = class _Stretch extends AbstractFifoSamplePipe {
     this.clearMidBuffer();
   }
   clearMidBuffer() {
-    if (this.midBufferDirty) {
-      this.midBufferDirty = false;
-      this.midBuffer = null;
+    this.midBufferDirty = false;
+    this.midBuffer = null;
+    if (this.refMidBuffer) {
+      this.refMidBuffer.fill(0);
     }
+    this.skipFract = 0;
   }
   setParameters(sampleRate, sequenceMs, seekWindowMs, overlapMs) {
     if (sampleRate > 0) {

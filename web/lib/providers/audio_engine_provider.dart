@@ -30,6 +30,6 @@ final engineReadyProvider = Provider<bool>((ref) {
   return initState.when(
     data: (_) => true,
     loading: () => false,
-    error: (_, __) => false,
+    error: (_, _) => false,
   );
 });

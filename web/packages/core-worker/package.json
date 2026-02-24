@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/core": "^0.12.10",
     "@slowverb/shared": "0.0.1",
-    "soundtouchjs": "^0.1.30"
+    "soundtouchjs": "^0.3.0"
   }
 }

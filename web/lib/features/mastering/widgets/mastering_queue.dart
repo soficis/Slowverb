@@ -68,7 +68,7 @@ class MasteringQueue extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: files.length,
-            separatorBuilder: (_, __) =>
+            separatorBuilder: (_, _) =>
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.05)),
             itemBuilder: (context, index) => _buildFileRow(files[index]),
           ),

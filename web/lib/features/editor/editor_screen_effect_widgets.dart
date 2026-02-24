@@ -174,7 +174,7 @@ class _EffectColumn extends ConsumerWidget {
                             loading: () => const Center(
                               child: CircularProgressIndicator(),
                             ),
-                            error: (_, __) => Column(
+                            error: (_, _) => Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: Presets.all.map((preset) {
                                 final isSelected =

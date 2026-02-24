@@ -20,13 +20,15 @@
     "test": "playwright test"
   },
   "devDependencies": {
-    "@ffmpeg/core": "^0.12.6",
-    "@playwright/test": "^1.49.0",
-    "@typescript-eslint/eslint-plugin": "^8.18.1",
-    "@typescript-eslint/parser": "^8.18.1",
-    "eslint": "^8.57.1",
-    "tsup": "^8.0.1",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "@eslint/js": "^10.0.1",
+    "@ffmpeg/core": "^0.12.10",
+    "@playwright/test": "^1.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^10.0.2",
+    "globals": "^17.3.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

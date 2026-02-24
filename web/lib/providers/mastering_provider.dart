@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
 import 'package:slowverb_web/services/logger_service.dart';

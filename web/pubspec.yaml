@@ -11,17 +11,17 @@ dependencies:
     sdk: flutter
 
   # State Management
-  flutter_riverpod: ^2.6.1
-  riverpod_annotation: ^2.6.1
+  flutter_riverpod: 3.1.0
+  riverpod_annotation: 4.0.0
 
   # Navigation
-  go_router: ^14.6.3
+  go_router: ^17.1.0
 
   # File Handling
-  file_picker: ^8.1.7
+  file_picker: ^10.3.10
 
   # Audio Playback (web-compatible)
-  just_audio: ^0.9.42
+  just_audio: ^0.10.5
   just_audio_web: ^0.4.13
 
   # Local Storage (IndexedDB for web)
@@ -31,12 +31,9 @@ dependencies:
   uuid: ^4.5.1
   collection: ^1.19.1
 
-  # JS Interop for WASM engine
-  js: ^0.7.1
-
   # UI Components
   flutter_animate: ^4.5.0
-  google_fonts: ^6.3.3
+  google_fonts: ^8.0.2
   web: ^1.1.1
   url_launcher: ^6.3.2
   provider: ^6.1.5+1
@@ -45,8 +42,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
-  riverpod_generator: ^2.6.2
+  flutter_lints: ^6.0.0
+  riverpod_generator: 4.0.0+1
   build_runner: ^2.4.13
 
 flutter:

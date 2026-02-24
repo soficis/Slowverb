@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
 class VisualizerState {

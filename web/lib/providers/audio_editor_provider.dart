@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
@@ -189,7 +190,7 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     newParams['masteringBassPreservation'] =
         state.currentParameters['masteringBassPreservation'] ?? 0.5;
     newParams['masteringMode'] =
-        state.currentParameters['masteringMode'] ?? 5.0;
+        state.currentParameters['masteringMode'] ?? 3.0;
 
     state = state.copyWith(
       selectedPreset: preset,

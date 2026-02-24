@@ -213,7 +213,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                   );
                 },
                 loading: () => _buildLoadingView(),
-                error: (_, __) => CustomPaint(
+                error: (_, _) => CustomPaint(
                   painter: _getCpuPainter(presetId),
                   size: Size.infinite,
                 ),
@@ -312,7 +312,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                   );
                 },
                 loading: () => _buildLoadingView(),
-                error: (_, __) => CustomPaint(
+                error: (_, _) => CustomPaint(
                   painter: _getCpuPainter(presetId),
                   size: Size.infinite,
                 ),

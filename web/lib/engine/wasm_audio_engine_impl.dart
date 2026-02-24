@@ -61,13 +61,15 @@ Future<Uint8List> encodeFromFloatPcmImpl(
   int? bitrateKbps,
 }) async {
   engine._ensureInitialized();
-  final payload = BridgeInterop.toJsObject({
+  final payloadData = <String, Object?>{
     'left': left.toJS,
     'right': right.toJS,
     'sampleRate': sampleRate,
     'format': format,
-    if (bitrateKbps != null) 'bitrateKbps': bitrateKbps,
-  });
+    'bitrateKbps': bitrateKbps,
+  };
+  payloadData.removeWhere((_, value) => value == null);
+  final payload = BridgeInterop.toJsObject(payloadData);
 
   final response = await BridgeInterop.encodeFromFloatPCM(payload);
   final type = engine._getProperty<String>(response, 'type');
