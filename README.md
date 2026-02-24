@@ -8,7 +8,7 @@
 
 **Slowverb** is a web-based audio editor for creating **slowed + reverb**, **vaporwave**, and other dreamy audio effects. It runs entirely in your browser—no installation or server uploads required. All audio processing happens on your machine using WebAssembly (WASM) technology.
 
-> ⚠️ **Browser Compatibility**: This application has been tested on **Google Chrome** and **Brave** browsers. Other browsers (Firefox, Safari, Edge) may work but are not officially supported.
+> ⚠️ **Browser Compatibility**: This application has been tested on **Google Chrome**. Other browsers (Firefox, Safari, Edge) may work but are not officially supported.
 
 ---
 
@@ -291,9 +291,9 @@ Slowverb is built with a modern, modular architecture:
 
 ### Prerequisites
 
-- **Flutter SDK**: 3.22.0 or higher.
+- **Flutter SDK**: 3.41.2 or higher.
 - **Node.js**: (Optional) For testing the JavaScript worker.
-- **Chrome or Brave**: For development and testing.
+- **Google Chrome**: For development and testing.
 
 ### Installation
 
@@ -308,7 +308,6 @@ cd web
 # 3. Install Flutter dependencies
 flutter pub get
 
-# 4. Run the development server
 # 4. Run the development server
 flutter run -d chrome
 ```
@@ -336,10 +335,10 @@ This will compile `adapter_pro.cpp` and copy the resulting `phaselimiter_pro.js`
 
 ```bash
 cd web
-flutter build web --wasm --release
+flutter build web --release
 ```
 
-The output will be in `web/build/web/`. You can deploy this folder to any static hosting service (Vercel, Netlify, GitHub Pages, etc.).
+The output will be in `build/web/` (when run from the `web/` directory). You can deploy this folder to any static hosting service (Vercel, Netlify, GitHub Pages, etc.).
 
 ---
 

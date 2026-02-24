@@ -28,16 +28,16 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.95,
       'pitch': -2.0,
-      'reverbAmount': 0.20, // Reduced from 0.49 for HQ reverb
+      'reverbAmount': 0.19, // Reduced from 0.49 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.35, // Reduced from 0.63
+      'reverbMix': 0.3325, // Reduced from 0.63
       'preDelayMs': 50.0, // Reduced from 80
       'roomScale': 0.55, // Reduced from 0.75
       'hfDamping': 0.25, // Increased from 0.15 to soften highs
-      'echoAmount': 0.08, // Reduced from 0.2
+      'echoAmount': 0.0784, // Reduced from 0.2
       'eqWarmth': 0.4,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -50,16 +50,16 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.74074, // -25.926% = multiply by 0.74074
       'pitch': -4.5, // Matching tempo slow
-      'reverbAmount': 0.15, // Reduced from 0.28 for HQ reverb
+      'reverbAmount': 0.1425, // Reduced from 0.28 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.32, // Reduced from 0.59
+      'reverbMix': 0.304, // Reduced from 0.59
       'preDelayMs': 60.0, // Reduced from 90
       'roomScale': 0.55, // Reduced from 0.8
       'hfDamping': 0.3, // Increased from 0.2
-      'echoAmount': 0.06, // Reduced from 0.15
+      'echoAmount': 0.0588, // Reduced from 0.15
       'eqWarmth': 0.5, // Balanced warmth
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -72,15 +72,15 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.81, // -19% speed from Audacity
       'pitch': -3.2, // Matching tempo slow (~19% = ~3.2 semitones)
-      'reverbAmount': 0.18, // Reduced from 0.35 for HQ reverb
+      'reverbAmount': 0.171, // Reduced from 0.35 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.32, // Reduced from 0.57
+      'reverbMix': 0.304, // Reduced from 0.57
       'preDelayMs': 45.0, // Reduced from 70
       'roomScale': 0.5, // Reduced from 0.7
-      'echoAmount': 0.08, // Reduced from 0.2
+      'echoAmount': 0.0784, // Reduced from 0.2
       'eqWarmth': 0.5, // 50% tone balance
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -93,17 +93,17 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.94,
       'pitch': -3.5,
-      'reverbAmount': 0.28, // Reduced from 0.59 for HQ reverb
+      'reverbAmount': 0.266, // Reduced from 0.59 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.38, // Reduced from 0.64
+      'reverbMix': 0.361, // Reduced from 0.64
       'preDelayMs': 80.0, // Reduced from 120
       'roomScale': 0.6, // Reduced from 0.85
       'hfDamping': 0.35, // Increased from 0.25
       'stereoWidth': 1.2,
-      'echoAmount': 0.15, // Reduced from 0.38
+      'echoAmount': 0.147, // Reduced from 0.38
       'eqWarmth': 0.83,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -116,17 +116,17 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.78,
       'pitch': -3.0,
-      'reverbAmount': 0.26, // Reduced from 0.56 for HQ reverb
+      'reverbAmount': 0.247, // Reduced from 0.56 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.36, // Reduced from 0.61
+      'reverbMix': 0.342, // Reduced from 0.61
       'preDelayMs': 70.0, // Reduced from 110
       'roomScale': 0.6, // Reduced from 0.9
       'hfDamping': 0.4, // Increased from 0.3
       'stereoWidth': 1.3,
-      'echoAmount': 0.15, // Reduced from 0.4
+      'echoAmount': 0.147, // Reduced from 0.4
       'eqWarmth': 0.7,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -139,13 +139,13 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.25,
       'pitch': 4.0,
-      'reverbAmount': 0.10, // Reduced from 0.21 for HQ reverb
+      'reverbAmount': 0.095, // Reduced from 0.21 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.28,
-      'echoAmount': 0.04, // Reduced from 0.1
+      'reverbMix': 0.266,
+      'echoAmount': 0.0392, // Reduced from 0.1
       'eqWarmth': 0.2,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -158,13 +158,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.65,
       'pitch': -4.0,
-      'reverbAmount': 0.20, // Reduced from 0.42 for HQ reverb
+      'reverbAmount': 0.19, // Reduced from 0.42 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.35,
-      'echoAmount': 0.45, // Reduced from 0.8 - still emphasized for this preset
+      'reverbMix': 0.3325,
+      'echoAmount':
+          0.441, // Reduced from 0.8 - still emphasized for this preset
       'eqWarmth': 0.5,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -177,14 +178,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.92,
       'pitch': -1.0,
-      'reverbAmount': 0.16, // Reduced from 0.35 for HQ reverb
+      'reverbAmount': 0.152, // Reduced from 0.35 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.30,
+      'reverbMix': 0.285,
       'hfDamping': 0.4, // Added - soften highs for lo-fi feel
-      'echoAmount': 0.12, // Reduced from 0.3
+      'echoAmount': 0.1176, // Reduced from 0.3
       'eqWarmth': 0.8,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -197,17 +198,17 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.70,
       'pitch': -2.5,
-      'reverbAmount': 0.32, // Reduced from 0.63 for HQ reverb
+      'reverbAmount': 0.304, // Reduced from 0.63 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.42, // Reduced from 0.66
+      'reverbMix': 0.399, // Reduced from 0.66
       'preDelayMs': 100.0, // Reduced from 140
       'roomScale': 0.7, // Reduced from 0.95
       'hfDamping': 0.3, // Increased from 0.2
       'stereoWidth': 1.4,
-      'echoAmount': 0.25, // Reduced from 0.6
+      'echoAmount': 0.245, // Reduced from 0.6
       'eqWarmth': 0.3,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -220,14 +221,14 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.80,
       'pitch': -5.0,
-      'reverbAmount': 0.14, // Reduced from 0.28 for HQ reverb
+      'reverbAmount': 0.133, // Reduced from 0.28 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.28,
+      'reverbMix': 0.266,
       'hfDamping': 0.5, // Added - keep focus on low end
-      'echoAmount': 0.08, // Reduced from 0.2
+      'echoAmount': 0.0784, // Reduced from 0.2
       'eqWarmth': 0.9,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -240,13 +241,13 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.0,
       'pitch': 2.0,
-      'reverbAmount': 0.08, // Reduced from 0.14 for HQ reverb
+      'reverbAmount': 0.076, // Reduced from 0.14 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.22,
-      'echoAmount': 0.04, // Reduced from 0.1
+      'reverbMix': 0.209,
+      'echoAmount': 0.0392, // Reduced from 0.1
       'eqWarmth': 0.1,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -259,17 +260,17 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.72,
       'pitch': -3.5,
-      'reverbAmount': 0.28, // Reduced from 0.59 for HQ reverb
+      'reverbAmount': 0.266, // Reduced from 0.59 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.38, // Reduced from 0.63
+      'reverbMix': 0.361, // Reduced from 0.63
       'preDelayMs': 80.0, // Reduced from 120
       'roomScale': 0.55, // Reduced from 0.8
       'hfDamping': 0.7, // Increased from 0.6 for muffled feel
       'stereoWidth': 1.1,
-      'echoAmount': 0.20, // Reduced from 0.5
+      'echoAmount': 0.196, // Reduced from 0.5
       'eqWarmth': 0.6,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -282,16 +283,16 @@ abstract final class Presets {
     parameters: {
       'tempo': 1.05,
       'pitch': 1.0,
-      'reverbAmount': 0.20, // Reduced from 0.42 for HQ reverb
+      'reverbAmount': 0.19, // Reduced from 0.42 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.32, // Reduced from 0.56
+      'reverbMix': 0.304, // Reduced from 0.56
       'preDelayMs': 45.0, // Reduced from 70
       'roomScale': 0.5, // Reduced from 0.7
       'stereoWidth': 1.2,
-      'echoAmount': 0.15, // Reduced from 0.4
+      'echoAmount': 0.147, // Reduced from 0.4
       'eqWarmth': 0.4,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -304,13 +305,13 @@ abstract final class Presets {
     parameters: {
       'tempo': 0.55,
       'pitch': -6.0,
-      'reverbAmount': 0.24, // Reduced from 0.49 for HQ reverb
+      'reverbAmount': 0.228, // Reduced from 0.49 for HQ reverb
       'hqTimeStretch': 1.0,
       'hqReverb': 1.0,
-      'reverbMix': 0.35,
-      'echoAmount': 0.25, // Reduced from 0.6
+      'reverbMix': 0.3325,
+      'echoAmount': 0.245, // Reduced from 0.6
       'eqWarmth': 0.5,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );
@@ -328,7 +329,7 @@ abstract final class Presets {
       'hqReverb': 1.0,
       'echoAmount': 0.0,
       'eqWarmth': 0.5,
-      'masteringEnabled': 1.0,
+      'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
   );

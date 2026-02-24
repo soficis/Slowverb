@@ -78,7 +78,7 @@ class MasteringSettings {
   final int mode;
 
   const MasteringSettings({
-    this.masteringEnabled = true,
+    this.masteringEnabled = false,
     this.phaselimiterEnabled = true,
     this.targetLufs = -14.0,
     this.bassPreservation = 0.5,
@@ -111,7 +111,7 @@ class MasteringSettings {
 
   factory MasteringSettings.fromJson(Map<String, dynamic> json) {
     return MasteringSettings(
-      masteringEnabled: json['masteringEnabled'] as bool? ?? true,
+      masteringEnabled: json['masteringEnabled'] as bool? ?? false,
       phaselimiterEnabled: json['phaselimiterEnabled'] as bool? ?? true,
       targetLufs: (json['targetLufs'] as num?)?.toDouble() ?? -14.0,
       bassPreservation: (json['bassPreservation'] as num?)?.toDouble() ?? 0.5,

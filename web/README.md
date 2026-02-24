@@ -8,7 +8,7 @@
 
 This document provides in-depth technical details for developers working on or contributing to the Slowverb web application.
 
-> ⚠️ **Tested Browsers**: Google Chrome and Brave. Other browsers may work but are not officially supported.
+> ⚠️ **Tested Browsers**: Google Chrome. Other browsers may work but are not officially supported.
 
 ---
 
@@ -33,8 +33,8 @@ This document provides in-depth technical details for developers working on or c
 
 ### Prerequisites
 
-- **Flutter SDK**: 3.22.0+
-- **Chrome or Brave browser**
+- **Flutter SDK**: 3.41.2+
+- **Google Chrome browser**
 
 ### Development
 
@@ -52,8 +52,8 @@ flutter run -d chrome
 ### Production Build
 
 ```bash
-flutter build web --wasm --release
-# Output: web/build/web/
+flutter build web --release
+# Output: build/web/
 ```
 
 ---
@@ -366,10 +366,10 @@ Starts a dev server at `http://localhost:PORT` with hot reload.
 ### Production Build
 
 ```bash
-flutter build web --wasm --release
+flutter build web --release
 ```
 
-- Output: `web/build/web/`
+- Output: `build/web/`
 - Size: ~5-10 MB gzipped (includes FFmpeg.wasm ~30MB uncompressed).
 
 ### Deployment Options
@@ -441,8 +441,8 @@ Before deploying to production:
 - [ ] Run `flutter clean && flutter pub get`
 - [ ] Run `flutter analyze` (no errors)
 - [ ] Run `flutter test` (if tests exist)
-- [ ] Build: `flutter build web --wasm --release`
-- [ ] Test in Chrome and Brave
+- [ ] Build: `flutter build web --release`
+- [ ] Test in Chrome
 - [ ] Test on mobile browser (Android Chrome)
 - [ ] Verify FFmpeg.wasm loads correctly
 - [ ] Check IndexedDB persistence
