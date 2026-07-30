@@ -21,6 +21,7 @@ import type {
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
 import { Reverb, start as toneStart } from "tone";
+import { generateFreeverbIR, type FreeverbParams } from "./freeverb-ir-generator.js";
 
 type WorkerFactory = () => Worker;
 
@@ -200,14 +201,26 @@ export class SlowverbEngine {
     spec?: DspSpec
   ): Promise<{ pcm: ArrayBuffer; sampleRate: number } | null> {
     if (!spec) return null;
-    if ((spec.quality?.reverb ?? "ffmpeg") !== "tone") return null;
+    const reverbAlgo = spec.quality?.reverb ?? "ffmpeg";
     if (!spec.reverb) return null;
     if (spec.reverb.mix <= 0) return null;
+
+    if (reverbAlgo === "freeverb") {
+      // Freeverb IR generation (pure CPU, no Tone.js needed).
+      // The FreeverbIRGenerator normalises the IR to -1 dBFS internally, so
+      // the worker-side volume=42dB makeup gain (added for Tone.js IRs) is
+      // NOT needed here. If the worker unconditionally applies 42dB gain,
+      // the freeverb path will be 42 dB too loud — see ffmpeg_pipeline.ts.
+      return this.resolveFreeverbIR(spec.reverb);
+    }
+
+    if (reverbAlgo !== "tone") return null;
 
     const key = JSON.stringify({
       decay: spec.reverb.decay,
       preDelayMs: spec.reverb.preDelayMs,
       roomScale: spec.reverb.roomScale ?? null,
+      hfDamping: spec.reverb.hfDamping ?? null,
     });
 
     const cached = this.toneReverbIrCache.get(key);
@@ -223,6 +236,52 @@ export class SlowverbEngine {
       console.warn("[SlowverbEngine] Tone reverb IR generation failed; falling back to FFmpeg reverb", error);
       return null;
     }
+  }
+
+  /**
+   * Generate a Freeverb impulse response from the given ReverbSpec.
+   *
+   * Maps Slowverb's normalised ReverbSpec (0-1) to SoX-range FreeverbParams
+   * (0-100), generates the IR with pure-JS arithmetic, and caches the result.
+   * The returned IR is normalised to -1 dBFS, so no additional makeup gain
+   * is required from the worker's convolution pipeline.
+   */
+  private resolveFreeverbIR(
+    reverb: NonNullable<DspSpec["reverb"]>
+  ): { pcm: ArrayBuffer; sampleRate: number } {
+    const key = JSON.stringify({
+      decay: reverb.decay,
+      preDelayMs: reverb.preDelayMs,
+      roomScale: reverb.roomScale ?? null,
+      hfDamping: reverb.hfDamping ?? null,
+    });
+
+    const cached = this.toneReverbIrCache.get(key);
+    if (cached) {
+      return { pcm: cached.pcm.slice(0), sampleRate: cached.sampleRate };
+    }
+
+    const reverberance = Math.round(reverb.decay * 100);
+    const hfDamping = Math.round((reverb.hfDamping ?? 0.5) * 100);
+    const roomScale = Math.round((reverb.roomScale ?? 0.7) * 100);
+    const stereoDepth = 100;
+    const preDelayMs = reverb.preDelayMs;
+    const sampleRate = 44100;
+    const durationSec = Math.max(3.0, Math.min(8.0, 0.1 + reverb.decay * 6.0));
+
+    const params: FreeverbParams = {
+      reverberance,
+      hfDamping,
+      roomScale,
+      stereoDepth,
+      preDelayMs,
+      sampleRate,
+      durationSec,
+    };
+
+    const result = generateFreeverbIR(params);
+    this.toneReverbIrCache.set(key, result);
+    return { pcm: result.pcm.slice(0), sampleRate: result.sampleRate };
   }
 
   async cancel(jobId: string): Promise<boolean> {

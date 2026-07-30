@@ -429,6 +429,56 @@ class _EffectColumn extends ConsumerWidget {
                             ),
                           ],
                         ),
+                      // Phaser controls (visible only when phaser depth > 0)
+                      if ((parameters['phaserDecay'] ?? 0) > 0) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: EffectSlider(
+                            label: phaserSpeedHzDef.label,
+                            value: parameters['phaserSpeedHz'] ??
+                                phaserSpeedHzDef.defaultValue,
+                            min: phaserSpeedHzDef.min,
+                            max: phaserSpeedHzDef.max,
+                            unit: '',
+                            formatValue: (v) =>
+                                _formatEffectValue('phaserSpeedHz', v),
+                            onChanged: (v) =>
+                                onUpdateParam('phaserSpeedHz', v),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: EffectSlider(
+                            label: phaserDecayDef.label,
+                            value: parameters['phaserDecay'] ??
+                                phaserDecayDef.defaultValue,
+                            min: phaserDecayDef.min,
+                            max: phaserDecayDef.max,
+                            unit: '',
+                            formatValue: (v) =>
+                                _formatEffectValue('phaserDecay', v),
+                            onChanged: (v) =>
+                                onUpdateParam('phaserDecay', v),
+                          ),
+                        ),
+                      ],
+                      // Bass boost control (always visible, zero = no effect)
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: EffectSlider(
+                          label: bassGainDef.label,
+                          value:
+                              parameters['bassGain'] ?? bassGainDef.defaultValue,
+                          min: bassGainDef.min,
+                          max: bassGainDef.max,
+                          unit: '',
+                          formatValue: (v) =>
+                              _formatEffectValue('bassGain', v),
+                          onChanged: (v) => onUpdateParam('bassGain', v),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -649,6 +699,60 @@ class _EffectColumn extends ConsumerWidget {
                     ),
                   ],
                 ),
+              // Phaser controls (visible only when phaser depth > 0)
+              if ((parameters['phaserDecay'] ?? 0) > 0) ...[
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: SlowverbTokens.spacingMd,
+                  ),
+                  child: EffectSlider(
+                    label: phaserSpeedHzDef.label,
+                    value: parameters['phaserSpeedHz'] ??
+                        phaserSpeedHzDef.defaultValue,
+                    min: phaserSpeedHzDef.min,
+                    max: phaserSpeedHzDef.max,
+                    unit: '',
+                    formatValue: (v) =>
+                        _formatEffectValue('phaserSpeedHz', v),
+                    onChanged: (v) =>
+                        onUpdateParam('phaserSpeedHz', v),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: SlowverbTokens.spacingMd,
+                  ),
+                  child: EffectSlider(
+                    label: phaserDecayDef.label,
+                    value: parameters['phaserDecay'] ??
+                        phaserDecayDef.defaultValue,
+                    min: phaserDecayDef.min,
+                    max: phaserDecayDef.max,
+                    unit: '',
+                    formatValue: (v) =>
+                        _formatEffectValue('phaserDecay', v),
+                    onChanged: (v) =>
+                        onUpdateParam('phaserDecay', v),
+                  ),
+                ),
+              ],
+              // Bass boost control (always visible, zero = no effect)
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              Padding(
+                padding: const EdgeInsets.only(
+                  bottom: SlowverbTokens.spacingMd,
+                ),
+                child: EffectSlider(
+                  label: bassGainDef.label,
+                  value: parameters['bassGain'] ?? bassGainDef.defaultValue,
+                  min: bassGainDef.min,
+                  max: bassGainDef.max,
+                  unit: '',
+                  formatValue: (v) => _formatEffectValue('bassGain', v),
+                  onChanged: (v) => onUpdateParam('bassGain', v),
+                ),
+              ),
             ],
           );
         },

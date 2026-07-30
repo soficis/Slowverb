@@ -255,6 +255,12 @@ String _formatEffectValue(String paramId, double value) {
     case 'reverbMix':
     case 'hfDamping':
       return '${(value * 100).toInt()}%';
+    case 'phaserSpeedHz':
+      return '${value.toStringAsFixed(1)} Hz';
+    case 'phaserDecay':
+      return '${(value * 100).toInt()}%';
+    case 'bassGain':
+      return '${value.toStringAsFixed(0)} dB';
     case 'stereoWidth':
       return '${value.toStringAsFixed(2)}x';
     default:

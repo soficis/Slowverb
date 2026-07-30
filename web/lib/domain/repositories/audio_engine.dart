@@ -160,6 +160,12 @@ class EffectConfig {
   final double? hfDamping; // 0.0 - 1.0
   final double? roomScale; // 0.0 - 1.0
   final double? stereoWidth; // 0.0 - 1.0
+  final double? bassGain; // -20 to +20 dB (bass shelf boost)
+  final double? dynaudnorm; // 0.0 or 1.0 (dynamic normalization)
+  final double? phaserDelayMs; // 0-10 ms
+  final double? phaserDecay; // 0-1
+  final double? phaserSpeedHz; // 0.1-5 Hz
+  final int? phaserType; // 0=sinusoidal, 1=triangular
 
   const EffectConfig({
     required this.presetId,
@@ -180,6 +186,12 @@ class EffectConfig {
     this.hfDamping,
     this.roomScale,
     this.stereoWidth,
+    this.bassGain,
+    this.dynaudnorm,
+    this.phaserDelayMs,
+    this.phaserDecay,
+    this.phaserSpeedHz,
+    this.phaserType,
   });
 
   /// Create configuration from parameter map
@@ -203,6 +215,12 @@ class EffectConfig {
       hfDamping: params['hfDamping'],
       roomScale: params['roomScale'],
       stereoWidth: params['stereoWidth'],
+      bassGain: params['bassGain'],
+      dynaudnorm: params['dynaudnorm'],
+      phaserDelayMs: params['phaserDelayMs'],
+      phaserDecay: params['phaserDecay'],
+      phaserSpeedHz: params['phaserSpeedHz'],
+      phaserType: params['phaserType']?.toInt(),
     );
   }
 }

@@ -39,5 +39,31 @@ const List<ParameterDefinition> advancedReverbParameterDefinitions = [
   ParameterDefinition('stereoWidth', 'Stereo Width', 0.5, 2.0, 1.0),
 ];
 
+/// Phaser modulation parameters.
+const phaserSpeedHzDef = ParameterDefinition(
+  'phaserSpeedHz',
+  'Phaser Speed',
+  0.1,
+  5.0,
+  1.3,
+);
+
+const phaserDecayDef = ParameterDefinition(
+  'phaserDecay',
+  'Phaser Depth',
+  0.0,
+  1.0,
+  0.23,
+);
+
+/// Bass shelf equalization parameters.
+const bassGainDef = ParameterDefinition(
+  'bassGain',
+  'Bass Boost',
+  -20.0,
+  20.0,
+  0.0,
+);
+
 /// Seek step in milliseconds for backward/forward navigation.
 const int seekStepMs = 10000;

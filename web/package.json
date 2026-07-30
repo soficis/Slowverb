@@ -14,6 +14,7 @@
     "check": "npm run check:ts && npm run check:dart",
     "build:ts": "npm run build -w @slowverb/shared && npm run build -w @slowverb/core-worker && npm run build -w @slowverb/core",
     "sync:bridge": "node scripts/sync_bridge_assets.mjs",
+    "serve": "node scripts/serve.mjs",
     "vercel-build": "bash scripts/vercel_build.sh",
     "build": "npm run build:ts && npm run sync:bridge",
     "test:unit": "node --test packages/shared/test/filter-compiler.test.mjs && vitest run packages/core-worker/test",

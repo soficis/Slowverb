@@ -675,6 +675,12 @@ String _formatEffectValue(String paramId, double value) {
       return '${value.toStringAsFixed(1)} st';
     case 'preDelayMs':
       return '${value.toStringAsFixed(0)} ms';
+    case 'phaserSpeedHz':
+      return '${value.toStringAsFixed(1)} Hz';
+    case 'phaserDecay':
+      return '${(value * 100).toInt()}%';
+    case 'bassGain':
+      return '${value.toStringAsFixed(0)} dB';
     case 'stereoWidth':
       return '${value.toStringAsFixed(2)}x';
     default:

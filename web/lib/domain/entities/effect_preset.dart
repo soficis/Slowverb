@@ -20,6 +20,67 @@ class EffectPreset {
 /// Note: HQ Reverb (Tone IR) is more powerful than FFmpeg's aecho,
 /// so these values are tuned lower to avoid excessive echo-y drum effect.
 abstract final class Presets {
+  /// Lite Slowed + Reverb — gentle slow with balanced reverb
+  static const liteSlowedReverb = EffectPreset(
+    id: 'lite_slowed_reverb',
+    name: 'Lite Slowed + Reverb',
+    description: 'Gentle slow with balanced reverb',
+    parameters: {
+      'tempo': 0.86,
+      'pitch': -2.61,
+      'reverbAmount': 0.1,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 1.0,
+      'reverbMix': 0.01,
+      'preDelayMs': 20.0,
+      'roomScale': 0.7,
+      'hfDamping': 0.35,
+      'echoAmount': 0.0,
+      'eqWarmth': 0.0,
+      'masteringEnabled': 0.0,
+      'masteringAlgorithm': 1.0,
+    },
+  );
+
+  /// Retro Nightcore — Analog coupled nightcore with bass boost
+  static const retroNightcore = EffectPreset(
+    id: 'retro_nightcore',
+    name: 'Retro Nightcore',
+    description: 'Analog coupled nightcore with bass boost',
+    parameters: {
+      'tempo': 1.10,
+      'pitch': 2.65,
+      'bassGain': 10.0,
+      'reverbAmount': 0.0,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 0.0,
+      'echoAmount': 0.0,
+      'eqWarmth': 0.0,
+      'masteringEnabled': 0.0,
+      'masteringAlgorithm': 1.0,
+    },
+  );
+
+  /// Slow Bass — Deep bass boost with dynamic level control
+  static const slowBass = EffectPreset(
+    id: 'slow_bass',
+    name: 'Slow Bass',
+    description: 'Deep bass boost with dynamic level control',
+    parameters: {
+      'tempo': 0.77,
+      'pitch': -6.17,
+      'bassGain': 10.0,
+      'dynaudnorm': 1.0,
+      'reverbAmount': 0.0,
+      'hqTimeStretch': 1.0,
+      'hqReverb': 0.0,
+      'echoAmount': 0.0,
+      'eqWarmth': 0.0,
+      'masteringEnabled': 0.0,
+      'masteringAlgorithm': 1.0,
+    },
+  );
+
   /// Classic slowed + reverb effect
   static const slowedReverb = EffectPreset(
     id: 'slowed_reverb',
@@ -336,6 +397,9 @@ abstract final class Presets {
 
   /// All available presets
   static const all = [
+    liteSlowedReverb,
+    retroNightcore,
+    slowBass,
     slowedReverb,
     slowedReverb2,
     slowedReverb3,

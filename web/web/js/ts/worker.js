@@ -4500,17 +4500,25 @@ var DSP_LIMITS = {
   hfDamping: { min: 0, max: 1},
   stereoWidth: { min: 0.5, max: 2}
 };
+var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
 function compileFilterChainParts(spec) {
   const pre = [];
   const post = [];
   const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
   if (timeStretchAlgorithm !== "soundtouch") {
-    appendTempo(pre, spec.tempo);
-    appendPitch(pre, spec.pitch);
+    if (spec.coupledMode) {
+      pre.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
+    } else {
+      appendTempo(pre, spec.tempo);
+      appendPitch(pre, spec.pitch);
+    }
   }
   appendEqWarmth(pre, spec.eqWarmth);
   appendEcho(post, spec.echo);
+  appendPhaser(post, spec.phaser);
+  appendBass(post, spec.bassGain);
+  appendDynaudnorm(post, spec.dynaudnorm);
   appendLowpass(post, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(post, spec.stereoWidth);
   appendMastering(post, spec.mastering);
@@ -4534,6 +4542,18 @@ function appendEqWarmth(filters, warmth) {
 function appendEcho(filters, echo) {
   if (!echo) return;
   filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+function appendPhaser(filters, phaser) {
+  if (!phaser) return;
+  filters.push(buildPhaserFilter(phaser));
+}
+function appendBass(filters, bassGain) {
+  if (bassGain === void 0 || bassGain === 0) return;
+  filters.push(buildBassFilter(bassGain));
+}
+function appendDynaudnorm(filters, enabled) {
+  if (!enabled) return;
+  filters.push(buildDynaudnormFilter());
 }
 function appendLowpass(filters, cutoffHz, hfDamping) {
   const lowpass = buildLowpassFilter(cutoffHz, hfDamping);
@@ -4581,7 +4601,20 @@ function buildTempoFilter(tempo) {
 }
 function buildPitchFilter(semitones) {
   const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+}
+function buildPhaserFilter(phaser) {
+  return `aphaser=delay=${phaser.delayMs}:decay=${phaser.decay}:speed=${phaser.speedHz}:type=${phaser.type}`;
+}
+function buildBassFilter(gain) {
+  return `bass=g=${gain.toFixed(1)}:f=100:width_type=q:width=0.5`;
+}
+function buildDynaudnormFilter() {
+  return `dynaudnorm=framelen=150:gausssize=15`;
+}
+function buildCoupledSpeedFilter(tempo) {
+  const rate = tempo.toFixed(4);
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
 }
 function buildEqWarmthFilter(warmth) {
   const gain = (warmth * 6).toFixed(1);

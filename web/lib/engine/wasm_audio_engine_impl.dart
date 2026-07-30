@@ -521,6 +521,37 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
     spec['stereoWidth'] = stereoWidth;
   }
 
+  if (config.bassGain != null && config.bassGain != 0) {
+    spec['bassGain'] = config.bassGain;
+  }
+
+  final dynaudnorm = config.dynaudnorm;
+  if (dynaudnorm != null && dynaudnorm > 0) {
+    spec['dynaudnorm'] = true;
+  }
+
+  final phaserDelayMs = config.phaserDelayMs;
+  if (phaserDelayMs != null && phaserDelayMs > 0) {
+    final phaserType = config.phaserType;
+    spec['phaser'] = <String, Object?>{
+      'delayMs': phaserDelayMs,
+      'decay': config.phaserDecay ?? 0.23,
+      'speedHz': config.phaserSpeedHz ?? 1.3,
+      'type': (phaserType != null && phaserType > 0) ? 't' : 's',
+    };
+  }
+
+  final coupledSpeedPresets = [
+    'lite_slowed_reverb',
+    'retro_nightcore',
+    'slow_bass',
+    'slowed_reverb',
+    'vaporwave_chill',
+  ];
+  if (coupledSpeedPresets.contains(config.presetId)) {
+    spec['coupledMode'] = true;
+  }
+
   return spec;
 }
 

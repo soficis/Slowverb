@@ -1,5 +1,7 @@
-import type { DspSpec, EchoSpec, MasteringSpec, ReverbSpec } from "./dsp.js";
+import type { DspSpec, EchoSpec, MasteringSpec, PhaserSpec, ReverbSpec } from "./dsp.js";
 import { DSP_LIMITS } from "./dsp.js";
+
+const DEFAULT_SAMPLE_RATE = 44100;
 
 type Limits = { readonly min: number; readonly max: number };
 type NormalizedReverb = Readonly<Required<ReverbSpec>>;
@@ -13,8 +15,12 @@ export function compileFilterChain(spec: DspSpec): string {
 
   const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
   if (timeStretchAlgorithm !== "soundtouch") {
-    appendTempo(filters, spec.tempo);
-    appendPitch(filters, spec.pitch);
+    if (spec.coupledMode) {
+      filters.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
+    } else {
+      appendTempo(filters, spec.tempo);
+      appendPitch(filters, spec.pitch);
+    }
   }
   appendEqWarmth(filters, spec.eqWarmth);
   const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
@@ -22,6 +28,9 @@ export function compileFilterChain(spec: DspSpec): string {
     appendReverb(filters, spec.reverb);
   }
   appendEcho(filters, spec.echo);
+  appendPhaser(filters, spec.phaser);
+  appendBass(filters, spec.bassGain);
+  appendDynaudnorm(filters, spec.dynaudnorm);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
   appendMastering(filters, spec.mastering);
@@ -35,8 +44,12 @@ export function compileFilterChainParts(spec: DspSpec): { pre: string; post: str
 
   const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
   if (timeStretchAlgorithm !== "soundtouch") {
-    appendTempo(pre, spec.tempo);
-    appendPitch(pre, spec.pitch);
+    if (spec.coupledMode) {
+      pre.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
+    } else {
+      appendTempo(pre, spec.tempo);
+      appendPitch(pre, spec.pitch);
+    }
   }
   appendEqWarmth(pre, spec.eqWarmth);
 
@@ -44,6 +57,9 @@ export function compileFilterChainParts(spec: DspSpec): { pre: string; post: str
   // high-quality reverb stage between `pre` and `post` (e.g., Tone-generated IR).
 
   appendEcho(post, spec.echo);
+  appendPhaser(post, spec.phaser);
+  appendBass(post, spec.bassGain);
+  appendDynaudnorm(post, spec.dynaudnorm);
   appendLowpass(post, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(post, spec.stereoWidth);
   appendMastering(post, spec.mastering);
@@ -77,6 +93,21 @@ function appendReverb(filters: string[], reverb?: ReverbSpec): void {
 function appendEcho(filters: string[], echo?: EchoSpec): void {
   if (!echo) return;
   filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+
+function appendPhaser(filters: string[], phaser?: PhaserSpec): void {
+  if (!phaser) return;
+  filters.push(buildPhaserFilter(phaser));
+}
+
+function appendBass(filters: string[], bassGain?: number): void {
+  if (bassGain === undefined || bassGain === 0) return;
+  filters.push(buildBassFilter(bassGain));
+}
+
+function appendDynaudnorm(filters: string[], enabled?: boolean): void {
+  if (!enabled) return;
+  filters.push(buildDynaudnormFilter());
 }
 
 function appendLowpass(filters: string[], cutoffHz?: number, hfDamping?: number): void {
@@ -142,7 +173,26 @@ function buildTempoFilter(tempo: number): string {
 
 function buildPitchFilter(semitones: number): string {
   const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+}
+
+function buildPhaserFilter(phaser: PhaserSpec): string {
+  return `aphaser=delay=${phaser.delayMs}:decay=${phaser.decay}:speed=${phaser.speedHz}:type=${phaser.type}`;
+}
+
+function buildBassFilter(gain: number): string {
+  // Low-shelf EQ at 100Hz (approximation of SoX bass)
+  return `bass=g=${gain.toFixed(1)}:f=100:width_type=q:width=0.5`;
+}
+
+function buildDynaudnormFilter(): string {
+  return `dynaudnorm=framelen=150:gausssize=15`;
+}
+
+function buildCoupledSpeedFilter(tempo: number): string {
+  // asetrate changes BOTH speed and pitch simultaneously (like SoX `speed` command)
+  const rate = tempo.toFixed(4);
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
 }
 
 function buildEqWarmthFilter(warmth: number): string {
@@ -200,6 +250,10 @@ function normalizeReverb(reverb: ReverbSpec): NormalizedReverb {
       DSP_LIMITS.reverb.roomScale
     ),
     mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix),
+    hfDamping: clamp(
+      reverb.hfDamping ?? DSP_LIMITS.hfDamping.default,
+      DSP_LIMITS.hfDamping
+    ),
   };
 }
 

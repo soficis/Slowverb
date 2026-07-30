@@ -63,6 +63,9 @@ The editor screen provides interactive sliders for:
 | **Reverb**    | 0% – 100%        | Add room echo and decay.                         |
 | **Echo**      | 0% – 100%        | Add a repeating echo effect.                     |
 | **EQ Warmth** | 0% – 100%        | Boost low frequencies for a warmer, lo-fi sound. |
+| **Phaser Speed** | 0.1 – 5.0 Hz  | Rate of phaser modulation                        |
+| **Phaser Depth** | 0 – 100%     | Amount of phaser effect                          |
+| **Bass Boost** | -20 to +20 dB   | Bass shelf boost/cut at 100Hz                    |
 
 ### ✨ High-Quality (HQ) Audio Engine
 
@@ -70,6 +73,7 @@ Slowverb now defaults to high-quality processing for all presets:
 
 - **HQ Slowed (SoundTouch)**: Uses the industry-standard SoundTouch algorithm for time-stretching. This prevents the "phasing" or "metallic" artifacts common in basic slowdowns, resulting in a cleaner, more natural sound even at extreme speeds.
 - **HQ Reverb (Tone)**: Utilizes an advanced reverb engine with configurable room scale, damping, and stereo width. It provides a much denser and more immersive atmosphere than standard algorithmic reverbs. Recent tuning has refined the gain staging (up to +42dB compensation) and echo feedback to eliminate unwanted percussion artifacts.
+- **Freeverb IR (SoX-matched)**: A pure JavaScript implementation of SoX’s Freeverb algorithm (8 parallel comb filters + 4 serial allpass filters) that generates impulse responses matching classical acoustic spatial reverb. Selected when quality.reverb = freeverb.
 - **HQ Enabled by Default**: All built-in presets leverage these HQ features for a professional, consistent audio experience.
 
 ### 📊 Waveform Display
@@ -170,11 +174,14 @@ Here's a simplified breakdown of what happens when you use Slowverb:
 
 ## Effect Presets
 
-Slowverb includes **13 curated presets** to get you started quickly:
+Slowverb includes **16 curated presets** to get you started quickly:
 
 | Preset             | Tempo   | Pitch    | Reverb | Echo  | Warmth | Description                       |
 |--------------------|---------|----------|--------|-------|--------|-----------------------------------|
 | **Slowed + Reverb**| 0.95x   | -2 semi  | 49%    | 20%   | 40%    | Classic dreamy vaporwave.         |
+| **Lite Slowed + Reverb** | 0.86x | -2.61 semi | 1.48% wet | Off | Off | Gentle slow-down with high-density Freeverb spatial reverb |
+| **Retro Nightcore** | 1.10x | +2.65 semi | Off | Off | Off | Analog coupled nightcore with bass boost |
+| **Slow Bass** | 0.77x | -6.17 semi | Off | Off | Off | Deep bass boost with dynamic normalization |
 | **Slowed + Reverb 2**| 0.74x | -4.5 semi| 28%    | 15%   | 50%    | Precise -25.926% slowdown.        |
 | **Slowed + Reverb 3**| 0.81x | -3.2 semi| 35%    | 20%   | 50%    | -19% speed with balanced reverb.  |
 | **Slow Chill**     | 0.94x   | -3.5 semi| 59%    | 38%   | 83%    | Smooth slowed sound with warm reverb. |
@@ -200,6 +207,17 @@ You can now create your own custom presets!
 4. It will appear at the bottom of the presets list, saved to your browser's local storage.
 
 ---
+
+## Analog & Freeverb Sound Profiles
+
+Slowverb includes presets and DSP profiles inspired by classic analog tape and vintage digital sound signatures:
+
+- **Freeverb Reverb Engine**: A pure JavaScript implementation of SoX’s Freeverb algorithm (8 parallel comb filters + 4 serial allpass filters), matching classical acoustic reverb character.
+- **Coupled Speed Mode**: Presets use coupled tempo+pitch (like vintage tape slowdowns), producing the characteristic tape-resample effect.
+- **New Effects**: Phaser modulation (for Vaporwave Chill) and bass shelf EQ (for Slow Bass, Retro Nightcore).
+- **Dynamic Normalization**: Dynamic level control (`dynaudnorm`) for the Slow Bass preset.
+
+These presets use the `reverb: freeverb` quality setting, which generates impulse responses using the SoX-matched algorithm directly in the browser.
 
 ## Visualizers
 
@@ -331,11 +349,13 @@ cd wasm/phaselimiter
 
 This will compile `adapter_pro.cpp` and copy the resulting `phaselimiter_pro.js` and `phaselimiter_pro.wasm` to `web/web/js/`.
 
-### Production Build
+### Production Build & Local Server
 
 ```bash
 cd web
-flutter build web --release
+npm run build          # Builds TypeScript engine & syncs bridge assets
+flutter build web --release  # Compiles Flutter web bundle
+npm run serve          # Serves app at http://localhost:8080 with COOP/COEP headers
 ```
 
 The output will be in `build/web/` (when run from the `web/` directory). You can deploy this folder to any static hosting service (Vercel, Netlify, GitHub Pages, etc.).

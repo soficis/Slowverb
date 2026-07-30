@@ -479,7 +479,7 @@ var DSP_LIMITS = {
   pitch: { min: -12, max: 12},
   reverb: {
     decay: { min: 0, max: 0.99},
-    preDelayMs: { min: 20, max: 500},
+    preDelayMs: { min: 0, max: 500},
     roomScale: { min: 0, max: 1, default: 0.7 },
     mix: { min: 0, max: 1}
   },
@@ -489,16 +489,21 @@ var DSP_LIMITS = {
   },
   lowPassCutoffHz: { min: 200, max: 2e4},
   eqWarmth: { min: 0, max: 1},
-  hfDamping: { min: 0, max: 1},
+  hfDamping: { min: 0, max: 1, default: 0 },
   stereoWidth: { min: 0.5, max: 2}
 };
+var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
 function compileFilterChain(spec) {
   const filters = [];
   const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
   if (timeStretchAlgorithm !== "soundtouch") {
-    appendTempo(filters, spec.tempo);
-    appendPitch(filters, spec.pitch);
+    if (spec.coupledMode) {
+      filters.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
+    } else {
+      appendTempo(filters, spec.tempo);
+      appendPitch(filters, spec.pitch);
+    }
   }
   appendEqWarmth(filters, spec.eqWarmth);
   const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
@@ -506,6 +511,9 @@ function compileFilterChain(spec) {
     appendReverb(filters, spec.reverb);
   }
   appendEcho(filters, spec.echo);
+  appendPhaser(filters, spec.phaser);
+  appendBass(filters, spec.bassGain);
+  appendDynaudnorm(filters, spec.dynaudnorm);
   appendLowpass(filters, spec.lowPassCutoffHz, spec.hfDamping);
   appendStereoWidth(filters, spec.stereoWidth);
   appendMastering(filters, spec.mastering);
@@ -530,6 +538,18 @@ function appendReverb(filters, reverb) {
 function appendEcho(filters, echo) {
   if (!echo) return;
   filters.push(buildEchoFilter(normalizeEcho(echo)));
+}
+function appendPhaser(filters, phaser) {
+  if (!phaser) return;
+  filters.push(buildPhaserFilter(phaser));
+}
+function appendBass(filters, bassGain) {
+  if (bassGain === void 0 || bassGain === 0) return;
+  filters.push(buildBassFilter(bassGain));
+}
+function appendDynaudnorm(filters, enabled) {
+  if (!enabled) return;
+  filters.push(buildDynaudnormFilter());
 }
 function appendLowpass(filters, cutoffHz, hfDamping) {
   const lowpass = buildLowpassFilter(cutoffHz, hfDamping);
@@ -577,7 +597,20 @@ function buildTempoFilter(tempo) {
 }
 function buildPitchFilter(semitones) {
   const rate = Math.pow(2, semitones / 12);
-  return `asetrate=44100*${rate.toFixed(4)},aresample=44100:filter_size=64:phase_shift=10`;
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+}
+function buildPhaserFilter(phaser) {
+  return `aphaser=delay=${phaser.delayMs}:decay=${phaser.decay}:speed=${phaser.speedHz}:type=${phaser.type}`;
+}
+function buildBassFilter(gain) {
+  return `bass=g=${gain.toFixed(1)}:f=100:width_type=q:width=0.5`;
+}
+function buildDynaudnormFilter() {
+  return `dynaudnorm=framelen=150:gausssize=15`;
+}
+function buildCoupledSpeedFilter(tempo) {
+  const rate = tempo.toFixed(4);
+  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
 }
 function buildEqWarmthFilter(warmth) {
   const gain = (warmth * 6).toFixed(1);
@@ -624,7 +657,11 @@ function normalizeReverb(reverb) {
       reverb.roomScale ?? DSP_LIMITS.reverb.roomScale.default,
       DSP_LIMITS.reverb.roomScale
     ),
-    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix)
+    mix: clamp(reverb.mix, DSP_LIMITS.reverb.mix),
+    hfDamping: clamp(
+      reverb.hfDamping ?? DSP_LIMITS.hfDamping.default,
+      DSP_LIMITS.hfDamping
+    )
   };
 }
 function normalizeEcho(echo) {
@@ -17986,6 +18023,197 @@ getContext().listener;
 getContext().draw;
 getContext();
 
+// src/freeverb-ir-generator.ts
+var COMB_DELAYS = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
+var ALLPASS_DELAYS = [225, 341, 441, 556];
+var STEREO_OFFSET = 12;
+var ALLPASS_GAIN = 0.5;
+var TARGET_PEAK = 10 ** (-1 / 20);
+function calcFeedback(reverberance) {
+  return 1 - Math.exp((reverberance + 10.032) / -28.123);
+}
+function calcDamping(hfDamping) {
+  return hfDamping / 100 * 0.3 + 0.2;
+}
+function processComb(buffer, length, writeIdx, input, feedback, damp, lpState) {
+  const output = buffer[writeIdx];
+  const nextLpState = output * (1 - damp) + lpState * damp;
+  buffer[writeIdx] = input + feedback * nextLpState;
+  const nextWriteIdx = (writeIdx + 1) % length;
+  return { output, nextWriteIdx, nextLpState };
+}
+function processAllpass(buffer, length, writeIdx, input, gain) {
+  const bufOut = buffer[writeIdx];
+  buffer[writeIdx] = input + gain * bufOut;
+  const output = -input + bufOut;
+  const nextWriteIdx = (writeIdx + 1) % length;
+  return { output, nextWriteIdx };
+}
+function makeCacheKey(params) {
+  const { reverberance, hfDamping, roomScale, stereoDepth, preDelayMs, sampleRate, durationSec } = params;
+  return `${reverberance.toFixed(1)}_${hfDamping.toFixed(1)}_${roomScale.toFixed(1)}_${stereoDepth.toFixed(1)}_${preDelayMs.toFixed(0)}_${sampleRate}_${durationSec.toFixed(2)}`;
+}
+var FreeverbIRGenerator = class {
+  cache = /* @__PURE__ */ new Map();
+  /**
+   * Generate a Freeverb impulse response for the given parameters, or
+   * return a cached result if these exact parameters have been used before.
+   *
+   * The returned `ArrayBuffer` is a **shared reference** to the cached
+   * buffer. Callers that mutate the underlying `Float32Array` must make a
+   * copy first (`new Float32Array(result.pcm)`).
+   */
+  generate(params) {
+    const key = makeCacheKey(params);
+    const cached = this.cache.get(key);
+    if (cached !== void 0) {
+      return cached;
+    }
+    const result = generateFreeverbIR(params);
+    this.cache.set(key, result);
+    return result;
+  }
+  /** Clear all cached impulse responses. */
+  clearCache() {
+    this.cache.clear();
+  }
+};
+function generateFreeverbIR(params) {
+  const {
+    reverberance,
+    hfDamping,
+    roomScale,
+    stereoDepth,
+    preDelayMs,
+    sampleRate,
+    durationSec
+  } = params;
+  const feedback = calcFeedback(reverberance);
+  const damp = calcDamping(hfDamping);
+  const roomScaleFactor = roomScale / 100 * 0.9 + 0.1;
+  const depthFactor = stereoDepth / 100;
+  const stereoOffset = Math.round(STEREO_OFFSET * depthFactor);
+  const leftCombDelays = COMB_DELAYS.map((d) => Math.max(1, Math.round(d * roomScaleFactor)));
+  const rightCombDelays = COMB_DELAYS.map((d) => Math.max(1, Math.round(d * roomScaleFactor + stereoOffset)));
+  const allpassDelays = [...ALLPASS_DELAYS];
+  const NUM_COMBS = COMB_DELAYS.length;
+  const NUM_ALLPASS = ALLPASS_DELAYS.length;
+  const leftCombBuf = [];
+  const leftCombIdx = [];
+  const leftLpState = [];
+  for (let i = 0; i < NUM_COMBS; i++) {
+    leftCombBuf.push(new Float64Array(leftCombDelays[i]));
+    leftCombIdx.push(0);
+    leftLpState.push(0);
+  }
+  const rightCombBuf = [];
+  const rightCombIdx = [];
+  const rightLpState = [];
+  for (let i = 0; i < NUM_COMBS; i++) {
+    rightCombBuf.push(new Float64Array(rightCombDelays[i]));
+    rightCombIdx.push(0);
+    rightLpState.push(0);
+  }
+  const leftApBuf = [];
+  const leftApIdx = [];
+  for (let i = 0; i < NUM_ALLPASS; i++) {
+    leftApBuf.push(new Float64Array(allpassDelays[i]));
+    leftApIdx.push(0);
+  }
+  const rightApBuf = [];
+  const rightApIdx = [];
+  for (let i = 0; i < NUM_ALLPASS; i++) {
+    rightApBuf.push(new Float64Array(allpassDelays[i]));
+    rightApIdx.push(0);
+  }
+  const reverbSamples = Math.floor(sampleRate * durationSec);
+  const preDelaySamples = Math.floor(preDelayMs / 1e3 * sampleRate);
+  const totalSamples = preDelaySamples + reverbSamples;
+  const output = new Float32Array(totalSamples * 2);
+  const impulseSample = preDelaySamples;
+  for (let i = 0; i < totalSamples; i++) {
+    const input = i === impulseSample ? 1 : 0;
+    let leftSum = 0;
+    for (let c = 0; c < NUM_COMBS; c++) {
+      const {
+        output: combOut,
+        nextWriteIdx: nextIdx,
+        nextLpState: nextLp
+      } = processComb(
+        leftCombBuf[c],
+        leftCombDelays[c],
+        leftCombIdx[c],
+        input,
+        feedback,
+        damp,
+        leftLpState[c]
+      );
+      leftSum += combOut;
+      leftCombIdx[c] = nextIdx;
+      leftLpState[c] = nextLp;
+    }
+    let leftOut = leftSum;
+    for (let a = 0; a < NUM_ALLPASS; a++) {
+      const { output: apOut, nextWriteIdx: nextIdx } = processAllpass(
+        leftApBuf[a],
+        allpassDelays[a],
+        leftApIdx[a],
+        leftOut,
+        ALLPASS_GAIN
+      );
+      leftOut = apOut;
+      leftApIdx[a] = nextIdx;
+    }
+    let rightSum = 0;
+    for (let c = 0; c < NUM_COMBS; c++) {
+      const {
+        output: combOut,
+        nextWriteIdx: nextIdx,
+        nextLpState: nextLp
+      } = processComb(
+        rightCombBuf[c],
+        rightCombDelays[c],
+        rightCombIdx[c],
+        input,
+        feedback,
+        damp,
+        rightLpState[c]
+      );
+      rightSum += combOut;
+      rightCombIdx[c] = nextIdx;
+      rightLpState[c] = nextLp;
+    }
+    let rightOut = rightSum;
+    for (let a = 0; a < NUM_ALLPASS; a++) {
+      const { output: apOut, nextWriteIdx: nextIdx } = processAllpass(
+        rightApBuf[a],
+        allpassDelays[a],
+        rightApIdx[a],
+        rightOut,
+        ALLPASS_GAIN
+      );
+      rightOut = apOut;
+      rightApIdx[a] = nextIdx;
+    }
+    output[i * 2] = leftOut;
+    output[i * 2 + 1] = rightOut;
+  }
+  let peak = 0;
+  for (let i = 0; i < output.length; i++) {
+    const abs = Math.abs(output[i]);
+    if (abs > peak) {
+      peak = abs;
+    }
+  }
+  if (peak > 0) {
+    const gain = TARGET_PEAK / peak;
+    for (let i = 0; i < output.length; i++) {
+      output[i] *= gain;
+    }
+  }
+  return { pcm: output.buffer, sampleRate };
+}
+
 // src/engine.ts
 var SlowverbEngine = class {
   workerFactory;
@@ -18100,13 +18328,18 @@ var SlowverbEngine = class {
   }
   async resolveToneReverbIR(spec) {
     if (!spec) return null;
-    if ((spec.quality?.reverb ?? "ffmpeg") !== "tone") return null;
+    const reverbAlgo = spec.quality?.reverb ?? "ffmpeg";
     if (!spec.reverb) return null;
     if (spec.reverb.mix <= 0) return null;
+    if (reverbAlgo === "freeverb") {
+      return this.resolveFreeverbIR(spec.reverb);
+    }
+    if (reverbAlgo !== "tone") return null;
     const key = JSON.stringify({
       decay: spec.reverb.decay,
       preDelayMs: spec.reverb.preDelayMs,
-      roomScale: spec.reverb.roomScale ?? null
+      roomScale: spec.reverb.roomScale ?? null,
+      hfDamping: spec.reverb.hfDamping ?? null
     });
     const cached = this.toneReverbIrCache.get(key);
     if (cached) {
@@ -18120,6 +18353,45 @@ var SlowverbEngine = class {
       console.warn("[SlowverbEngine] Tone reverb IR generation failed; falling back to FFmpeg reverb", error);
       return null;
     }
+  }
+  /**
+   * Generate a Freeverb impulse response from the given ReverbSpec.
+   *
+   * Maps Slowverb's normalised ReverbSpec (0-1) to SoX-range FreeverbParams
+   * (0-100), generates the IR with pure-JS arithmetic, and caches the result.
+   * The returned IR is normalised to -1 dBFS, so no additional makeup gain
+   * is required from the worker's convolution pipeline.
+   */
+  resolveFreeverbIR(reverb) {
+    const key = JSON.stringify({
+      decay: reverb.decay,
+      preDelayMs: reverb.preDelayMs,
+      roomScale: reverb.roomScale ?? null,
+      hfDamping: reverb.hfDamping ?? null
+    });
+    const cached = this.toneReverbIrCache.get(key);
+    if (cached) {
+      return { pcm: cached.pcm.slice(0), sampleRate: cached.sampleRate };
+    }
+    const reverberance = Math.round(reverb.decay * 100);
+    const hfDamping = Math.round((reverb.hfDamping ?? 0.5) * 100);
+    const roomScale = Math.round((reverb.roomScale ?? 0.7) * 100);
+    const stereoDepth = 100;
+    const preDelayMs = reverb.preDelayMs;
+    const sampleRate = 44100;
+    const durationSec = Math.max(3, Math.min(8, 0.1 + reverb.decay * 6));
+    const params = {
+      reverberance,
+      hfDamping,
+      roomScale,
+      stereoDepth,
+      preDelayMs,
+      sampleRate,
+      durationSec
+    };
+    const result = generateFreeverbIR(params);
+    this.toneReverbIrCache.set(key, result);
+    return { pcm: result.pcm.slice(0), sampleRate: result.sampleRate };
   }
   async cancel(jobId) {
     const runner = this.active.get(jobId);
@@ -18436,4 +18708,4 @@ tone/build/esm/core/Tone.js:
    *)
 */
 
-export { SlowverbEngine };
+export { FreeverbIRGenerator, SlowverbEngine, generateFreeverbIR };

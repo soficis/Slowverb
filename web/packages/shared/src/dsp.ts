@@ -6,7 +6,7 @@ export type SpecVersion = "1.0.0";
 export type MasteringAlgorithm = "simple" | "phaselimiter" | "phaselimiter_pro";
 
 export type TimeStretchAlgorithm = "ffmpeg" | "soundtouch";
-export type ReverbAlgorithm = "ffmpeg" | "tone";
+export type ReverbAlgorithm = "ffmpeg" | "tone" | "freeverb";
 
 export interface QualitySpec {
   readonly timeStretch?: TimeStretchAlgorithm;
@@ -26,11 +26,19 @@ export interface ReverbSpec {
   readonly preDelayMs: number;
   readonly roomScale?: NormalizedUnit;
   readonly mix: NormalizedUnit;
+  readonly hfDamping?: number; // NEW: 0-1, maps to SoX hf-damping coefficient
 }
 
 export interface EchoSpec {
   readonly delayMs: number;
   readonly feedback: NormalizedUnit;
+}
+
+export interface PhaserSpec {
+  readonly delayMs: number;   // 0-10 ms
+  readonly decay: number;     // 0-1
+  readonly speedHz: number;   // 0.1-5 Hz
+  readonly type: 's' | 't';  // sinusoidal or triangular
 }
 
 export interface DspSpec {
@@ -46,6 +54,11 @@ export interface DspSpec {
   readonly stereoWidth?: number;
   readonly mastering?: MasteringSpec;
   readonly normalize?: boolean;
+  // NEW FIELDS:
+  readonly phaser?: PhaserSpec;
+  readonly bassGain?: number;       // -20 to +20 dB
+  readonly dynaudnorm?: boolean;
+  readonly coupledMode?: boolean;   // SoX speed behavior (no atempo, just asetrate)
 }
 
 export const DSP_SPEC_VERSION: SpecVersion = "1.0.0";
@@ -55,7 +68,7 @@ export const DSP_LIMITS = {
   pitch: { min: -12.0, max: 12.0, default: 0.0 },
   reverb: {
     decay: { min: 0.0, max: 0.99, default: 0.4 },
-    preDelayMs: { min: 20, max: 500, default: 60 },
+    preDelayMs: { min: 0, max: 500, default: 60 },
     roomScale: { min: 0.0, max: 1.0, default: 0.7 },
     mix: { min: 0.0, max: 1.0, default: 0.6 },
   },
@@ -71,9 +84,12 @@ export const DSP_LIMITS = {
 
 export const PRESET_ORDER = [
   "SLOWED_REVERB",
+  "LITE_SLOWED_REVERB",  // NEW
   "VAPORWAVE_CHILL",
   "NIGHTCORE",
+  "RETRO_NIGHTCORE",     // NEW
   "ECHO_SLOW",
+  "SLOW_BASS",            // NEW
   "LOFI",
   "AMBIENT",
   "DEEP_BASS",
@@ -97,11 +113,27 @@ export const PRESETS: Record<PresetId, DspSpec> = {
       roomScale: 0.7,
       mix: 0.3,
     },
+    quality: { reverb: 'freeverb' },
     echo: {
       delayMs: 200,
       feedback: 0.2,
     },
     eqWarmth: 0.4,
+  },
+  LITE_SLOWED_REVERB: {
+    specVersion: DSP_SPEC_VERSION,
+    coupledMode: true,
+    tempo: 0.86,
+    pitch: -2.61,
+    reverb: {
+      decay: 0.882,
+      mix: 0.008,
+      hfDamping: 0.35,
+      roomScale: 1.0,
+      preDelayMs: 20,
+    },
+    quality: { reverb: 'freeverb' },
+    echo: { delayMs: 0, feedback: 0 },
   },
   VAPORWAVE_CHILL: {
     specVersion: DSP_SPEC_VERSION,
@@ -114,6 +146,8 @@ export const PRESETS: Record<PresetId, DspSpec> = {
       roomScale: 0.8,
       mix: 0.4,
     },
+    phaser: { delayMs: 4, decay: 0.23, speedHz: 1.3, type: 's' },
+    quality: { reverb: 'freeverb' },
     echo: {
       delayMs: 400,
       feedback: 0.4,
@@ -136,6 +170,14 @@ export const PRESETS: Record<PresetId, DspSpec> = {
     },
     eqWarmth: 0.2,
   },
+  RETRO_NIGHTCORE: {
+    specVersion: DSP_SPEC_VERSION,
+    coupledMode: true,
+    tempo: 1.10,
+    pitch: 2.65,
+    bassGain: 10,
+    echo: { delayMs: 0, feedback: 0 },
+  },
   ECHO_SLOW: {
     specVersion: DSP_SPEC_VERSION,
     tempo: 0.65,
@@ -151,6 +193,15 @@ export const PRESETS: Record<PresetId, DspSpec> = {
       feedback: 0.8,
     },
     eqWarmth: 0.5,
+  },
+  SLOW_BASS: {
+    specVersion: DSP_SPEC_VERSION,
+    coupledMode: true,
+    tempo: 0.77,
+    pitch: -6.17,
+    bassGain: 10,
+    dynaudnorm: true,
+    echo: { delayMs: 0, feedback: 0 },
   },
   LOFI: {
     specVersion: DSP_SPEC_VERSION,
@@ -285,8 +336,20 @@ export const PRESET_METADATA: Record<PresetId, { name: string; description: stri
     name: "Vaporwave Chill",
     description: "Warm, nostalgic sound",
   },
+  LITE_SLOWED_REVERB: {
+    name: "Lite Slowed + Reverb",
+    description: "Gentle slow with balanced reverb",
+  },
   NIGHTCORE: { name: "Nightcore", description: "Fast & energetic" },
+  RETRO_NIGHTCORE: {
+    name: "Retro Nightcore",
+    description: "Analog coupled nightcore with bass boost",
+  },
   ECHO_SLOW: { name: "Echo Slow", description: "Hazy with deep echoes" },
+  SLOW_BASS: {
+    name: "Slow Bass",
+    description: "Deep bass boost with dynamic level control",
+  },
   LOFI: { name: "Lo-Fi", description: "Warm, relaxed lo-fi sound" },
   AMBIENT: { name: "Ambient Space", description: "Ethereal, floating atmosphere" },
   DEEP_BASS: { name: "Deep Bass", description: "Heavy low-end focus" },
