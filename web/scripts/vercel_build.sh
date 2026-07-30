@@ -46,5 +46,5 @@ if [[ -d "${FLUTTER_SDK_ROOT}" ]]; then
 fi
 flutter --version
 flutter config --no-analytics
-flutter pub get --enforce-lockfile
+flutter pub get
 flutter build web --release --no-pub
