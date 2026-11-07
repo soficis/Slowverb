@@ -49,6 +49,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # Bundled OFL fonts (see assets/google_fonts/*-OFL.txt); no runtime fetching.
+  fonts:
+    - family: Orbitron
+      fonts:
+        - asset: assets/google_fonts/Orbitron-Variable.ttf
+    - family: Roboto
+      fonts:
+        - asset: assets/google_fonts/Roboto-Variable.ttf
+
   # GPU visualizer shaders
   shaders:
     - shaders/maze_3d.frag
@@ -64,3 +73,4 @@ flutter:
   assets:
 
     - web/js/
+    - assets/google_fonts/

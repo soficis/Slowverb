@@ -1,5 +1,5 @@
 // Separate cache names for better versioning control
-const STATIC_CACHE_NAME = "slowverb-static-v10";
+const STATIC_CACHE_NAME = "slowverb-static-v11";
 const WASM_CACHE_NAME = "slowverb-wasm-v2";
 
 // WASM files get separate cache for easier maintenance
@@ -22,6 +22,7 @@ const STATIC_ASSETS = [
   "/flutter_bootstrap.js",
   "/manifest.json",
   "/favicon.png",
+  "/vendor/jszip.min.js",
   "/js/slowverb_bridge.js",
   "/js/ts/core.js",
   "/js/ts/worker.js",

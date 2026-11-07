@@ -7,7 +7,6 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onPlayPause;
   final VoidCallback onSeekBackward;
   final VoidCallback onSeekForward;
-  final VoidCallback onLoop;
 
   const PlaybackControls({
     super.key,
@@ -16,7 +15,6 @@ class PlaybackControls extends StatelessWidget {
     required this.onPlayPause,
     required this.onSeekBackward,
     required this.onSeekForward,
-    required this.onLoop,
   });
 
   @override
@@ -24,13 +22,6 @@ class PlaybackControls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
-          onPressed: onLoop,
-          icon: const Icon(Icons.repeat),
-          color: SlowverbColors.textSecondary,
-          tooltip: 'Loop (Coming soon)',
-        ),
-        const SizedBox(width: 8),
         IconButton(
           onPressed: onSeekBackward,
           icon: const Icon(Icons.replay_10),
@@ -84,13 +75,6 @@ class PlaybackControls extends StatelessWidget {
           color: Colors.white,
           iconSize: 28,
           tooltip: 'Skip 10s',
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          onPressed: () {}, // Shuffle placeholder
-          icon: const Icon(Icons.shuffle),
-          color: SlowverbColors.textSecondary,
-          tooltip: 'Shuffle',
         ),
       ],
     );

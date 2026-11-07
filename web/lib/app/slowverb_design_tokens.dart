@@ -20,6 +20,20 @@ abstract final class SlowverbTokens {
   static const Color surfaceCardHover = Color(0x1FFFFFFF); // 12% white overlay
   static const Color surfaceGlass = Color(0x29FFFFFF); // 16% glassmorphism
 
+  static const Color backgroundMedium = Color(0xFF0F1628);
+  static const Color backgroundLight = Color(0xFF23304A);
+  static const Color surface = Color(0xFF1F1B2F);
+  static const Color surfaceVariant = Color(0xFF2A2343);
+
+  // === TEXT COLORS ===
+  static const Color textPrimary = Color(0xFFF5F1FF);
+  static const Color textSecondary = Color(0xFFCBC6DD);
+  static const Color textHint = Color(0xFF9FA4BF);
+
+  // === WAVEFORM ===
+  /// 3.29:1 against [surface] (WCAG 1.4.11 non-text contrast needs >= 3:1).
+  static const Color waveformInactive = Color(0xFF6C6A94);
+
   // === SEMANTIC COLORS ===
   static const Color success = Color(0xFF4ECCA3);
   static const Color warning = Color(0xFFFFD93D);

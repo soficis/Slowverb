@@ -41,9 +41,11 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
         ),
         title: Column(
           children: [
-            Text(
+            const Text(
               'PHASELIMITER',
-              style: GoogleFonts.orbitron(
+              style: TextStyle(
+                fontFamily: 'Orbitron',
+                fontVariations: [FontVariation('wght', 700)],
                 fontSize: 72,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 4,

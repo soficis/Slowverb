@@ -282,7 +282,6 @@ class _WaveformTransportCard extends StatelessWidget {
                     onPlayPause: onPlayPause,
                     onSeekBackward: onSeekBackward,
                     onSeekForward: onSeekForward,
-                    onLoop: () {},
                     isProcessing: isGeneratingPreview,
                   ),
                   if (hasGeneratedPreview) ...[
