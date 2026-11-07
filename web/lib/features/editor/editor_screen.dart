@@ -40,16 +40,42 @@ class EditorScreen extends ConsumerStatefulWidget {
 /// See KNOWN_LIMITS.md.
 const _longTrackWarning = Duration(minutes: 10);
 
+/// Files at least this big get the same warning, for when the probe reports
+/// no duration (seen with very long lossless files). ~10 min of 16-bit WAV.
+const _largeFileWarningBytes = 100 * 1024 * 1024;
+
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   bool _deckCollapsed = false;
   bool _soundCollapsed = false;
   bool _fullscreenVisualizer = false;
+  bool _longTrackWarned = false;
+
+  void _showLongTrackWarning(String what) {
+    if (_longTrackWarned || !mounted) return;
+    _longTrackWarned = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text(
+          '$what. Rendering it takes a lot of memory and may fail on phones; '
+          'mastering can take a long time or run out of memory. Export in a '
+          'desktop browser, or turn mastering off, if it does.',
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.fileData != null) {
+        final bytes = widget.fileData!.bytes.length;
+        if (bytes >= _largeFileWarningBytes) {
+          _showLongTrackWarning(
+            'Large file (${(bytes / (1024 * 1024)).round()} MB)',
+          );
+        }
         ref
             .read(audioEditorProvider.notifier)
             .loadAudioFile(widget.fileData!, project: widget.project);
@@ -89,16 +115,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       next,
     ) {
       if (next == null || next == prev || next < _longTrackWarning) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 10),
-          content: Text(
-            'Long track (${next.inMinutes} min). Rendering it takes a lot of '
-            'memory and may fail on phones; Level 5 mastering can take a long '
-            'time. Export in a desktop browser if it does.',
-          ),
-        ),
-      );
+      _showLongTrackWarning('Long track (${next.inMinutes} min)');
     });
 
     final hasProject = state.fileId != null || state.audioFileName != null;

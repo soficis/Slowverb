@@ -78,7 +78,10 @@ function allocateWasmMemory(Module, sampleCount) {
   if (!leftPtr || !rightPtr) {
     if (leftPtr) Module._free(leftPtr);
     if (rightPtr) Module._free(rightPtr);
-    throw new Error("WASM malloc failed (out of memory?)");
+    throw new Error(
+      "Track too long for Level 3 mastering (this mastering engine is limited to 1 GB of memory). " +
+      "Try Level 5, or turn mastering off for this track."
+    );
   }
 
   return { leftPtr, rightPtr };
