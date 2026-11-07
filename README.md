@@ -133,7 +133,7 @@ cd Slowverb/web
 npm install
 npm run build              # builds the TypeScript engine and syncs bridge assets
 flutter pub get
-flutter build web --release
+flutter build web --release --no-web-resources-cdn
 npm run serve              # http://localhost:8080 with COOP/COEP headers
 ```
 
