@@ -324,11 +324,17 @@ class VfdPanel extends StatelessWidget {
         boxShadow: const [
           BoxShadow(color: Color(0x33FFFFFF), offset: Offset(0, 1)),
         ],
+        // A faint reflection at the top of the glass. Both stops are opaque:
+        // a translucent-to-opaque gradient interpolates through a bright band.
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
+          stops: const [0, 0.5],
           colors: [
-            SlowverbTokens.vfdCyan.withValues(alpha: 0.06),
+            Color.alphaBlend(
+              SlowverbTokens.vfdCyan.withValues(alpha: 0.07),
+              SlowverbTokens.vfdGlass,
+            ),
             SlowverbTokens.vfdGlass,
           ],
         ),
