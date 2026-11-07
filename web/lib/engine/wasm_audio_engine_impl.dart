@@ -215,16 +215,19 @@ Future<void> performRenderImpl(
       success: true,
       outputBytes: bytes,
     );
-    controller.add(
-      RenderProgress(jobId: jobId, progress: 1.0, stage: 'complete'),
-    );
+    if (!controller.isClosed) {
+      controller.add(
+        RenderProgress(jobId: jobId, progress: 1.0, stage: 'complete'),
+      );
+    }
   } catch (error) {
     final message = error.toString();
     engine._renderResults[jobId.value] = RenderResult(
       success: false,
       errorMessage: message,
     );
-    controller.addError(Exception(message));
+    // cancelRenderImpl may already have closed the controller.
+    if (!controller.isClosed) controller.addError(Exception(message));
   } finally {
     await controller.close();
     engine._progressControllers.remove(jobId.value);
@@ -340,6 +343,10 @@ Future<void> runParallelBatchImpl(
       : maxConcurrency;
   int nextIndex = 0;
   final activeJobs = <int, Future<void>>{};
+  // Aggregate cap on source bytes in flight; a lone file always runs (per-file limit is enforced elsewhere).
+  const int maxInFlightBytes = 300 * 1024 * 1024;
+  final activeBytes = <int, int>{};
+  int inFlightBytes() => activeBytes.values.fold(0, (a, b) => a + b);
 
   Future<void> processFile(int index) async {
     final file = files[index];
@@ -429,12 +436,20 @@ Future<void> runParallelBatchImpl(
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
-    while (nextIndex < files.length && activeJobs.length < concurrency) {
+    while (nextIndex < files.length &&
+        activeJobs.length < concurrency &&
+        (activeJobs.isEmpty ||
+            inFlightBytes() + files[nextIndex].bytes.length <=
+                maxInFlightBytes)) {
       final index = nextIndex++;
+      activeBytes[index] = files[index].bytes.length;
       final job = processFile(index);
       activeJobs[index] = job;
       // ignore: unawaited_future
-      job.whenComplete(() => activeJobs.remove(index));
+      job.whenComplete(() {
+        activeJobs.remove(index);
+        activeBytes.remove(index);
+      });
     }
 
     if (activeJobs.isEmpty) break;
@@ -467,8 +482,14 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
   if (config.hqTimeStretch > 0.5) {
     quality['timeStretch'] = 'soundtouch';
   }
+  const reverbFileIrs = {2: 'plate_conner_i', 3: 'hotel_bathroom'};
+  final reverbType = config.reverbType?.round() ?? 0;
   if (config.hqReverb > 0.5 && config.reverbAmount > 0.0) {
-    quality['reverb'] = 'tone';
+    quality['reverb'] = switch (reverbType) {
+      1 => 'freeverb',
+      2 || 3 => 'file',
+      _ => 'tone',
+    };
   }
   if (quality.isNotEmpty) {
     spec['quality'] = quality;
@@ -501,6 +522,7 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
       'preDelayMs': (config.preDelayMs ?? 60).round(),
       'roomScale': config.roomScale ?? 0.7,
       'mix': mix,
+      if (quality['reverb'] == 'file') 'ir': reverbFileIrs[reverbType],
     };
   }
 
@@ -530,12 +552,30 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
     spec['dynaudnorm'] = true;
   }
 
+  const playbackDevices = [
+    'sedan_2002_front',
+    'sedan_2002_rear',
+    'gramophone_cabinet',
+    'cassette_portable',
+  ];
+  final playbackIndex = config.playbackDevice?.round() ?? 0;
+  if (playbackIndex >= 1 && playbackIndex <= playbackDevices.length) {
+    spec['playback'] = <String, Object?>{
+      'device': playbackDevices[playbackIndex - 1],
+    };
+  }
+
+  // Phaser is on when depth (decay) > 0 or an explicit delay is set; delay defaults to 4 ms.
   final phaserDelayMs = config.phaserDelayMs;
-  if (phaserDelayMs != null && phaserDelayMs > 0) {
+  final phaserDecay = config.phaserDecay;
+  if ((phaserDecay != null && phaserDecay > 0) ||
+      (phaserDelayMs != null && phaserDelayMs > 0)) {
     final phaserType = config.phaserType;
     spec['phaser'] = <String, Object?>{
-      'delayMs': phaserDelayMs,
-      'decay': config.phaserDecay ?? 0.23,
+      'delayMs': (phaserDelayMs != null && phaserDelayMs > 0)
+          ? phaserDelayMs
+          : 4.0,
+      'decay': phaserDecay ?? 0.23,
       'speedHz': config.phaserSpeedHz ?? 1.3,
       'type': (phaserType != null && phaserType > 0) ? 't' : 's',
     };

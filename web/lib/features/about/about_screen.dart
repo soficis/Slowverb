@@ -149,6 +149,21 @@ class AboutScreen extends StatelessWidget {
 
                   _buildSection(
                     context,
+                    icon: Icons.speaker,
+                    title: 'Impulse Responses',
+                    content:
+                        'Playback devices (car, gramophone, cassette), the plate and the hotel bathroom reverb use '
+                        'impulse responses from the IR Library by Conner (github.com/itsmusician/IR-Library), '
+                        'Copyright © 2022 Conner, MIT License. The full licence text is shipped at '
+                        'irs/LICENSE-itsmusician-IR-Library.md.\n\n'
+                        'Fonts: Rajdhani, Orbitron and Roboto (SIL Open Font License). '
+                        'ZIP export: JSZip (MIT).',
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSection(
+                    context,
                     icon: Icons.copyright,
                     title: 'License',
                     content:

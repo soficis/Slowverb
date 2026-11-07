@@ -1,4 +1,4 @@
-import { compileFilterChain } from "@slowverb/shared";
+import { compileFilterChain, getPlaybackDevice, getReverbIr, normalizeStereoIrEnergy } from "@slowverb/shared";
 import type {
   CancelPayload,
   EngineInitOptions,
@@ -33,7 +33,6 @@ export interface SourceData {
 
 export interface RenderRequest {
   readonly source: SourceData;
-  readonly filterGraph?: string;
   readonly dspSpec?: DspSpec;
   readonly format?: ExportFormat;
   readonly bitrateKbps?: number;
@@ -64,6 +63,7 @@ export class SlowverbEngine {
   private readonly initPayload: InitPayload;
   private readonly active = new Map<string, WorkerRunner>();
   private readonly toneReverbIrCache = new Map<string, { pcm: ArrayBuffer; sampleRate: number }>();
+  private readonly wavIrCache = new Map<string, ArrayBuffer>();
 
   constructor(options: EngineInitOptions = {}) {
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
@@ -176,6 +176,8 @@ export class SlowverbEngine {
   private async buildRenderPayload(request: RenderRequest): Promise<RenderPayload> {
     const filterGraph = this.resolveFilterGraph(request);
     const toneIr = await this.resolveToneReverbIR(request.dspSpec);
+    const reverbIRWav = await this.resolveFileReverbIR(request.dspSpec);
+    const playbackIR = await this.resolvePlaybackIR(request.dspSpec);
     const format = ensureExportFormat(request.format);
     return {
       fileId: request.source.fileId,
@@ -183,6 +185,8 @@ export class SlowverbEngine {
       dspSpec: request.dspSpec,
       reverbIR: toneIr?.pcm,
       reverbIRSampleRate: toneIr?.sampleRate,
+      reverbIRWav,
+      playbackIR,
       mastering: request.dspSpec?.mastering,
       format,
       bitrateKbps: request.bitrateKbps,
@@ -191,8 +195,33 @@ export class SlowverbEngine {
     };
   }
 
+  private async resolvePlaybackIR(spec?: DspSpec): Promise<ArrayBuffer | undefined> {
+    const entry = getPlaybackDevice(spec?.playback?.device);
+    return entry ? this.fetchWavIr(entry.url) : undefined;
+  }
+
+  private async resolveFileReverbIR(spec?: DspSpec): Promise<ArrayBuffer | undefined> {
+    if (spec?.quality?.reverb !== "file" || !spec.reverb || !(spec.reverb.mix > 0)) return undefined;
+    const entry = getReverbIr(spec.reverb.ir);
+    if (!entry) throw new Error(`Unknown reverb IR: ${String(spec.reverb.ir)}`);
+    return this.fetchWavIr(entry.url);
+  }
+
+  /** Fetches a bundled WAV once per url; returns a copy because the buffer is transferred to the worker. */
+  private async fetchWavIr(url: string): Promise<ArrayBuffer> {
+    let bytes = this.wavIrCache.get(url);
+    if (!bytes) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`IR fetch failed (${response.status}): ${url}`);
+      }
+      bytes = await response.arrayBuffer();
+      this.wavIrCache.set(url, bytes);
+    }
+    return bytes.slice(0);
+  }
+
   private resolveFilterGraph(request: RenderRequest): string | undefined {
-    if (request.filterGraph) return request.filterGraph;
     if (request.dspSpec) return compileFilterChain(request.dspSpec);
     return undefined;
   }
@@ -207,16 +236,18 @@ export class SlowverbEngine {
 
     if (reverbAlgo === "freeverb") {
       // Freeverb IR generation (pure CPU, no Tone.js needed).
-      // The FreeverbIRGenerator normalises the IR to -1 dBFS internally, so
-      // the worker-side volume=42dB makeup gain (added for Tone.js IRs) is
-      // NOT needed here. If the worker unconditionally applies 42dB gain,
-      // the freeverb path will be 42 dB too loud — see ffmpeg_pipeline.ts.
-      return this.resolveFreeverbIR(spec.reverb);
+      try {
+        return this.resolveFreeverbIR(spec.reverb);
+      } catch (error) {
+        console.warn("[SlowverbEngine] Freeverb IR generation failed", error);
+        return null;
+      }
     }
 
     if (reverbAlgo !== "tone") return null;
 
     const key = JSON.stringify({
+      algo: "tone",
       decay: spec.reverb.decay,
       preDelayMs: spec.reverb.preDelayMs,
       roomScale: spec.reverb.roomScale ?? null,
@@ -229,7 +260,9 @@ export class SlowverbEngine {
     }
 
     try {
-      const generated = await withTimeout(generateToneReverbIr(spec.reverb), 12_000, "Tone IR generation timed out");
+      const generated = normalizeIrEnergy(
+        await withTimeout(generateToneReverbIr(spec.reverb), 12_000, "Tone IR generation timed out")
+      );
       this.toneReverbIrCache.set(key, generated);
       return { pcm: generated.pcm.slice(0), sampleRate: generated.sampleRate };
     } catch (error) {
@@ -243,13 +276,14 @@ export class SlowverbEngine {
    *
    * Maps Slowverb's normalised ReverbSpec (0-1) to SoX-range FreeverbParams
    * (0-100), generates the IR with pure-JS arithmetic, and caches the result.
-   * The returned IR is normalised to -1 dBFS, so no additional makeup gain
-   * is required from the worker's convolution pipeline.
+   * The returned IR is rescaled to unit energy per channel (normalizeIrEnergy);
+   * the worker applies a fixed wet makeup (IR_WET_MAKEUP_DB) and blends by mix.
    */
   private resolveFreeverbIR(
     reverb: NonNullable<DspSpec["reverb"]>
   ): { pcm: ArrayBuffer; sampleRate: number } {
     const key = JSON.stringify({
+      algo: "freeverb",
       decay: reverb.decay,
       preDelayMs: reverb.preDelayMs,
       roomScale: reverb.roomScale ?? null,
@@ -279,7 +313,7 @@ export class SlowverbEngine {
       durationSec,
     };
 
-    const result = generateFreeverbIR(params);
+    const result = normalizeIrEnergy(generateFreeverbIR(params));
     this.toneReverbIrCache.set(key, result);
     return { pcm: result.pcm.slice(0), sampleRate: result.sampleRate };
   }
@@ -377,6 +411,8 @@ class WorkerRunner {
     const requestId = this.nextRequestId();
     const transfer: Transferable[] = [];
     if (payload.reverbIR) transfer.push(payload.reverbIR);
+    if (payload.reverbIRWav) transfer.push(payload.reverbIRWav);
+    if (payload.playbackIR) transfer.push(payload.playbackIR);
     return this.sendWithLog<RenderResultPayload>({ type: type, requestId, jobId, payload }, { transfer });
   }
 
@@ -526,6 +562,13 @@ class WorkerRunner {
       maybeGc();
     }
   }
+}
+
+/** Scales an interleaved stereo IR to unit energy per channel; throws if the IR is silent or non-finite. */
+function normalizeIrEnergy(ir: { pcm: ArrayBuffer; sampleRate: number }): { pcm: ArrayBuffer; sampleRate: number } {
+  const data = new Float32Array(ir.pcm.slice(0));
+  if (!normalizeStereoIrEnergy(data)) throw new Error("Reverb IR has zero or non-finite energy");
+  return { pcm: data.buffer, sampleRate: ir.sampleRate };
 }
 
 async function generateToneReverbIr(

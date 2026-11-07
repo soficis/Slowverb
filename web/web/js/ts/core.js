@@ -493,21 +493,13 @@ var DSP_LIMITS = {
   stereoWidth: { min: 0.5, max: 2}
 };
 var DEFAULT_SAMPLE_RATE = 44100;
-var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChain(spec) {
   const filters = [];
-  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
-  if (timeStretchAlgorithm !== "soundtouch") {
-    if (spec.coupledMode) {
-      filters.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
-    } else {
-      appendTempo(filters, spec.tempo);
-      appendPitch(filters, spec.pitch);
-    }
-  }
+  appendTimeStretch(filters, spec);
   appendEqWarmth(filters, spec.eqWarmth);
   const reverbAlgorithm = spec.quality?.reverb ?? "ffmpeg";
-  if (reverbAlgorithm !== "tone") {
+  if (reverbAlgorithm === "ffmpeg") {
     appendReverb(filters, spec.reverb);
   }
   appendEcho(filters, spec.echo);
@@ -523,9 +515,15 @@ function appendTempo(filters, tempo) {
   if (tempo === void 0 || tempo === 1) return;
   filters.push(buildTempoFilter(clamp(tempo, DSP_LIMITS.tempo)));
 }
-function appendPitch(filters, pitch) {
-  if (pitch === void 0 || pitch === 0) return;
-  filters.push(buildPitchFilter(clamp(pitch, DSP_LIMITS.pitch)));
+function appendTimeStretch(filters, spec) {
+  if ((spec.quality?.timeStretch ?? "ffmpeg") === "soundtouch") return;
+  const pitch = spec.pitch;
+  const hasPitch = typeof pitch === "number" && Number.isFinite(pitch) && pitch !== 0;
+  if (spec.coupledMode || hasPitch) {
+    filters.push(buildCoupledSpeedFilter(spec.tempo, pitch));
+    return;
+  }
+  appendTempo(filters, spec.tempo);
 }
 function appendEqWarmth(filters, warmth) {
   if (warmth === void 0 || warmth <= 0) return;
@@ -533,10 +531,13 @@ function appendEqWarmth(filters, warmth) {
 }
 function appendReverb(filters, reverb) {
   if (!reverb) return;
+  if (!(reverb.mix > 0)) return;
   filters.push(buildReverbFilter(normalizeReverb(reverb)));
 }
 function appendEcho(filters, echo) {
   if (!echo) return;
+  if (!(echo.delayMs > 0) || !(echo.feedback > 0)) return;
+  if (!Number.isFinite(echo.delayMs) || !Number.isFinite(echo.feedback)) return;
   filters.push(buildEchoFilter(normalizeEcho(echo)));
 }
 function appendPhaser(filters, phaser) {
@@ -544,8 +545,8 @@ function appendPhaser(filters, phaser) {
   filters.push(buildPhaserFilter(phaser));
 }
 function appendBass(filters, bassGain) {
-  if (bassGain === void 0 || bassGain === 0) return;
-  filters.push(buildBassFilter(bassGain));
+  if (typeof bassGain !== "number" || !Number.isFinite(bassGain) || bassGain === 0) return;
+  filters.push(buildBassFilter(Math.max(-20, Math.min(20, bassGain))));
 }
 function appendDynaudnorm(filters, enabled) {
   if (!enabled) return;
@@ -576,7 +577,7 @@ function buildSimpleMasteringFilterChain() {
   return SIMPLE_MASTERING_FILTER_CHAIN;
 }
 function buildNormalizationFilter() {
-  return "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1";
+  return "volume=3dB,alimiter=limit=0.95:level=disabled";
 }
 function buildTempoFilter(tempo) {
   if (tempo >= 0.5 && tempo <= 2) {
@@ -595,12 +596,10 @@ function buildTempoFilter(tempo) {
   filters.push(`atempo=${remaining.toFixed(4)}`);
   return filters.join(",");
 }
-function buildPitchFilter(semitones) {
-  const rate = Math.pow(2, semitones / 12);
-  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
-}
 function buildPhaserFilter(phaser) {
-  return `aphaser=delay=${phaser.delayMs}:decay=${phaser.decay}:speed=${phaser.speedHz}:type=${phaser.type}`;
+  const num = (v, min, max, def) => typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
+  const type = phaser.type === "t" ? "t" : "s";
+  return `aphaser=in_gain=0.9:out_gain=0.85:delay=${num(phaser.delayMs, 0, 5, 3)}:decay=${num(phaser.decay, 0, 0.99, 0.4)}:speed=${num(phaser.speedHz, 0.1, 2, 0.5)}:type=${type}`;
 }
 function buildBassFilter(gain) {
   return `bass=g=${gain.toFixed(1)}:f=100:width_type=q:width=0.5`;
@@ -608,9 +607,13 @@ function buildBassFilter(gain) {
 function buildDynaudnormFilter() {
   return `dynaudnorm=framelen=150:gausssize=15`;
 }
-function buildCoupledSpeedFilter(tempo) {
-  const rate = tempo.toFixed(4);
-  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+function buildCoupledSpeedFilter(rawTempo, pitch) {
+  const tempo = typeof rawTempo === "number" && Number.isFinite(rawTempo) ? clamp(rawTempo, DSP_LIMITS.tempo) : 1;
+  const rate = typeof pitch === "number" && Number.isFinite(pitch) ? Math.pow(2, clamp(pitch, DSP_LIMITS.pitch) / 12) : tempo;
+  let filter = `aresample=${DEFAULT_SAMPLE_RATE},asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+  const residual = tempo / rate;
+  if (Math.abs(residual - 1) > 1e-4) filter += `,${buildTempoFilter(residual)}`;
+  return filter;
 }
 function buildEqWarmthFilter(warmth) {
   const gain = (warmth * 6).toFixed(1);
@@ -625,10 +628,13 @@ function buildReverbFilter(reverb) {
   const d5 = Math.round(d1 * (1.9 + 0.8 * scale));
   const decay = reverb.decay;
   const mix = reverb.mix;
-  return `aecho=0.8:${mix.toFixed(2)}:${d1}|${d2}|${d3}|${d4}|${d5}:${(decay * 0.8).toFixed(2)}|${(decay * 0.6).toFixed(2)}|${(decay * 0.4).toFixed(2)}|${(decay * 0.25).toFixed(2)}|${(decay * 0.1).toFixed(2)}`;
+  const taps = [0.8, 0.6, 0.4, 0.25, 0.1].map((k) => (decay * k * mix).toFixed(5)).join("|");
+  return `aecho=1:1:${d1}|${d2}|${d3}|${d4}|${d5}:${taps}`;
 }
+var ECHO_TAP_PER_FEEDBACK = 0.5;
 function buildEchoFilter(echo) {
-  return `aecho=0.8:0.2:${echo.delayMs}:0.6`;
+  const tap = Math.max(1e-4, Math.min(1, echo.feedback * ECHO_TAP_PER_FEEDBACK));
+  return `aecho=1:1:${echo.delayMs}:${tap.toFixed(4)}`;
 }
 function buildLowpassFilter(cutoffHz, hfDamping) {
   if (cutoffHz !== void 0) {
@@ -674,6 +680,39 @@ function clamp(value, limits) {
   if (value < limits.min) return limits.min;
   if (value > limits.max) return limits.max;
   return value;
+}
+function normalizeStereoIrEnergy(data) {
+  const energy = [0, 0];
+  for (let i = 0; i < data.length; i += 1) energy[i & 1] += data[i] * data[i];
+  if (!energy.every((e) => e > 0 && Number.isFinite(e))) return false;
+  const scale = energy.map((e) => 1 / Math.sqrt(e));
+  for (let i = 0; i < data.length; i += 1) data[i] *= scale[i & 1];
+  return true;
+}
+var PLAYBACK_DEVICES = {
+  // Makeup: IR decoded with the 30 Hz 4th-order highpass and unit energy; stage-on vs stage-off K-weighted
+  // loudness (highpass 60 Hz + treble +4 dB @1.5 kHz, astats RMS; ebur128 is unusable on the bundled 5.1
+  // core) of -3 dBFS pink noise within 0.2 LU. Harmonic-tone music mix then lands at -0.6/-0.5 (car),
+  // +0.7 (cassette) LU. Gramophone split between pink (-1.5) and music mix (+1.8): its makeup is 1.5 dB
+  // below the pink-only value (-14.5).
+  sedan_2002_front: { url: "irs/sedan_2002_front.wav", label: "Car (front)", makeupDb: -6 },
+  sedan_2002_rear: { url: "irs/sedan_2002_rear.wav", label: "Car (rear)", makeupDb: -6.5 },
+  gramophone_cabinet: { url: "irs/gramophone_cabinet.wav", label: "Gramophone", makeupDb: -16 },
+  cassette_portable: { url: "irs/cassette_portable.wav", label: "Cassette", makeupDb: -9 }
+};
+var REVERB_IRS = {
+  // Makeup: same K-weighted pink-noise measurement as above, so mix=1 wet loudness ~ dry loudness
+  // (music-like mix: -0.3 hotel). Plate: Conner Plate I "5s -45" sweep (replaced the EMT 140, whose author
+  // asks that it not be publicly hosted). On the bundled core at -14.5: pink -1.4, music mix 0.0 LU
+  // (the EMT at -14 was -1.1 / +0.8). Slightly darker above 4 kHz than the EMT.
+  plate_conner_i: { url: "irs/plate_conner_i.wav", label: "Plate", makeupDb: -14.5 },
+  hotel_bathroom: { url: "irs/hotel_bathroom.wav", label: "Hotel Bathroom", makeupDb: -7 }
+};
+function getPlaybackDevice(id) {
+  return typeof id === "string" && Object.hasOwn(PLAYBACK_DEVICES, id) ? PLAYBACK_DEVICES[id] : void 0;
+}
+function getReverbIr(id) {
+  return typeof id === "string" && Object.hasOwn(REVERB_IRS, id) ? REVERB_IRS[id] : void 0;
 }
 
 // ../../node_modules/tone/build/esm/version.js
@@ -18220,6 +18259,7 @@ var SlowverbEngine = class {
   initPayload;
   active = /* @__PURE__ */ new Map();
   toneReverbIrCache = /* @__PURE__ */ new Map();
+  wavIrCache = /* @__PURE__ */ new Map();
   constructor(options = {}) {
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
     this.initPayload = {
@@ -18307,6 +18347,8 @@ var SlowverbEngine = class {
   async buildRenderPayload(request) {
     const filterGraph = this.resolveFilterGraph(request);
     const toneIr = await this.resolveToneReverbIR(request.dspSpec);
+    const reverbIRWav = await this.resolveFileReverbIR(request.dspSpec);
+    const playbackIR = await this.resolvePlaybackIR(request.dspSpec);
     const format = ensureExportFormat(request.format);
     return {
       fileId: request.source.fileId,
@@ -18314,6 +18356,8 @@ var SlowverbEngine = class {
       dspSpec: request.dspSpec,
       reverbIR: toneIr?.pcm,
       reverbIRSampleRate: toneIr?.sampleRate,
+      reverbIRWav,
+      playbackIR,
       mastering: request.dspSpec?.mastering,
       format,
       bitrateKbps: request.bitrateKbps,
@@ -18321,8 +18365,30 @@ var SlowverbEngine = class {
       durationSec: request.durationSec
     };
   }
+  async resolvePlaybackIR(spec) {
+    const entry = getPlaybackDevice(spec?.playback?.device);
+    return entry ? this.fetchWavIr(entry.url) : void 0;
+  }
+  async resolveFileReverbIR(spec) {
+    if (spec?.quality?.reverb !== "file" || !spec.reverb || !(spec.reverb.mix > 0)) return void 0;
+    const entry = getReverbIr(spec.reverb.ir);
+    if (!entry) throw new Error(`Unknown reverb IR: ${String(spec.reverb.ir)}`);
+    return this.fetchWavIr(entry.url);
+  }
+  /** Fetches a bundled WAV once per url; returns a copy because the buffer is transferred to the worker. */
+  async fetchWavIr(url) {
+    let bytes = this.wavIrCache.get(url);
+    if (!bytes) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`IR fetch failed (${response.status}): ${url}`);
+      }
+      bytes = await response.arrayBuffer();
+      this.wavIrCache.set(url, bytes);
+    }
+    return bytes.slice(0);
+  }
   resolveFilterGraph(request) {
-    if (request.filterGraph) return request.filterGraph;
     if (request.dspSpec) return compileFilterChain(request.dspSpec);
     return void 0;
   }
@@ -18332,10 +18398,16 @@ var SlowverbEngine = class {
     if (!spec.reverb) return null;
     if (spec.reverb.mix <= 0) return null;
     if (reverbAlgo === "freeverb") {
-      return this.resolveFreeverbIR(spec.reverb);
+      try {
+        return this.resolveFreeverbIR(spec.reverb);
+      } catch (error) {
+        console.warn("[SlowverbEngine] Freeverb IR generation failed", error);
+        return null;
+      }
     }
     if (reverbAlgo !== "tone") return null;
     const key = JSON.stringify({
+      algo: "tone",
       decay: spec.reverb.decay,
       preDelayMs: spec.reverb.preDelayMs,
       roomScale: spec.reverb.roomScale ?? null,
@@ -18346,7 +18418,9 @@ var SlowverbEngine = class {
       return { pcm: cached.pcm.slice(0), sampleRate: cached.sampleRate };
     }
     try {
-      const generated = await withTimeout(generateToneReverbIr(spec.reverb), 12e3, "Tone IR generation timed out");
+      const generated = normalizeIrEnergy(
+        await withTimeout(generateToneReverbIr(spec.reverb), 12e3, "Tone IR generation timed out")
+      );
       this.toneReverbIrCache.set(key, generated);
       return { pcm: generated.pcm.slice(0), sampleRate: generated.sampleRate };
     } catch (error) {
@@ -18359,11 +18433,12 @@ var SlowverbEngine = class {
    *
    * Maps Slowverb's normalised ReverbSpec (0-1) to SoX-range FreeverbParams
    * (0-100), generates the IR with pure-JS arithmetic, and caches the result.
-   * The returned IR is normalised to -1 dBFS, so no additional makeup gain
-   * is required from the worker's convolution pipeline.
+   * The returned IR is rescaled to unit energy per channel (normalizeIrEnergy);
+   * the worker applies a fixed wet makeup (IR_WET_MAKEUP_DB) and blends by mix.
    */
   resolveFreeverbIR(reverb) {
     const key = JSON.stringify({
+      algo: "freeverb",
       decay: reverb.decay,
       preDelayMs: reverb.preDelayMs,
       roomScale: reverb.roomScale ?? null,
@@ -18389,7 +18464,7 @@ var SlowverbEngine = class {
       sampleRate,
       durationSec
     };
-    const result = generateFreeverbIR(params);
+    const result = normalizeIrEnergy(generateFreeverbIR(params));
     this.toneReverbIrCache.set(key, result);
     return { pcm: result.pcm.slice(0), sampleRate: result.sampleRate };
   }
@@ -18469,6 +18544,8 @@ var WorkerRunner = class {
     const requestId = this.nextRequestId();
     const transfer = [];
     if (payload.reverbIR) transfer.push(payload.reverbIR);
+    if (payload.reverbIRWav) transfer.push(payload.reverbIRWav);
+    if (payload.playbackIR) transfer.push(payload.playbackIR);
     return this.sendWithLog({ type, requestId, jobId, payload }, { transfer });
   }
   async waveform(payload, jobId) {
@@ -18592,6 +18669,11 @@ var WorkerRunner = class {
     }
   }
 };
+function normalizeIrEnergy(ir) {
+  const data = new Float32Array(ir.pcm.slice(0));
+  if (!normalizeStereoIrEnergy(data)) throw new Error("Reverb IR has zero or non-finite energy");
+  return { pcm: data.buffer, sampleRate: ir.sampleRate };
+}
 async function generateToneReverbIr(reverb) {
   try {
     await start();

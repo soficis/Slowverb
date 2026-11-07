@@ -20,7 +20,12 @@ export function isSoundTouchEnabled(payload: RenderPayload): boolean {
 export function isToneReverbEnabled(payload: RenderPayload): boolean {
   const spec = payload.dspSpec;
   const algorithm = spec?.quality?.reverb ?? "ffmpeg";
-  return algorithm === "tone" && spec?.reverb != null;
+  return (algorithm === "tone" || algorithm === "freeverb" || algorithm === "file") &&
+    spec?.reverb != null && spec.reverb.mix > 0;
+}
+
+export function isPlaybackDeviceEnabled(payload: RenderPayload): boolean {
+  return payload.dspSpec?.playback != null && payload.playbackIR != null;
 }
 
 export function isSimpleMasteringEnabled(payload: RenderPayload): boolean {

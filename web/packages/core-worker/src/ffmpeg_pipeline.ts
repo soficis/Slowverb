@@ -1,4 +1,4 @@
-import { compileFilterChainParts } from "@slowverb/shared";
+import { compileFilterChainParts, getPlaybackDevice, getReverbIr, normalizeStereoIrEnergy } from "@slowverb/shared";
 import type {
   EncodePcmPayload,
   ProbeResultPayload,
@@ -20,14 +20,13 @@ import {
   normalizeInPlace,
   parseProbeLogs,
   readAndSplitF32Stereo,
+  readInterleavedF32,
   writeInterleavedF32Stereo,
 } from "./worker_utils.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
 import { runSoundTouchStage } from "./soundtouch_pipeline.js";
 import {
   applyPhaseLimiterStage,
-  applySimpleMasteringBoostStage,
-  isSimpleMasteringWithToneReverb,
 } from "./mastering_pipeline.js";
 
 interface ProgressCallbacks {
@@ -125,6 +124,38 @@ interface PcmPipelineOptions {
   applyPhaseLimiter: boolean;
   useSoundTouch: boolean;
   useToneReverb: boolean;
+  usePlaybackDevice: boolean;
+}
+
+// Measured on the bundled FFmpeg 5.1 core: unit-energy IRs (gtype=none) on -3 dBFS pink noise give wet
+// RMS +5.8 dB (tone surrogate) / +9.7 dB (freeverb) vs dry across 4 decay/room settings; -8 dB centres both.
+const IR_WET_MAKEUP_DB = -8;
+
+/**
+ * Decodes a WAV IR (any rate/channels) to 44.1 kHz stereo f32 with ffmpeg, scales it to unit energy
+ * per channel and writes it to a temp file (registered in tempFiles). Returns the f32 file name.
+ */
+function decodeWavIrToUnitEnergyF32(
+  ffmpeg: WorkerFfmpegBridge,
+  wav: ArrayBuffer,
+  baseName: string,
+  sampleRate: number,
+  tempFiles: string[]
+): string {
+  const wavFile = `${baseName}.wav`;
+  const irFile = `${baseName}.f32`;
+  tempFiles.push(wavFile, irFile);
+  ffmpeg.FS.writeFile(wavFile, new Uint8Array(wav));
+  // Two 2-pole highpasses (4th order @ 30 Hz) strip DC/subsonic measurement artefacts from the IR
+  // before energy normalisation, so they neither colour the output nor dominate the level.
+  ffmpeg.exec(
+    "-i", wavFile, "-af", "highpass=f=30:poles=2,highpass=f=30:poles=2",
+    "-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", irFile
+  );
+  const ir = readInterleavedF32(ffmpeg.FS, irFile);
+  if (!normalizeStereoIrEnergy(ir)) throw new Error("IR has zero or non-finite energy");
+  ffmpeg.FS.writeFile(irFile, new Uint8Array(ir.buffer));
+  return irFile;
 }
 
 export async function renderWithPcmPipeline(
@@ -165,7 +196,8 @@ export async function renderWithPcmPipeline(
     if (!payload.dspSpec?.reverb) {
       throw new Error("Tone reverb enabled but dspSpec.reverb missing");
     }
-    if (!payload.reverbIR) {
+    const fileIr = payload.dspSpec.quality?.reverb === "file";
+    if (!payload.reverbIR && !(fileIr && payload.reverbIRWav)) {
       callbacks.postMasteringWarning(
         jobId,
         payload.fileId,
@@ -174,15 +206,26 @@ export async function renderWithPcmPipeline(
       throw new Error("Tone reverb enabled but reverbIR was not provided");
     }
 
-    const irFile = `${payload.fileId}-${jobId}-ir.f32`;
-    ffmpeg.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
-    tempFiles.push(irFile);
+    let irFile: string;
+    let wetMakeupDb = IR_WET_MAKEUP_DB;
+    if (fileIr && payload.reverbIRWav) {
+      const entry = getReverbIr(payload.dspSpec.reverb.ir);
+      if (!entry) throw new Error(`Unknown reverb IR: ${String(payload.dspSpec.reverb.ir)}`);
+      wetMakeupDb = entry.makeupDb;
+      irFile = decodeWavIrToUnitEnergyF32(
+        ffmpeg, payload.reverbIRWav, `${payload.fileId}-${jobId}-reverb-ir`, sampleRate, tempFiles
+      );
+    } else {
+      irFile = `${payload.fileId}-${jobId}-ir.f32`;
+      ffmpeg.FS.writeFile(irFile, new Uint8Array(payload.reverbIR as ArrayBuffer));
+      tempFiles.push(irFile);
+    }
 
     const { pre, post } = compileFilterChainParts(payload.dspSpec);
     const mix = clampNumber(payload.dspSpec.reverb.mix, 0.0, 1.0);
     const dry = (1 - mix).toFixed(4);
     const wet = mix.toFixed(4);
-    const irSampleRate = typeof payload.reverbIRSampleRate === "number"
+    const irSampleRate = !fileIr && typeof payload.reverbIRSampleRate === "number"
       ? payload.reverbIRSampleRate
       : sampleRate;
 
@@ -191,10 +234,12 @@ export async function renderWithPcmPipeline(
     args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
 
     const chains: string[] = [];
-    chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
+    chains.push(`[0:a]${pre},asplit=2[d][w]`);
     chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
-    chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
-    chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
+    // IR is unit-energy (engine.ts); gtype=none disables FFmpeg 5.1's own IR gain normalisation.
+    chains.push(`[w][ir]afir=dry=1:wet=1:gtype=none,volume=${wetMakeupDb}dB[wv]`);
+    chains.push(`[d][wv]amix=inputs=2:weights='${dry} ${wet}':normalize=0[mixed]`);
+    chains.push(`[mixed]${post}[out]`);
 
     args.push("-filter_complex", chains.join(";"));
     args.push("-map", "[out]");
@@ -210,6 +255,26 @@ export async function renderWithPcmPipeline(
     callbacks.withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
     tempFiles.push(effectsFile);
     currentPcmFile = effectsFile;
+  }
+
+  if (options.usePlaybackDevice && payload.playbackIR) {
+    const device = getPlaybackDevice(payload.dspSpec?.playback?.device);
+    if (!device) throw new Error("Unknown playback device");
+    const playbackIrFile = decodeWavIrToUnitEnergyF32(
+      ffmpeg, payload.playbackIR, `${payload.fileId}-${jobId}-playback-ir`, sampleRate, tempFiles
+    );
+    const playbackFile = `${payload.fileId}-${jobId}-playback.f32`;
+    tempFiles.push(playbackFile);
+
+    const playbackArgs = [
+      "-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile,
+      "-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", playbackIrFile,
+      "-filter_complex",
+      `[0:a][1:a]afir=dry=1:wet=1:gtype=none,volume=${device.makeupDb}dB,alimiter=limit=0.95:level=disabled[out]`,
+      "-map", "[out]", "-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", playbackFile,
+    ];
+    callbacks.withProgressStage("effects", 0.6, 0.1, () => ffmpeg.exec(...playbackArgs));
+    currentPcmFile = playbackFile;
   }
 
   if (options.applyPhaseLimiter) {
@@ -239,20 +304,6 @@ export async function renderWithPcmPipeline(
 
     tempFiles.push(...mastered.tempFiles);
     currentPcmFile = mastered.outputFile;
-  }
-
-  if (isSimpleMasteringWithToneReverb(payload.mastering, options.useToneReverb)) {
-    const boosted = applySimpleMasteringBoostStage({
-      ffmpeg,
-      fileId: payload.fileId,
-      jobId,
-      sampleRate,
-      inputFile: currentPcmFile,
-      withProgressStage: callbacks.withProgressStage,
-      postProgress: () => {},
-    });
-    tempFiles.push(boosted.tempFile);
-    currentPcmFile = boosted.outputFile;
   }
 
   const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);

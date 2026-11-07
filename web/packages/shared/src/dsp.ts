@@ -6,7 +6,14 @@ export type SpecVersion = "1.0.0";
 export type MasteringAlgorithm = "simple" | "phaselimiter" | "phaselimiter_pro";
 
 export type TimeStretchAlgorithm = "ffmpeg" | "soundtouch";
-export type ReverbAlgorithm = "ffmpeg" | "tone" | "freeverb";
+export type PlaybackDeviceId =
+  | "sedan_2002_front"
+  | "sedan_2002_rear"
+  | "gramophone_cabinet"
+  | "cassette_portable";
+export type ReverbIrId = "plate_conner_i" | "hotel_bathroom";
+
+export type ReverbAlgorithm = "ffmpeg" | "tone" | "freeverb" | "file";
 
 export interface QualitySpec {
   readonly timeStretch?: TimeStretchAlgorithm;
@@ -27,6 +34,7 @@ export interface ReverbSpec {
   readonly roomScale?: NormalizedUnit;
   readonly mix: NormalizedUnit;
   readonly hfDamping?: number; // NEW: 0-1, maps to SoX hf-damping coefficient
+  readonly ir?: ReverbIrId; // required when quality.reverb === "file"
 }
 
 export interface EchoSpec {
@@ -59,6 +67,7 @@ export interface DspSpec {
   readonly bassGain?: number;       // -20 to +20 dB
   readonly dynaudnorm?: boolean;
   readonly coupledMode?: boolean;   // SoX speed behavior (no atempo, just asetrate)
+  readonly playback?: { readonly device: PlaybackDeviceId };  // fully wet playback-device convolution
 }
 
 export const DSP_SPEC_VERSION: SpecVersion = "1.0.0";

@@ -30,7 +30,14 @@ export function applySoundTouch(
     }
   }
 
-  const filter = new SimpleFilter(new InterleavedStereoSource(input), soundTouch);
+  // SimpleFilter never flushes SoundTouch's internal buffers, so the last ~0.35 s of input was
+  // dropped. Feed trailing silence to push it through, then trim to the exact stretched length.
+  const flushFrames = 2 * 44100;
+  const padded = new Float32Array(input.length + flushFrames * 2);
+  padded.set(input);
+  const expectedFrames = Math.round(totalFrames / tempo);
+
+  const filter = new SimpleFilter(new InterleavedStereoSource(padded), soundTouch);
   const chunkFrames = 16384;
   const chunk = new Float32Array(chunkFrames * 2);
   const chunks: Float32Array[] = [];
@@ -51,15 +58,20 @@ export function applySoundTouch(
     }
   }
 
-  const totalSamples = chunks.reduce((sum, block) => sum + block.length, 0);
-  const output = new Float32Array(totalSamples);
+  const producedSamples = chunks.reduce((sum, block) => sum + block.length, 0);
+  const output = new Float32Array(Math.min(producedSamples, expectedFrames * 2));
   let offset = 0;
   for (const block of chunks) {
-    output.set(block, offset);
-    offset += block.length;
+    if (offset >= output.length) break;
+    const take = Math.min(block.length, output.length - offset);
+    output.set(block.subarray(0, take), offset);
+    offset += take;
   }
   return output;
 }
+
+// A stuck PhaseLimiter worker would otherwise hang the render (and leak the worker) forever.
+const PHASE_LIMITER_TIMEOUT_MS = 30 * 60 * 1000;
 
 export async function processWithPhaseLimiter(options: {
   leftChannel: Float32Array;
@@ -94,6 +106,12 @@ export async function processWithPhaseLimiter(options: {
             : 0.5,
       };
     const worker = new Worker(workerScript);
+    const timeout = setTimeout(() => {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.terminate();
+      reject(new Error("PhaseLimiter timed out"));
+    }, PHASE_LIMITER_TIMEOUT_MS);
 
     const onMessage = (event: MessageEvent) => {
       const data = event.data ?? {};
@@ -107,6 +125,7 @@ export async function processWithPhaseLimiter(options: {
       if (type === "complete") {
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
+        clearTimeout(timeout);
         worker.terminate();
 
         const left = data.leftChannel;
@@ -121,6 +140,7 @@ export async function processWithPhaseLimiter(options: {
       if (type === "error") {
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
+        clearTimeout(timeout);
         worker.terminate();
         reject(new Error(data.error ?? "PhaseLimiter worker error"));
       }
@@ -129,6 +149,7 @@ export async function processWithPhaseLimiter(options: {
     const onError = (event: ErrorEvent) => {
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
+      clearTimeout(timeout);
       worker.terminate();
       reject(new Error(event.message || "PhaseLimiter worker crashed"));
     };
@@ -149,6 +170,7 @@ export async function processWithPhaseLimiter(options: {
     } catch (error) {
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
+      clearTimeout(timeout);
       worker.terminate();
       reject(error);
     }

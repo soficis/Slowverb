@@ -115,7 +115,6 @@ function normalizeRender(params) {
   const source = normalizeSource(params.source);
   return {
     source,
-    filterGraph: params.filterGraph ?? params.filterChain,
     dspSpec: params.dspSpec ?? params.spec,
     format: params.format ?? "mp3",
     bitrateKbps: params.bitrateKbps,

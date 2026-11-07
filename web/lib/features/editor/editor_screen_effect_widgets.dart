@@ -409,6 +409,12 @@ class _EffectColumn extends ConsumerWidget {
                               parameters: parameters,
                               onUpdateParam: onUpdateParam,
                             ),
+                            _ChoiceSelector(
+                              label: 'Reverb type (needs HQ reverb)',
+                              options: _reverbTypeOptions,
+                              value: parameters['reverbType'] ?? 0.0,
+                              onChanged: (v) => onUpdateParam('reverbType', v),
+                            ),
                             ...advancedReverbParameterDefinitions.map(
                               (param) => Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
@@ -429,40 +435,38 @@ class _EffectColumn extends ConsumerWidget {
                             ),
                           ],
                         ),
-                      // Phaser controls (visible only when phaser depth > 0)
-                      if ((parameters['phaserDecay'] ?? 0) > 0) ...[
-                        const SizedBox(height: 8),
+                      // Phaser depth is always visible (0 = off); speed shows once depth > 0
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: EffectSlider(
+                          label: phaserDecayDef.label,
+                          value:
+                              parameters['phaserDecay'] ??
+                              phaserDecayDef.defaultValue,
+                          min: phaserDecayDef.min,
+                          max: phaserDecayDef.max,
+                          unit: '',
+                          formatValue: (v) =>
+                              _formatEffectValue('phaserDecay', v),
+                          onChanged: (v) => onUpdateParam('phaserDecay', v),
+                        ),
+                      ),
+                      if ((parameters['phaserDecay'] ?? 0) > 0)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: EffectSlider(
                             label: phaserSpeedHzDef.label,
-                            value: parameters['phaserSpeedHz'] ??
+                            value:
+                                parameters['phaserSpeedHz'] ??
                                 phaserSpeedHzDef.defaultValue,
                             min: phaserSpeedHzDef.min,
                             max: phaserSpeedHzDef.max,
                             unit: '',
                             formatValue: (v) =>
                                 _formatEffectValue('phaserSpeedHz', v),
-                            onChanged: (v) =>
-                                onUpdateParam('phaserSpeedHz', v),
+                            onChanged: (v) => onUpdateParam('phaserSpeedHz', v),
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: EffectSlider(
-                            label: phaserDecayDef.label,
-                            value: parameters['phaserDecay'] ??
-                                phaserDecayDef.defaultValue,
-                            min: phaserDecayDef.min,
-                            max: phaserDecayDef.max,
-                            unit: '',
-                            formatValue: (v) =>
-                                _formatEffectValue('phaserDecay', v),
-                            onChanged: (v) =>
-                                onUpdateParam('phaserDecay', v),
-                          ),
-                        ),
-                      ],
                       // Bass boost control (always visible, zero = no effect)
                       const SizedBox(height: 8),
                       Padding(
@@ -470,14 +474,20 @@ class _EffectColumn extends ConsumerWidget {
                         child: EffectSlider(
                           label: bassGainDef.label,
                           value:
-                              parameters['bassGain'] ?? bassGainDef.defaultValue,
+                              parameters['bassGain'] ??
+                              bassGainDef.defaultValue,
                           min: bassGainDef.min,
                           max: bassGainDef.max,
                           unit: '',
-                          formatValue: (v) =>
-                              _formatEffectValue('bassGain', v),
+                          formatValue: (v) => _formatEffectValue('bassGain', v),
                           onChanged: (v) => onUpdateParam('bassGain', v),
                         ),
+                      ),
+                      _ChoiceSelector(
+                        label: 'Playback device',
+                        options: _playbackDeviceOptions,
+                        value: parameters['playbackDevice'] ?? 0.0,
+                        onChanged: (v) => onUpdateParam('playbackDevice', v),
                       ),
                     ],
                   ),
@@ -681,6 +691,12 @@ class _EffectColumn extends ConsumerWidget {
                       parameters: parameters,
                       onUpdateParam: onUpdateParam,
                     ),
+                    _ChoiceSelector(
+                      label: 'Reverb type (needs HQ reverb)',
+                      options: _reverbTypeOptions,
+                      value: parameters['reverbType'] ?? 0.0,
+                      onChanged: (v) => onUpdateParam('reverbType', v),
+                    ),
                     ...advancedReverbParameterDefinitions.map(
                       (param) => Padding(
                         padding: const EdgeInsets.only(
@@ -699,44 +715,39 @@ class _EffectColumn extends ConsumerWidget {
                     ),
                   ],
                 ),
-              // Phaser controls (visible only when phaser depth > 0)
-              if ((parameters['phaserDecay'] ?? 0) > 0) ...[
-                const SizedBox(height: SlowverbTokens.spacingMd),
+              // Phaser depth is always visible (0 = off); speed shows once depth > 0
+              Padding(
+                padding: const EdgeInsets.only(
+                  bottom: SlowverbTokens.spacingMd,
+                ),
+                child: EffectSlider(
+                  label: phaserDecayDef.label,
+                  value:
+                      parameters['phaserDecay'] ?? phaserDecayDef.defaultValue,
+                  min: phaserDecayDef.min,
+                  max: phaserDecayDef.max,
+                  unit: '',
+                  formatValue: (v) => _formatEffectValue('phaserDecay', v),
+                  onChanged: (v) => onUpdateParam('phaserDecay', v),
+                ),
+              ),
+              if ((parameters['phaserDecay'] ?? 0) > 0)
                 Padding(
                   padding: const EdgeInsets.only(
                     bottom: SlowverbTokens.spacingMd,
                   ),
                   child: EffectSlider(
                     label: phaserSpeedHzDef.label,
-                    value: parameters['phaserSpeedHz'] ??
+                    value:
+                        parameters['phaserSpeedHz'] ??
                         phaserSpeedHzDef.defaultValue,
                     min: phaserSpeedHzDef.min,
                     max: phaserSpeedHzDef.max,
                     unit: '',
-                    formatValue: (v) =>
-                        _formatEffectValue('phaserSpeedHz', v),
-                    onChanged: (v) =>
-                        onUpdateParam('phaserSpeedHz', v),
+                    formatValue: (v) => _formatEffectValue('phaserSpeedHz', v),
+                    onChanged: (v) => onUpdateParam('phaserSpeedHz', v),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: SlowverbTokens.spacingMd,
-                  ),
-                  child: EffectSlider(
-                    label: phaserDecayDef.label,
-                    value: parameters['phaserDecay'] ??
-                        phaserDecayDef.defaultValue,
-                    min: phaserDecayDef.min,
-                    max: phaserDecayDef.max,
-                    unit: '',
-                    formatValue: (v) =>
-                        _formatEffectValue('phaserDecay', v),
-                    onChanged: (v) =>
-                        onUpdateParam('phaserDecay', v),
-                  ),
-                ),
-              ],
               // Bass boost control (always visible, zero = no effect)
               const SizedBox(height: SlowverbTokens.spacingMd),
               Padding(
@@ -753,10 +764,76 @@ class _EffectColumn extends ConsumerWidget {
                   onChanged: (v) => onUpdateParam('bassGain', v),
                 ),
               ),
+              _ChoiceSelector(
+                label: 'Playback device',
+                options: _playbackDeviceOptions,
+                value: parameters['playbackDevice'] ?? 0.0,
+                onChanged: (v) => onUpdateParam('playbackDevice', v),
+              ),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+const _playbackDeviceOptions = [
+  'Off',
+  'Car (front)',
+  'Car (rear)',
+  'Gramophone',
+  'Cassette',
+];
+const _reverbTypeOptions = [
+  'Tone',
+  'Freeverb',
+  'Plate',
+  'Hotel Bathroom',
+];
+
+/// Labelled single-choice chip row; the value is the selected option index.
+class _ChoiceSelector extends StatelessWidget {
+  final String label;
+  final List<String> options;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  const _ChoiceSelector({
+    required this.label,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: SlowverbTokens.spacingSm),
+        Wrap(
+          spacing: SlowverbTokens.spacingSm,
+          runSpacing: SlowverbTokens.spacingSm,
+          children: [
+            for (var i = 0; i < options.length; i++)
+              ChoiceChip(
+                label: Text(options[i]),
+                selected: value.round() == i,
+                onSelected: (_) => onChanged(i.toDouble()),
+                selectedColor: SlowverbColors.hotPink.withValues(alpha: 0.2),
+                backgroundColor: SlowverbColors.surfaceVariant,
+                labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: value.round() == i
+                      ? SlowverbColors.hotPink
+                      : SlowverbColors.textPrimary,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: SlowverbTokens.spacingSm),
+      ],
     );
   }
 }

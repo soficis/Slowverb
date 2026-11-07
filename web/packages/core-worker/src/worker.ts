@@ -24,6 +24,7 @@ import {
   isPhaseLimiterEnabled,
   isSimpleMasteringEnabled,
   isSoundTouchEnabled,
+  isPlaybackDeviceEnabled,
   isToneReverbEnabled,
   validateRenderPayload,
 } from "./worker_render_rules.js";
@@ -212,7 +213,8 @@ async function handleRender(
   const shouldUsePhaseLimiter = isPhaseLimiterEnabled(payload);
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb;
+  const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
   const filesToCleanup = new Set<string>([payload.fileId]);
 
   activeJobId = jobId;
@@ -272,6 +274,7 @@ async function handleRender(
         applyPhaseLimiter: shouldUsePhaseLimiter,
         useSoundTouch: shouldUseSoundTouch,
         useToneReverb: shouldUseToneReverb,
+        usePlaybackDevice: shouldUsePlayback,
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );
