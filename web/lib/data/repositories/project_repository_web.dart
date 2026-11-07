@@ -69,10 +69,14 @@ class ProjectRepositoryWeb implements ProjectRepository {
     final result = await store.getAll();
     await txn.completed;
 
-    final projects = result
-        .whereType<Map>()
-        .map((json) => Project.fromJson(Map<String, dynamic>.from(json)))
-        .toList();
+    final projects = <Project>[];
+    for (final json in result.whereType<Map>()) {
+      try {
+        projects.add(Project.fromJson(Map<String, dynamic>.from(json)));
+      } catch (error) {
+        debugPrint('Skipping malformed project record: $error');
+      }
+    }
 
     projects.sort(_sortByUpdatedAt);
     return projects;
@@ -228,14 +232,24 @@ class ProjectRepositoryWeb implements ProjectRepository {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
-        return decoded
-            .whereType<Map>()
-            .map((e) => Project.fromJson(Map<String, dynamic>.from(e)))
-            .toList()
-          ..sort(_sortByUpdatedAt);
+        final projects = <Project>[];
+        for (final e in decoded.whereType<Map>()) {
+          try {
+            projects.add(Project.fromJson(Map<String, dynamic>.from(e)));
+          } catch (error) {
+            debugPrint('Skipping malformed project record: $error');
+          }
+        }
+        return projects..sort(_sortByUpdatedAt);
       }
     } catch (error) {
-      debugPrint('Malformed project storage payload, resetting cache: $error');
+      debugPrint('Malformed project storage payload, backing up: $error');
+      // Keep one backup of the unreadable payload; reads repeat until the next
+      // save, so a timestamped key per read would pile up toward the quota.
+      const backupKey = '$_localStorageKey.corrupt';
+      if (web.window.localStorage.getItem(backupKey) == null) {
+        web.window.localStorage.setItem(backupKey, raw);
+      }
     }
     return [];
   }
