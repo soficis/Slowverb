@@ -9,6 +9,7 @@ export interface IrEntry {
 }
 
 // Whitelists: specs can only select these bundled files, never arbitrary URLs.
+// The service worker serves irs/ cache-first: when replacing an IR, give the file a new name.
 export const PLAYBACK_DEVICES: Readonly<Record<PlaybackDeviceId, IrEntry>> = {
   // Makeup: IR decoded with the 30 Hz 4th-order highpass and unit energy; stage-on vs stage-off K-weighted
   // loudness (highpass 60 Hz + treble +4 dB @1.5 kHz, astats RMS; ebur128 is unusable on the bundled 5.1

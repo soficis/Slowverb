@@ -1,5 +1,5 @@
 // Separate cache names for better versioning control
-const STATIC_CACHE_NAME = "slowverb-static-v11";
+const STATIC_CACHE_NAME = "slowverb-static-v12";
 const WASM_CACHE_NAME = "slowverb-wasm-v2";
 
 // WASM files get separate cache for easier maintenance
@@ -30,6 +30,54 @@ const STATIC_ASSETS = [
   "/icons/Icon-192.png",
   "/icons/Icon-512.png",
 ];
+
+// Served cache-first (see the fetch handler for why app code is not).
+const CACHE_FIRST_PATHS = [
+  /\/assets\/assets\/google_fonts\//,
+  /\/irs\//,
+  /\/vendor\//,
+  /\/icons\//,
+  /\/assets\/shaders\//,
+];
+
+function isCacheable(request, response) {
+  return (
+    response &&
+    response.status === 200 &&
+    response.type === "basic" &&
+    !request.url.includes("/api/") &&
+    !request.url.includes("vercel")
+  );
+}
+
+async function fromCacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (isCacheable(request, response)) {
+      const clone = response.clone();
+      caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(request, clone));
+    }
+    return response;
+  } catch {
+    return new Response("", { status: 504 });
+  }
+}
+
+async function fromNetworkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (isCacheable(request, response)) {
+      const clone = response.clone();
+      caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(request, clone));
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    return cached || new Response("", { status: 504 });
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -101,31 +149,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for static assets
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
+  if (event.request.method !== "GET") return;
 
-      return fetch(event.request).then((response) => {
-        // Cache only valid responses
-        if (
-          !response ||
-          response.status !== 200 ||
-          response.type !== "basic" ||
-          event.request.method !== "GET" ||
-          event.request.url.includes("/api/") ||
-          event.request.url.includes("google-analytics") ||
-          event.request.url.includes("vercel") // Avoid caching analytics
-        ) {
-          return response;
-        }
-
-        const clone = response.clone();
-        caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        return response;
-      });
-    }).catch(() => {
-      return new Response("", { status: 504 });
-    })
-  );
+  // App code (HTML, main.dart.js, bridge/worker JS, manifests) is network-first so a deploy
+  // is picked up on the next load without a manual cache-version bump, and old and new files
+  // never mix. The cache is only an offline fallback. Large files that change only with their
+  // name or rarely (fonts, IRs, vendored libs, icons) stay cache-first.
+  const path = new URL(requestUrl).pathname;
+  const cacheFirst = CACHE_FIRST_PATHS.some((re) => re.test(path));
+  event.respondWith(cacheFirst ? fromCacheFirst(event.request) : fromNetworkFirst(event.request));
 });

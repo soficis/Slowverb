@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:web/web.dart' as web;
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
 
 class VisualizerState {
@@ -9,10 +10,24 @@ class VisualizerState {
 }
 
 class VisualizerController extends StateNotifier<VisualizerState> {
+  static const _storageKey = 'slowverb.visualizer';
+
   VisualizerController()
-    : super(VisualizerState(activePreset: VisualizerPresets.random()));
+    : super(VisualizerState(activePreset: _initialPreset()));
 
   static List<VisualizerPreset> get presets => VisualizerPresets.all;
+
+  /// The user's last choice if stored, otherwise a random calm one.
+  static VisualizerPreset _initialPreset() {
+    try {
+      final id = web.window.localStorage.getItem(_storageKey);
+      final stored = presets.where((p) => p.id == id).firstOrNull;
+      if (stored != null) return stored;
+    } catch (_) {
+      // Storage blocked (private mode etc.): fall through to random.
+    }
+    return VisualizerPresets.random();
+  }
 
   void selectPreset(String id) {
     if (state.activePreset.id == id) return;
@@ -22,6 +37,11 @@ class VisualizerController extends StateNotifier<VisualizerState> {
       orElse: () => VisualizerPresets.pipesVaporwave,
     );
     state = VisualizerState(activePreset: preset, isPlaying: state.isPlaying);
+    try {
+      web.window.localStorage.setItem(_storageKey, preset.id);
+    } catch (_) {
+      // Not persisting is fine.
+    }
   }
 
   void setPlaying(bool isPlaying) {

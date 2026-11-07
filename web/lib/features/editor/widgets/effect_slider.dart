@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
 
 class EffectSlider extends StatelessWidget {
   final String label;
@@ -57,46 +57,28 @@ class EffectSlider extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            ExcludeSemantics(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: SlowverbColors.textSecondary,
-                ),
-              ),
-            ),
+            ExcludeSemantics(child: PlateLabel(label)),
             Semantics(
               button: true,
               label: 'Type a value for $label',
-              child: InkWell(
-                onTap: () => _editValue(context),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ExcludeSemantics(
-                    child: Text(
-                      _format(value),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: SlowverbColors.neonCyan,
-                        fontWeight: FontWeight.w500,
-                      ),
+              child: Tooltip(
+                message: 'Click to type a value',
+                child: InkWell(
+                  onTap: () => _editValue(context),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
                     ),
+                    child: ExcludeSemantics(child: VfdText(_format(value))),
                   ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 4,
-            activeTrackColor: SlowverbColors.neonCyan,
-            inactiveTrackColor: SlowverbColors.surfaceVariant,
-            thumbColor: Colors.white,
-            overlayColor: SlowverbColors.neonCyan.withValues(alpha: 0.2),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-          ),
+        SizedBox(
+          height: 36,
           child: MergeSemantics(
             child: Semantics(
               label: label,

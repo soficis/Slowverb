@@ -638,7 +638,11 @@ void installLogHandlerImpl(WasmAudioEngine engine) {
         final warning = message.substring('mastering-warning:'.length).trim();
         engine._warningCallback?.call(warning);
       }
-      debugPrint('[WasmAudioEngine][$level] $message');
+      // The bridge already prints warn/error to the console; echoing every
+      // line again here doubled the noise.
+      if (kDebugMode && (level == 'warn' || level == 'error')) {
+        debugPrint('[WasmAudioEngine][$level] $message');
+      }
     }).toJS,
   );
 }
