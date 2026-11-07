@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:slowverb_web/app/app_version.dart';
 import 'package:slowverb_web/app/retro/retro_widgets.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
@@ -187,7 +188,7 @@ class AboutScreen extends StatelessWidget {
 
                         // Version
                         const Center(
-                          child: VfdText('Version 1.0.0-beta', size: 12),
+                          child: VfdText('Version $appVersion', size: 12),
                         ),
                       ],
                     ),
