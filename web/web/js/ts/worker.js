@@ -4798,9 +4798,8 @@ function buildOutputName(fileId, jobId, format, isPreview) {
 function readAndSplitF32Stereo(fs, path) {
   const bytes = fs.readFile(path);
   if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
-  const pcm = bytes.slice().buffer;
-  const interleaved = new Float32Array(pcm);
-  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+  if (bytes.byteLength % 8 !== 0) throw new Error("Invalid stereo PCM length");
+  const interleaved = bytes.byteOffset % 4 === 0 ? new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4) : new Float32Array(bytes.slice().buffer);
   const frames = interleaved.length / 2;
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:idb_shim/idb_browser.dart';
+import 'package:slowverb_web/data/repositories/slowverb_idb.dart';
 import 'package:slowverb_web/domain/exceptions/app_exceptions.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/preset_repository.dart';
@@ -9,9 +10,7 @@ import 'package:web/web.dart' as web;
 
 /// IndexedDB-backed preset repository with localStorage fallback.
 class PresetRepositoryWeb implements PresetRepository {
-  static const _dbName = 'slowverb_web';
-  static const _storeName = 'custom_presets';
-  static const _dbVersion = 3; // Incremented from project repo version
+  static const _storeName = SlowverbIdb.customPresets;
   static const _localStorageKey = 'slowverb.custom_presets';
 
   final IdbFactory? _factory;
@@ -32,26 +31,7 @@ class PresetRepositoryWeb implements PresetRepository {
         return;
       }
 
-      _db = await _factory.open(
-        _dbName,
-        version: _dbVersion,
-        onUpgradeNeeded: (VersionChangeEvent e) {
-          final db = e.database;
-
-          // Ensure project stores exist (from ProjectRepository)
-          if (!db.objectStoreNames.contains('projects')) {
-            db.createObjectStore('projects', keyPath: 'id');
-          }
-          if (!db.objectStoreNames.contains('project_handles')) {
-            db.createObjectStore('project_handles');
-          }
-
-          // Create custom presets store
-          if (!db.objectStoreNames.contains(_storeName)) {
-            db.createObjectStore(_storeName, keyPath: 'id');
-          }
-        },
-      );
+      _db = await SlowverbIdb.open(_factory);
     } catch (error) {
       debugPrint(
         'IndexedDB unavailable, using localStorage for presets: $error',

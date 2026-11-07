@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:idb_shim/idb_browser.dart';
+import 'package:slowverb_web/data/repositories/slowverb_idb.dart';
 import 'package:slowverb_web/domain/exceptions/app_exceptions.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/project_repository.dart';
@@ -9,10 +10,8 @@ import 'package:web/web.dart' as web;
 
 /// IndexedDB-backed project repository with a localStorage fallback.
 class ProjectRepositoryWeb implements ProjectRepository {
-  static const _dbName = 'slowverb_web';
-  static const _storeName = 'projects';
-  static const _handleStoreName = 'project_handles';
-  static const _dbVersion = 2;
+  static const _storeName = SlowverbIdb.projects;
+  static const _handleStoreName = SlowverbIdb.projectHandles;
   static const _localStorageKey = 'slowverb.projects';
 
   final IdbFactory? _factory;
@@ -34,19 +33,8 @@ class ProjectRepositoryWeb implements ProjectRepository {
         return;
       }
 
-      _db = await _factory.open(
-        _dbName,
-        version: _dbVersion,
-        onUpgradeNeeded: (VersionChangeEvent e) {
-          final db = e.database;
-          if (!db.objectStoreNames.contains(_storeName)) {
-            db.createObjectStore(_storeName, keyPath: 'id');
-          }
-          if (!db.objectStoreNames.contains(_handleStoreName)) {
-            db.createObjectStore(_handleStoreName);
-          }
-        },
-      );
+      _db = await SlowverbIdb.open(_factory);
+      await _migrateFromLocalStorage();
     } catch (error) {
       debugPrint(
         'IndexedDB unavailable, using localStorage for projects: $error',
@@ -223,6 +211,27 @@ class ProjectRepositoryWeb implements ProjectRepository {
       'lastExportBitrateKbps': project.lastExportBitrateKbps,
       'lastExportDate': project.lastExportDate?.toIso8601String(),
     };
+  }
+
+  /// Projects saved while IndexedDB failed to open went to localStorage.
+  /// Move them into IndexedDB (without overwriting) so the Library shows them.
+  Future<void> _migrateFromLocalStorage() async {
+    final List<Project> stranded;
+    try {
+      if (web.window.localStorage.getItem(_localStorageKey) == null) return;
+      stranded = _getAllFromLocalStorage();
+    } catch (_) {
+      return;
+    }
+    final txn = _db!.transaction(_storeName, idbModeReadWrite);
+    final store = txn.objectStore(_storeName);
+    for (final project in stranded) {
+      if (await store.getObject(project.id) == null) {
+        await store.put(_projectToJson(project));
+      }
+    }
+    await txn.completed;
+    web.window.localStorage.removeItem(_localStorageKey);
   }
 
   List<Project> _getAllFromLocalStorage() {
