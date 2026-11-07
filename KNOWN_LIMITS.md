@@ -12,7 +12,8 @@ Revisit after real-song testing. Values here are guesses or taste calls, not mea
 
 Browser memory is the real ceiling: a long lossless file is decoded to 32-bit float in memory several times
 over (decode, effects, mastering). Users should be warned before rendering very long or very large files,
-especially with PhaseLimiter Pro on mobile. **TODO (UI pass):** add that warning in the import/export flow.
+especially with PhaseLimiter Pro on mobile. The editor shows a one-time warning when a track of 10 minutes
+or more loads (`_longTrackWarning` in `web/lib/features/editor/editor_screen.dart`); the threshold is a guess.
 
 ## Sound taste calls (decide by ear)
 

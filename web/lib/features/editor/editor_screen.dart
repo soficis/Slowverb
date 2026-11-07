@@ -36,6 +36,10 @@ class EditorScreen extends ConsumerStatefulWidget {
   ConsumerState<EditorScreen> createState() => _EditorScreenState();
 }
 
+/// Tracks at least this long get a memory/time warning when loaded.
+/// See KNOWN_LIMITS.md.
+const _longTrackWarning = Duration(minutes: 10);
+
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   bool _deckCollapsed = false;
   bool _soundCollapsed = false;
@@ -75,6 +79,26 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
     ref.listen(audioEditorProvider.select((s) => s.isPlaying), (_, isPlaying) {
       ref.read(visualizerProvider.notifier).setPlaying(isPlaying);
+    });
+
+    // Long tracks are decoded to 32-bit float several times over while
+    // rendering (~210 MB per copy for 10 min of stereo), which can exhaust a
+    // phone's browser memory. Warn once per loaded track.
+    ref.listen(audioEditorProvider.select((s) => s.audioDuration), (
+      prev,
+      next,
+    ) {
+      if (next == null || next == prev || next < _longTrackWarning) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 10),
+          content: Text(
+            'Long track (${next.inMinutes} min). Rendering it takes a lot of '
+            'memory and may fail on phones; Level 5 mastering can take a long '
+            'time. Export in a desktop browser if it does.',
+          ),
+        ),
+      );
     });
 
     final hasProject = state.fileId != null || state.audioFileName != null;
