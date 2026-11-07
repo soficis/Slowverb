@@ -68,7 +68,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.fileData != null) {
         final bytes = widget.fileData!.bytes.length;
         if (bytes >= _largeFileWarningBytes) {
@@ -76,9 +76,16 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             'Large file (${(bytes / (1024 * 1024)).round()} MB)',
           );
         }
-        ref
+        await ref
             .read(audioEditorProvider.notifier)
             .loadAudioFile(widget.fileData!, project: widget.project);
+        // Checked after the load rather than by listening for a duration
+        // change: reloading the same file leaves the duration unchanged.
+        if (!mounted) return;
+        final duration = ref.read(audioEditorProvider).audioDuration;
+        if (duration != null && duration >= _longTrackWarning) {
+          _showLongTrackWarning('Long track (${duration.inMinutes} min)');
+        }
       }
     });
   }
@@ -107,16 +114,6 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       ref.read(visualizerProvider.notifier).setPlaying(isPlaying);
     });
 
-    // Long tracks are decoded to 32-bit float several times over while
-    // rendering (~210 MB per copy for 10 min of stereo), which can exhaust a
-    // phone's browser memory. Warn once per loaded track.
-    ref.listen(audioEditorProvider.select((s) => s.audioDuration), (
-      prev,
-      next,
-    ) {
-      if (next == null || next == prev || next < _longTrackWarning) return;
-      _showLongTrackWarning('Long track (${next.inMinutes} min)');
-    });
 
     final hasProject = state.fileId != null || state.audioFileName != null;
     if (!hasProject && !state.isLoading) {

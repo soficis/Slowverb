@@ -19,7 +19,14 @@ class _EditorMenuBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final narrow = MediaQuery.sizeOf(context).width < 600;
-    final active = ref.watch(visualizerProvider).activePreset;
+    final vis = ref.watch(visualizerProvider);
+    final active = vis.activePreset;
+    Widget check(bool on) => SizedBox(
+      width: 18,
+      child: on
+          ? const Icon(Icons.check, size: 16, color: SlowverbTokens.vfdCyan)
+          : null,
+    );
 
     return RetroMenuBar(
       leading: Row(
@@ -49,18 +56,18 @@ class _EditorMenuBar extends ConsumerWidget {
               child: const Text('Full screen'),
             ),
             const Divider(height: 1),
+            MenuItemButton(
+              leadingIcon: check(vis.shuffle),
+              trailingIcon: const Icon(Icons.shuffle, size: 16),
+              onPressed: () =>
+                  ref.read(visualizerProvider.notifier).selectShuffle(),
+              child: const Text('Shuffle'),
+            ),
+            const Divider(height: 1),
             for (final preset in VisualizerController.presets)
               MenuItemButton(
-                leadingIcon: SizedBox(
-                  width: 18,
-                  child: preset.id == active.id
-                      ? const Icon(
-                          Icons.check,
-                          size: 16,
-                          color: SlowverbTokens.vfdCyan,
-                        )
-                      : null,
-                ),
+                // With shuffle on, the current scene is shown but not ticked.
+                leadingIcon: check(!vis.shuffle && preset.id == active.id),
                 onPressed: () => ref
                     .read(visualizerProvider.notifier)
                     .selectPreset(preset.id),

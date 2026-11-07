@@ -200,9 +200,4 @@ abstract final class VisualizerPresets {
   ];
 
   /// Returns a random visualizer from the selectable list
-  static VisualizerPreset random() {
-    final index =
-        DateTime.now().millisecondsSinceEpoch % randomSelectable.length;
-    return randomSelectable[index];
-  }
 }
