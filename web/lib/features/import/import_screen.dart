@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:go_router/go_router.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
 import 'package:slowverb_web/app/router.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/utils/file_system_access.dart';
 
@@ -65,7 +66,7 @@ class _ImportScreenState extends State<ImportScreen> {
             messenger.showSnackBar(
               const SnackBar(
                 content: Text('Failed to read file data'),
-                backgroundColor: SlowverbColors.error,
+                backgroundColor: SlowverbTokens.error,
               ),
             );
           }
@@ -99,7 +100,7 @@ class _ImportScreenState extends State<ImportScreen> {
         messenger.showSnackBar(
           SnackBar(
             content: Text('Error picking file: $e'),
-            backgroundColor: SlowverbColors.error,
+            backgroundColor: SlowverbTokens.error,
           ),
         );
       }
@@ -108,313 +109,254 @@ class _ImportScreenState extends State<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final padding = EdgeInsets.all(
+      narrow ? SlowverbTokens.spacingMd : SlowverbTokens.spacingXl,
+    );
+    final formats = _supportedExtensions
+        .map((ext) => ext.toUpperCase())
+        .join(' · ');
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
+      body: RetroDesktop(
         child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 900,
-              ), // Increased max width
-              child: Padding(
-                padding: const EdgeInsets.all(32.0), // Increased padding
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Logo/Title
-                    ShaderMask(
-                      shaderCallback: (bounds) =>
-                          SlowverbColors.primaryGradient.createShader(bounds),
-                      child: Text(
-                        'SLOWVERB',
-                        style: Theme.of(context).textTheme.displayLarge
-                            ?.copyWith(
-                              fontSize: 72, // Force larger font size
-                              color: Colors.white,
-                              fontWeight:
-                                  FontWeight.w100, // Thinner for aesthetic
-                              letterSpacing: 12.0, // Wider spacing
-                            ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Slowed + Reverb Editor',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: SlowverbColors.textSecondary,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-
-                    const SizedBox(height: 64),
-
-                    // Drop zone
-                    DropTarget(
-                      onDragDone: (details) async {
-                        if (details.files.isEmpty) return;
-                        final file = details.files.first;
-                        final messenger = ScaffoldMessenger.of(context);
-                        final router = GoRouter.of(context);
-
-                        // Check extension
-                        final ext = file.name.split('.').last.toLowerCase();
-                        if (!_supportedExtensions.contains(ext)) {
-                          if (mounted) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Unsupported file format: .$ext'),
-                                backgroundColor: SlowverbColors.error,
-                              ),
-                            );
-                          }
-                          return;
-                        }
-
-                        setState(() => _isLoading = true);
-
-                        try {
-                          final bytes = await file.readAsBytes();
-                          if (mounted) {
-                            setState(() => _isLoading = false);
-                            final fileData = AudioFileData(
-                              filename: file.name,
-                              bytes: bytes,
-                            );
-
-                            router.push(
-                              AppRoutes.editor,
-                              extra: EditorScreenArgs(fileData: fileData),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() => _isLoading = false);
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Error reading file: $e'),
-                                backgroundColor: SlowverbColors.error,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      onDragEntered: (_) => setState(() => _isHovering = true),
-                      onDragExited: (_) => setState(() => _isHovering = false),
-                      child: MouseRegion(
-                        onEnter: (_) => setState(() => _isHovering = true),
-                        onExit: (_) => setState(() => _isHovering = false),
-                        child: GestureDetector(
-                          onTap: _isLoading ? null : _pickFile,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 300,
-                            decoration: BoxDecoration(
-                              color: _isHovering
-                                  ? SlowverbColors.surfaceVariant
-                                  : SlowverbColors.surface,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: _isHovering
-                                    ? SlowverbColors.primaryPurple
-                                    : SlowverbColors.backgroundLight,
-                                width: 2,
-                              ),
-                              boxShadow: _isHovering
-                                  ? [
-                                      BoxShadow(
-                                        color: SlowverbColors.primaryPurple
-                                            .withValues(alpha: 0.3),
-                                        blurRadius: 20,
-                                        spreadRadius: 2,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: _isLoading
-                                ? const Center(
-                                    child: CircularProgressIndicator(
-                                      color: SlowverbColors.primaryPurple,
-                                    ),
-                                  )
-                                : Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.audio_file_outlined,
-                                        size: 64,
-                                        color: _isHovering
-                                            ? SlowverbColors.primaryPurple
-                                            : SlowverbColors.textSecondary,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      Text(
-                                        'Drop audio file here',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineMedium
-                                            ?.copyWith(
-                                              color: _isHovering
-                                                  ? SlowverbColors.textPrimary
-                                                  : SlowverbColors
-                                                        .textSecondary,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'or click to browse',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                      const SizedBox(height: 32),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        alignment: WrapAlignment.center,
-                                        children: _supportedExtensions
-                                            .map(
-                                              (ext) => Chip(
-                                                label: Text(
-                                                  ext.toUpperCase(),
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    letterSpacing: 0.5,
-                                                  ),
-                                                ),
-                                                backgroundColor: SlowverbColors
-                                                    .backgroundLight,
-                                                side: BorderSide.none,
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                              ),
-                                            )
-                                            .toList(),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () => context.push(AppRoutes.library),
-                          icon: const Icon(Icons.library_music, size: 24),
-                          label: const Text(
-                            'LIBRARY',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => context.push(AppRoutes.batchExport),
-                          icon: const Icon(Icons.folder_open, size: 24),
-                          label: const Text(
-                            'BATCH',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => context.push(AppRoutes.mastering),
-                          icon: const Icon(Icons.equalizer, size: 24),
-                          label: const Text(
-                            'MASTERING',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: SlowverbColors.primaryPurple,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 48),
-
-                    // Privacy notice
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: SlowverbColors.surface.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: padding,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight - padding.vertical,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
-                            Icons.lock_outline,
-                            size: 20,
-                            color: SlowverbColors.success,
+                          // Wordmark and subtitle
+                          SlowverbWordmark(size: narrow ? 30 : 44),
+                          const SizedBox(height: SlowverbTokens.spacingSm),
+                          Text(
+                            'Slowed + Reverb Editor',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'All processing happens locally in your browser. Your audio never leaves your device.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: SlowverbColors.textSecondary,
+
+                          SizedBox(
+                            height: narrow
+                                ? SlowverbTokens.spacingLg
+                                : SlowverbTokens.spacing2Xl,
+                          ),
+
+                          // Drop zone
+                          RetroWindow(
+                            title: 'Open a song',
+                            child: DropTarget(
+                              onDragDone: (details) async {
+                                if (details.files.isEmpty) return;
+                                final file = details.files.first;
+                                final messenger = ScaffoldMessenger.of(context);
+                                final router = GoRouter.of(context);
+
+                                // Check extension
+                                final ext = file.name
+                                    .split('.')
+                                    .last
+                                    .toLowerCase();
+                                if (!_supportedExtensions.contains(ext)) {
+                                  if (mounted) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Unsupported file format: .$ext',
+                                        ),
+                                        backgroundColor: SlowverbTokens.error,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
+                                setState(() => _isLoading = true);
+
+                                try {
+                                  final bytes = await file.readAsBytes();
+                                  if (mounted) {
+                                    setState(() => _isLoading = false);
+                                    final fileData = AudioFileData(
+                                      filename: file.name,
+                                      bytes: bytes,
+                                    );
+
+                                    router.push(
+                                      AppRoutes.editor,
+                                      extra: EditorScreenArgs(
+                                        fileData: fileData,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    setState(() => _isLoading = false);
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error reading file: $e'),
+                                        backgroundColor: SlowverbTokens.error,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              onDragEntered: (_) =>
+                                  setState(() => _isHovering = true),
+                              onDragExited: (_) =>
+                                  setState(() => _isHovering = false),
+                              child: MouseRegion(
+                                onEnter: (_) =>
+                                    setState(() => _isHovering = true),
+                                onExit: (_) =>
+                                    setState(() => _isHovering = false),
+                                child: InkWell(
+                                  onTap: _isLoading ? null : _pickFile,
+                                  borderRadius: BorderRadius.circular(
+                                    SlowverbTokens.radiusSm,
                                   ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(
+                                        SlowverbTokens.radiusSm,
+                                      ),
+                                      border: Border.all(
+                                        color: _isHovering
+                                            ? SlowverbTokens.vfdCyan
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: VfdPanel(
+                                      child: SizedBox(
+                                        height: 220,
+                                        width: double.infinity,
+                                        child: _isLoading
+                                            ? const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      color: SlowverbTokens
+                                                          .vfdCyan,
+                                                    ),
+                                              )
+                                            : Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.audio_file_outlined,
+                                                    size: 56,
+                                                    color: _isHovering
+                                                        ? SlowverbTokens.vfdCyan
+                                                        : SlowverbTokens
+                                                              .textSecondary,
+                                                  ),
+                                                  const SizedBox(
+                                                    height: SlowverbTokens
+                                                        .spacingMd,
+                                                  ),
+                                                  const VfdText(
+                                                    'Drop audio file here',
+                                                    size: 18,
+                                                  ),
+                                                  const SizedBox(
+                                                    height: SlowverbTokens
+                                                        .spacingSm,
+                                                  ),
+                                                  Text(
+                                                    'or click to browse',
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.bodySmall,
+                                                  ),
+                                                  const SizedBox(
+                                                    height: SlowverbTokens
+                                                        .spacingLg,
+                                                  ),
+                                                  VfdText(formats, size: 12),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
+                          ),
+
+                          const SizedBox(height: SlowverbTokens.spacingLg),
+
+                          // Secondary destinations
+                          Wrap(
+                            spacing: SlowverbTokens.spacingMd,
+                            runSpacing: SlowverbTokens.spacingSm,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              HwKey(
+                                onPressed: () =>
+                                    context.push(AppRoutes.library),
+                                icon: Icons.library_music,
+                                label: 'LIBRARY',
+                              ),
+                              HwKey(
+                                onPressed: () =>
+                                    context.push(AppRoutes.batchExport),
+                                icon: Icons.folder_open,
+                                label: 'BATCH',
+                              ),
+                              HwKey(
+                                onPressed: () =>
+                                    context.push(AppRoutes.mastering),
+                                icon: Icons.equalizer,
+                                label: 'MASTERING',
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: SlowverbTokens.spacingLg),
+
+                          // Privacy notice
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.lock_outline,
+                                size: 18,
+                                color: SlowverbTokens.success,
+                              ),
+                              const SizedBox(width: SlowverbTokens.spacingSm),
+                              Flexible(
+                                child: Text(
+                                  'All processing happens locally in your browser. Your audio never leaves your device.',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: SlowverbTokens.spacingMd),
+
+                          // About link
+                          TextButton(
+                            onPressed: () => context.push(AppRoutes.about),
+                            child: const Text('About Slowverb'),
                           ),
                         ],
                       ),
                     ),
-
-                    const SizedBox(height: 24),
-
-                    // About link
-                    TextButton(
-                      onPressed: () => context.push(AppRoutes.about),
-                      child: const Text('About Slowverb'),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),

@@ -35,6 +35,36 @@ void main() {
       expect(await repository.hasProject(project.id), isFalse);
     });
 
+    test('skips malformed records instead of dropping all projects', () async {
+      final factory = newIdbFactoryMemory();
+      final repository = ProjectRepositoryWeb(factory: factory);
+      await repository.initialize();
+
+      await repository.saveProject(
+        const Project(
+          id: 'good',
+          name: 'Good',
+          sourcePath: null,
+          sourceHandleId: null,
+          sourceFileName: null,
+          sourceTitle: null,
+          sourceArtist: null,
+          durationMs: 1000,
+          presetId: 'slowed_reverb',
+          parameters: {'tempo': 0.9},
+        ),
+      );
+
+      final db = await factory.open('slowverb_web');
+      final txn = db.transaction('projects', 'readwrite');
+      await txn.objectStore('projects').put({'id': 'bad'});
+      await txn.completed;
+      db.close();
+
+      final projects = await repository.getAllProjects();
+      expect(projects.map((p) => p.id), ['good']);
+    });
+
     test('returns null for missing project handles', () async {
       final repository = ProjectRepositoryWeb(factory: newIdbFactoryMemory());
       await repository.initialize();

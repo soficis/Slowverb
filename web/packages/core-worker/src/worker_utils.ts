@@ -136,9 +136,13 @@ export function readAndSplitF32Stereo(fs: { readFile(path: string): unknown }, p
   const bytes = fs.readFile(path);
   if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
 
-  const pcm = bytes.slice().buffer;
-  const interleaved = new Float32Array(pcm);
-  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+  // View the bytes in place: the samples are copied into left/right below, so
+  // a full copy here only doubles peak memory (1.65 GB extra for a 78-min track).
+  if (bytes.byteLength % 8 !== 0) throw new Error("Invalid stereo PCM length");
+  const interleaved =
+    bytes.byteOffset % 4 === 0
+      ? new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
+      : new Float32Array(bytes.slice().buffer);
 
   const frames = interleaved.length / 2;
   const left = new Float32Array(frames);

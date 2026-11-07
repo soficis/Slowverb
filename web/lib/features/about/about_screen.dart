@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/app_config.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
 /// About screen with app information and credits
 class AboutScreen extends StatelessWidget {
@@ -8,292 +10,195 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final bodyStyle = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(height: 1.5);
+    final linkStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: SlowverbTokens.vfdCyan,
+      decoration: TextDecoration.underline,
+      height: 1.5,
+    );
+
     return Scaffold(
-      backgroundColor: SlowverbColors.backgroundDark,
       appBar: AppBar(title: const Text('ABOUT')),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 700),
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: SlowverbColors.surface,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Logo
-                  Center(
-                    child: ShaderMask(
-                      shaderCallback: (bounds) =>
-                          SlowverbColors.primaryGradient.createShader(bounds),
-                      child: Text(
-                        'SLOWVERB',
-                        style: Theme.of(context).textTheme.displayMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w200,
-                              letterSpacing: 8.0,
-                            ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Center(
-                    child: Text(
-                      'Slowed + Reverb Audio Editor',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: SlowverbColors.textSecondary,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.info_outline,
-                    title: 'About',
-                    content:
-                        'Slowverb is a browser-based audio editor for creating dreamy slowed + reverb effects. All audio processing happens locally in your browser using WebAssembly.',
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.music_note,
-                    title: 'Supported Formats',
-                    content:
-                        'Input: MP3, WAV, AAC, M4A, OGG, FLAC\n'
-                        'Output: MP3 (128-320 kbps), WAV (lossless), FLAC (lossless), AAC',
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.tune,
-                    title: 'Features',
-                    content:
-                        '• 12 professional effect presets\n'
-                        '• Custom parameter control (tempo, pitch, reverb, echo, warmth)\n'
-                        '• Interactive waveform visualization\n'
-                        '• Real-time audio preview\n'
-                        '• PhaseLimiter mastering for loudness & clarity\n'
-                        '• High-quality FLAC export',
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.auto_awesome,
-                    title: 'Mastering',
-                    contentWidget: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: RetroDesktop(
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final padding = EdgeInsets.all(
+                constraints.maxWidth < 600
+                    ? SlowverbTokens.spacingMd
+                    : SlowverbTokens.spacingLg,
+              );
+              return SingleChildScrollView(
+                padding: padding,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'Professional mastering powered by PhaseLimiter',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: SlowverbColors.textSecondary,
-                                height: 1.6,
-                              ),
-                        ),
-                        InkWell(
-                          onTap: () async {
-                            final uri = Uri.parse(
-                              'https://github.com/ai-mastering/phaselimiter',
-                            );
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(
-                                uri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          },
+                        // Logo and subtitle
+                        Center(child: SlowverbWordmark(size: narrow ? 30 : 44)),
+                        const SizedBox(height: SlowverbTokens.spacingSm),
+                        Center(
                           child: Text(
-                            'https://github.com/ai-mastering/phaselimiter',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: SlowverbColors.accentCyan,
-                                  decoration: TextDecoration.underline,
-                                  height: 1.6,
-                                ),
+                            'Slowed + Reverb Audio Editor',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'PhaseLimiter is MIT licensed. This implementation is released under GPLv3.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: SlowverbColors.textSecondary,
-                                height: 1.6,
+
+                        const SizedBox(height: SlowverbTokens.spacingLg),
+
+                        RetroWindow(
+                          title: 'About',
+                          child: Text(
+                            'Slowverb is a browser-based audio editor for creating dreamy slowed + reverb effects. All audio processing happens locally in your browser using WebAssembly.',
+                            style: bodyStyle,
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        RetroWindow(
+                          title: 'Supported Formats',
+                          child: Text(
+                            'Input: MP3, WAV, AAC, M4A, OGG, FLAC\n'
+                            'Output: MP3 (128-320 kbps), WAV (lossless), FLAC (lossless), AAC',
+                            style: bodyStyle,
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        RetroWindow(
+                          title: 'Features',
+                          child: Text(
+                            '• 18 built-in presets, plus your own\n'
+                            '• Tempo, pitch, reverb, echo, warmth, phaser and bass controls\n'
+                            '• Playback devices: car speakers, gramophone, cassette\n'
+                            '• Reverb types including a plate and a hotel bathroom\n'
+                            '• Retro audio visualizers\n'
+                            '• PhaseLimiter mastering for loudness & clarity\n'
+                            '• Batch export, including lossless FLAC',
+                            style: bodyStyle,
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        RetroWindow(
+                          title: 'Mastering',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Professional mastering powered by PhaseLimiter',
+                                style: bodyStyle,
                               ),
+                              InkWell(
+                                onTap: () async {
+                                  final uri = Uri.parse(
+                                    'https://github.com/ai-mastering/phaselimiter',
+                                  );
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                },
+                                child: Text(
+                                  'https://github.com/ai-mastering/phaselimiter',
+                                  style: linkStyle,
+                                ),
+                              ),
+                              const SizedBox(height: SlowverbTokens.spacingSm),
+                              Text(
+                                'PhaseLimiter is MIT licensed. This implementation is released under GPLv3.',
+                                style: bodyStyle,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        RetroWindow(
+                          title: 'Impulse Responses',
+                          child: Text(
+                            'Playback devices (car, gramophone, cassette), the plate and the hotel bathroom reverb use '
+                            'impulse responses from the IR Library by Conner (github.com/itsmusician/IR-Library), '
+                            'Copyright © 2022 Conner, MIT License. The full licence text is shipped at '
+                            'irs/LICENSE-itsmusician-IR-Library.md.\n\n'
+                            'Fonts: Rajdhani, DotGothic16, DSEG and Roboto (SIL Open Font License). '
+                            'ZIP export: JSZip (MIT).',
+                            style: bodyStyle,
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        RetroWindow(
+                          title: 'License',
+                          child: Text(
+                            'Slowverb is free and open-source software licensed under the GNU General Public License v3.0 (GPLv3).\n\n'
+                            'Copyright © 2025 Slowverb\n\n'
+                            'This program comes with ABSOLUTELY NO WARRANTY.',
+                            style: bodyStyle,
+                          ),
+                        ),
+
+                        const SizedBox(height: SlowverbTokens.spacingLg),
+
+                        // GitHub link
+                        Center(
+                          child: HwKey(
+                            onPressed: () async {
+                              final uri = Uri.parse(
+                                'https://github.com/soficis/Slowverb',
+                              );
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              }
+                            },
+                            icon: Icons.code,
+                            label: 'View Source on GitHub',
+                          ),
+                        ),
+
+                        const SizedBox(height: SlowverbTokens.spacingMd),
+
+                        // My First Rodeo link
+                        Center(
+                          child: HwKey(
+                            onPressed: () async {
+                              final uri = Uri.parse('https://nihilist.rodeo');
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              }
+                            },
+                            label: 'My First Rodeo',
+                          ),
+                        ),
+
+                        const SizedBox(height: SlowverbTokens.spacingLg),
+
+                        // Version
+                        const Center(
+                          child: VfdText('Version ${AppConfig.version}', size: 12),
                         ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    context,
-                    icon: Icons.copyright,
-                    title: 'License',
-                    content:
-                        'Slowverb is free and open-source software licensed under the GNU General Public License v3.0 (GPLv3).\n\n'
-                        'Copyright © 2025 Slowverb\n\n'
-                        'This program comes with ABSOLUTELY NO WARRANTY.',
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // GitHub Link
-                  Center(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final uri = Uri.parse(
-                          'https://github.com/soficis/Slowverb',
-                        );
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.code, size: 18),
-                      label: const Text('View Source on GitHub'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: SlowverbColors.accentCyan,
-                        side: const BorderSide(
-                          color: SlowverbColors.accentCyan,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // My First Rodeo Link
-                  Center(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final uri = Uri.parse('https://nihilist.rodeo');
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: SlowverbColors.accentPink,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 40,
-                          vertical: 20,
-                        ),
-                        textStyle: const TextStyle(
-                          fontFamily: 'Indie Flower',
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        elevation: 8,
-                        shadowColor: SlowverbColors.accentPink.withValues(
-                          alpha: 0.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(32),
-                        ),
-                      ),
-                      child: const Text('My First Rodeo'),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Version
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: SlowverbColors.backgroundLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Version 1.0.0-beta',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: SlowverbColors.textSecondary,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSection(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    String? content,
-    Widget? contentWidget,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: SlowverbColors.accentCyan),
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: SlowverbColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.only(left: 32),
-          child:
-              contentWidget ??
-              Text(
-                content ?? '',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: SlowverbColors.textSecondary,
-                  height: 1.6,
-                ),
-              ),
-        ),
-      ],
     );
   }
 }

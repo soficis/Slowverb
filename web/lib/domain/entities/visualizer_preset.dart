@@ -128,8 +128,6 @@ abstract final class VisualizerPresets {
     dvdBounce,
     rainyWindow,
     rainyWindow3d,
-    timeGate,
-    vortex,
   ];
 
   static const mystify = VisualizerPreset(
@@ -186,7 +184,9 @@ abstract final class VisualizerPresets {
     defaultIntensity: 0.9,
   );
 
-  /// Visualizers eligible for random selection (excludes WMP Retro and DVD Bounce)
+  /// Visualizers eligible for random selection on first launch. Excludes
+  /// WMP Retro and DVD Bounce (novelty) and Time Gate and Vortex, which flood
+  /// the screen with bright, high-contrast flashes behind the controls.
   static const randomSelectable = [
     pipesVaporwave,
     starfieldWarp,
@@ -197,14 +197,7 @@ abstract final class VisualizerPresets {
     mystify,
     rainyWindow,
     rainyWindow3d,
-    timeGate,
-    vortex,
   ];
 
   /// Returns a random visualizer from the selectable list
-  static VisualizerPreset random() {
-    final index =
-        DateTime.now().millisecondsSinceEpoch % randomSelectable.length;
-    return randomSelectable[index];
-  }
 }

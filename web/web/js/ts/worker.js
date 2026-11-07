@@ -4501,19 +4501,11 @@ var DSP_LIMITS = {
   stereoWidth: { min: 0.5, max: 2}
 };
 var DEFAULT_SAMPLE_RATE = 44100;
-var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,alimiter=limit=0.95";
+var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChainParts(spec) {
   const pre = [];
   const post = [];
-  const timeStretchAlgorithm = spec.quality?.timeStretch ?? "ffmpeg";
-  if (timeStretchAlgorithm !== "soundtouch") {
-    if (spec.coupledMode) {
-      pre.push(buildCoupledSpeedFilter(spec.tempo ?? 1));
-    } else {
-      appendTempo(pre, spec.tempo);
-      appendPitch(pre, spec.pitch);
-    }
-  }
+  appendTimeStretch(pre, spec);
   appendEqWarmth(pre, spec.eqWarmth);
   appendEcho(post, spec.echo);
   appendPhaser(post, spec.phaser);
@@ -4531,9 +4523,15 @@ function appendTempo(filters, tempo) {
   if (tempo === void 0 || tempo === 1) return;
   filters.push(buildTempoFilter(clamp(tempo, DSP_LIMITS.tempo)));
 }
-function appendPitch(filters, pitch) {
-  if (pitch === void 0 || pitch === 0) return;
-  filters.push(buildPitchFilter(clamp(pitch, DSP_LIMITS.pitch)));
+function appendTimeStretch(filters, spec) {
+  if ((spec.quality?.timeStretch ?? "ffmpeg") === "soundtouch") return;
+  const pitch = spec.pitch;
+  const hasPitch = typeof pitch === "number" && Number.isFinite(pitch) && pitch !== 0;
+  if (spec.coupledMode || hasPitch) {
+    filters.push(buildCoupledSpeedFilter(spec.tempo, pitch));
+    return;
+  }
+  appendTempo(filters, spec.tempo);
 }
 function appendEqWarmth(filters, warmth) {
   if (warmth === void 0 || warmth <= 0) return;
@@ -4541,6 +4539,8 @@ function appendEqWarmth(filters, warmth) {
 }
 function appendEcho(filters, echo) {
   if (!echo) return;
+  if (!(echo.delayMs > 0) || !(echo.feedback > 0)) return;
+  if (!Number.isFinite(echo.delayMs) || !Number.isFinite(echo.feedback)) return;
   filters.push(buildEchoFilter(normalizeEcho(echo)));
 }
 function appendPhaser(filters, phaser) {
@@ -4548,8 +4548,8 @@ function appendPhaser(filters, phaser) {
   filters.push(buildPhaserFilter(phaser));
 }
 function appendBass(filters, bassGain) {
-  if (bassGain === void 0 || bassGain === 0) return;
-  filters.push(buildBassFilter(bassGain));
+  if (typeof bassGain !== "number" || !Number.isFinite(bassGain) || bassGain === 0) return;
+  filters.push(buildBassFilter(Math.max(-20, Math.min(20, bassGain))));
 }
 function appendDynaudnorm(filters, enabled) {
   if (!enabled) return;
@@ -4580,7 +4580,7 @@ function buildSimpleMasteringFilterChain() {
   return SIMPLE_MASTERING_FILTER_CHAIN;
 }
 function buildNormalizationFilter() {
-  return "volume=6dB,alimiter=limit=0.95:level_in=1:level_out=1";
+  return "volume=3dB,alimiter=limit=0.95:level=disabled";
 }
 function buildTempoFilter(tempo) {
   if (tempo >= 0.5 && tempo <= 2) {
@@ -4599,12 +4599,10 @@ function buildTempoFilter(tempo) {
   filters.push(`atempo=${remaining.toFixed(4)}`);
   return filters.join(",");
 }
-function buildPitchFilter(semitones) {
-  const rate = Math.pow(2, semitones / 12);
-  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
-}
 function buildPhaserFilter(phaser) {
-  return `aphaser=delay=${phaser.delayMs}:decay=${phaser.decay}:speed=${phaser.speedHz}:type=${phaser.type}`;
+  const num = (v, min, max, def) => typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
+  const type = phaser.type === "t" ? "t" : "s";
+  return `aphaser=in_gain=0.9:out_gain=0.85:delay=${num(phaser.delayMs, 0, 5, 3)}:decay=${num(phaser.decay, 0, 0.99, 0.4)}:speed=${num(phaser.speedHz, 0.1, 2, 0.5)}:type=${type}`;
 }
 function buildBassFilter(gain) {
   return `bass=g=${gain.toFixed(1)}:f=100:width_type=q:width=0.5`;
@@ -4612,16 +4610,22 @@ function buildBassFilter(gain) {
 function buildDynaudnormFilter() {
   return `dynaudnorm=framelen=150:gausssize=15`;
 }
-function buildCoupledSpeedFilter(tempo) {
-  const rate = tempo.toFixed(4);
-  return `asetrate=${DEFAULT_SAMPLE_RATE}*${rate},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+function buildCoupledSpeedFilter(rawTempo, pitch) {
+  const tempo = typeof rawTempo === "number" && Number.isFinite(rawTempo) ? clamp(rawTempo, DSP_LIMITS.tempo) : 1;
+  const rate = typeof pitch === "number" && Number.isFinite(pitch) ? Math.pow(2, clamp(pitch, DSP_LIMITS.pitch) / 12) : tempo;
+  let filter = `aresample=${DEFAULT_SAMPLE_RATE},asetrate=${DEFAULT_SAMPLE_RATE}*${rate.toFixed(4)},aresample=${DEFAULT_SAMPLE_RATE}:filter_size=64:phase_shift=10`;
+  const residual = tempo / rate;
+  if (Math.abs(residual - 1) > 1e-4) filter += `,${buildTempoFilter(residual)}`;
+  return filter;
 }
 function buildEqWarmthFilter(warmth) {
   const gain = (warmth * 6).toFixed(1);
   return `equalizer=f=300:t=h:width=200:g=${gain}`;
 }
+var ECHO_TAP_PER_FEEDBACK = 0.5;
 function buildEchoFilter(echo) {
-  return `aecho=0.8:0.2:${echo.delayMs}:0.6`;
+  const tap = Math.max(1e-4, Math.min(1, echo.feedback * ECHO_TAP_PER_FEEDBACK));
+  return `aecho=1:1:${echo.delayMs}:${tap.toFixed(4)}`;
 }
 function buildLowpassFilter(cutoffHz, hfDamping) {
   if (cutoffHz !== void 0) {
@@ -4652,6 +4656,39 @@ function clamp(value, limits) {
   if (value < limits.min) return limits.min;
   if (value > limits.max) return limits.max;
   return value;
+}
+function normalizeStereoIrEnergy(data) {
+  const energy = [0, 0];
+  for (let i = 0; i < data.length; i += 1) energy[i & 1] += data[i] * data[i];
+  if (!energy.every((e) => e > 0 && Number.isFinite(e))) return false;
+  const scale = energy.map((e) => 1 / Math.sqrt(e));
+  for (let i = 0; i < data.length; i += 1) data[i] *= scale[i & 1];
+  return true;
+}
+var PLAYBACK_DEVICES = {
+  // Makeup: IR decoded with the 30 Hz 4th-order highpass and unit energy; stage-on vs stage-off K-weighted
+  // loudness (highpass 60 Hz + treble +4 dB @1.5 kHz, astats RMS; ebur128 is unusable on the bundled 5.1
+  // core) of -3 dBFS pink noise within 0.2 LU. Harmonic-tone music mix then lands at -0.6/-0.5 (car),
+  // +0.7 (cassette) LU. Gramophone split between pink (-1.5) and music mix (+1.8): its makeup is 1.5 dB
+  // below the pink-only value (-14.5).
+  sedan_2002_front: { url: "irs/sedan_2002_front.wav", label: "Car (front)", makeupDb: -6 },
+  sedan_2002_rear: { url: "irs/sedan_2002_rear.wav", label: "Car (rear)", makeupDb: -6.5 },
+  gramophone_cabinet: { url: "irs/gramophone_cabinet.wav", label: "Gramophone", makeupDb: -16 },
+  cassette_portable: { url: "irs/cassette_portable.wav", label: "Cassette", makeupDb: -9 }
+};
+var REVERB_IRS = {
+  // Makeup: same K-weighted pink-noise measurement as above, so mix=1 wet loudness ~ dry loudness
+  // (music-like mix: -0.3 hotel). Plate: Conner Plate I "5s -45" sweep (replaced the EMT 140, whose author
+  // asks that it not be publicly hosted). On the bundled core at -14.5: pink -1.4, music mix 0.0 LU
+  // (the EMT at -14 was -1.1 / +0.8). Slightly darker above 4 kHz than the EMT.
+  plate_conner_i: { url: "irs/plate_conner_i.wav", label: "Plate", makeupDb: -14.5 },
+  hotel_bathroom: { url: "irs/hotel_bathroom.wav", label: "Hotel Bathroom", makeupDb: -7 }
+};
+function getPlaybackDevice(id) {
+  return typeof id === "string" && Object.hasOwn(PLAYBACK_DEVICES, id) ? PLAYBACK_DEVICES[id] : void 0;
+}
+function getReverbIr(id) {
+  return typeof id === "string" && Object.hasOwn(REVERB_IRS, id) ? REVERB_IRS[id] : void 0;
 }
 function log(level, message, data) {
   const env = import.meta.env;
@@ -4761,9 +4798,8 @@ function buildOutputName(fileId, jobId, format, isPreview) {
 function readAndSplitF32Stereo(fs, path) {
   const bytes = fs.readFile(path);
   if (!(bytes instanceof Uint8Array)) throw new Error("Expected binary PCM output from FFmpeg");
-  const pcm = bytes.slice().buffer;
-  const interleaved = new Float32Array(pcm);
-  if (interleaved.length % 2 !== 0) throw new Error("Invalid stereo PCM length");
+  if (bytes.byteLength % 8 !== 0) throw new Error("Invalid stereo PCM length");
+  const interleaved = bytes.byteOffset % 4 === 0 ? new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4) : new Float32Array(bytes.slice().buffer);
   const frames = interleaved.length / 2;
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);
@@ -5527,7 +5563,11 @@ function applySoundTouch(input, tempo, pitchSemitones, onProgress) {
       return frames;
     }
   }
-  const filter = new SimpleFilter(new InterleavedStereoSource(input), soundTouch);
+  const flushFrames = 2 * 44100;
+  const padded = new Float32Array(input.length + flushFrames * 2);
+  padded.set(input);
+  const expectedFrames = Math.round(totalFrames / tempo);
+  const filter = new SimpleFilter(new InterleavedStereoSource(padded), soundTouch);
   const chunkFrames = 16384;
   const chunk = new Float32Array(chunkFrames * 2);
   const chunks = [];
@@ -5545,15 +5585,18 @@ function applySoundTouch(input, tempo, pitchSemitones, onProgress) {
       }
     }
   }
-  const totalSamples = chunks.reduce((sum, block) => sum + block.length, 0);
-  const output = new Float32Array(totalSamples);
+  const producedSamples = chunks.reduce((sum, block) => sum + block.length, 0);
+  const output = new Float32Array(Math.min(producedSamples, expectedFrames * 2));
   let offset = 0;
   for (const block of chunks) {
-    output.set(block, offset);
-    offset += block.length;
+    if (offset >= output.length) break;
+    const take = Math.min(block.length, output.length - offset);
+    output.set(block.subarray(0, take), offset);
+    offset += take;
   }
   return output;
 }
+var PHASE_LIMITER_TIMEOUT_MS = 30 * 60 * 1e3;
 async function processWithPhaseLimiter(options) {
   const {
     leftChannel,
@@ -5573,6 +5616,12 @@ async function processWithPhaseLimiter(options) {
       bassPreservation: typeof masteringConfig.bassPreservation === "number" ? masteringConfig.bassPreservation : 0.5
     };
     const worker = new Worker(workerScript);
+    const timeout = setTimeout(() => {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.terminate();
+      reject(new Error("PhaseLimiter timed out"));
+    }, PHASE_LIMITER_TIMEOUT_MS);
     const onMessage = (event) => {
       const data = event.data ?? {};
       const type = data.type;
@@ -5585,6 +5634,7 @@ async function processWithPhaseLimiter(options) {
       if (type === "complete") {
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
+        clearTimeout(timeout);
         worker.terminate();
         const left = data.leftChannel;
         const right = data.rightChannel;
@@ -5598,6 +5648,7 @@ async function processWithPhaseLimiter(options) {
       if (type === "error") {
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
+        clearTimeout(timeout);
         worker.terminate();
         reject(new Error(data.error ?? "PhaseLimiter worker error"));
       }
@@ -5605,6 +5656,7 @@ async function processWithPhaseLimiter(options) {
     const onError = (event) => {
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
+      clearTimeout(timeout);
       worker.terminate();
       reject(new Error(event.message || "PhaseLimiter worker crashed"));
     };
@@ -5623,6 +5675,7 @@ async function processWithPhaseLimiter(options) {
     } catch (error) {
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
+      clearTimeout(timeout);
       worker.terminate();
       reject(error);
     }
@@ -5643,9 +5696,6 @@ function runSoundTouchStage(ffmpeg2, payload, inputFile, outputFile, jobId, prog
 }
 
 // src/mastering_pipeline.ts
-function isSimpleMasteringWithToneReverb(mastering, toneReverbEnabled) {
-  return mastering?.enabled === true && mastering?.algorithm === "simple" && toneReverbEnabled;
-}
 async function applyPhaseLimiterStage(input) {
   const {
     ffmpeg: ffmpeg2,
@@ -5691,13 +5741,6 @@ async function applyPhaseLimiterStage(input) {
     currentFile = reducedFile;
   }
   return { outputFile: currentFile, tempFiles };
-}
-function applySimpleMasteringBoostStage(input) {
-  const { ffmpeg: ffmpeg2, fileId, jobId, sampleRate, inputFile, withProgressStage: withProgressStage2 } = input;
-  const boostedFile = `${fileId}-${jobId}-simple-boosted.f32`;
-  const boostArgs = buildPcmFilterPlan(inputFile, boostedFile, "volume=12dB", sampleRate);
-  withProgressStage2("simple-mastering-boost", 0.9, 0, () => ffmpeg2.exec(...boostArgs));
-  return { outputFile: boostedFile, tempFile: boostedFile };
 }
 
 // src/ffmpeg_pipeline.ts
@@ -5760,6 +5803,31 @@ async function renderWithPhaseLimiter(ffmpeg2, payload, jobId, isPreview, callba
     throw error;
   }
 }
+var IR_WET_MAKEUP_DB = -8;
+function decodeWavIrToUnitEnergyF32(ffmpeg2, wav, baseName, sampleRate, tempFiles) {
+  const wavFile = `${baseName}.wav`;
+  const irFile = `${baseName}.f32`;
+  tempFiles.push(wavFile, irFile);
+  ffmpeg2.FS.writeFile(wavFile, new Uint8Array(wav));
+  ffmpeg2.exec(
+    "-i",
+    wavFile,
+    "-af",
+    "highpass=f=30:poles=2,highpass=f=30:poles=2",
+    "-ac",
+    "2",
+    "-ar",
+    `${sampleRate}`,
+    "-f",
+    "f32le",
+    "-y",
+    irFile
+  );
+  const ir = readInterleavedF32(ffmpeg2.FS, irFile);
+  if (!normalizeStereoIrEnergy(ir)) throw new Error("IR has zero or non-finite energy");
+  ffmpeg2.FS.writeFile(irFile, new Uint8Array(ir.buffer));
+  return irFile;
+}
 async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options, callbacks) {
   const sampleRate = 44100;
   const rawFile = `${payload.fileId}-${jobId}-raw.f32`;
@@ -5787,7 +5855,8 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
     if (!payload.dspSpec?.reverb) {
       throw new Error("Tone reverb enabled but dspSpec.reverb missing");
     }
-    if (!payload.reverbIR) {
+    const fileIr = payload.dspSpec.quality?.reverb === "file";
+    if (!payload.reverbIR && !(fileIr && payload.reverbIRWav)) {
       callbacks.postMasteringWarning(
         jobId,
         payload.fileId,
@@ -5795,22 +5864,38 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
       );
       throw new Error("Tone reverb enabled but reverbIR was not provided");
     }
-    const irFile = `${payload.fileId}-${jobId}-ir.f32`;
-    ffmpeg2.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
-    tempFiles.push(irFile);
+    let irFile;
+    let wetMakeupDb = IR_WET_MAKEUP_DB;
+    if (fileIr && payload.reverbIRWav) {
+      const entry = getReverbIr(payload.dspSpec.reverb.ir);
+      if (!entry) throw new Error(`Unknown reverb IR: ${String(payload.dspSpec.reverb.ir)}`);
+      wetMakeupDb = entry.makeupDb;
+      irFile = decodeWavIrToUnitEnergyF32(
+        ffmpeg2,
+        payload.reverbIRWav,
+        `${payload.fileId}-${jobId}-reverb-ir`,
+        sampleRate,
+        tempFiles
+      );
+    } else {
+      irFile = `${payload.fileId}-${jobId}-ir.f32`;
+      ffmpeg2.FS.writeFile(irFile, new Uint8Array(payload.reverbIR));
+      tempFiles.push(irFile);
+    }
     const { pre, post } = compileFilterChainParts(payload.dspSpec);
     const mix = clampNumber(payload.dspSpec.reverb.mix, 0, 1);
     const dry = (1 - mix).toFixed(4);
     const wet = mix.toFixed(4);
-    const irSampleRate = typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
+    const irSampleRate = !fileIr && typeof payload.reverbIRSampleRate === "number" ? payload.reverbIRSampleRate : sampleRate;
     const args = [];
     args.push("-f", "f32le", "-ac", "2", "-ar", `${sampleRate}`, "-i", currentPcmFile);
     args.push("-f", "f32le", "-ac", "2", "-ar", `${irSampleRate}`, "-i", irFile);
     const chains = [];
-    chains.push(`[0:a]${pre === "anull" ? "anull" : pre}[pre]`);
+    chains.push(`[0:a]${pre},asplit=2[d][w]`);
     chains.push(`[1:a]${irSampleRate === sampleRate ? "anull" : `aresample=${sampleRate}`}[ir]`);
-    chains.push(`[pre][ir]afir=dry=${dry}:wet=${wet},volume=42dB[wet]`);
-    chains.push(`[wet]${post === "anull" ? "anull" : post}[out]`);
+    chains.push(`[w][ir]afir=dry=1:wet=1:gtype=none,volume=${wetMakeupDb}dB[wv]`);
+    chains.push(`[d][wv]amix=inputs=2:weights='${dry} ${wet}':normalize=0[mixed]`);
+    chains.push(`[mixed]${post}[out]`);
     args.push("-filter_complex", chains.join(";"));
     args.push("-map", "[out]");
     args.push("-ac", "2", "-ar", `${sampleRate}`, "-f", "f32le", "-y", effectsFile);
@@ -5824,6 +5909,51 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
     callbacks.withProgressStage("effects", 0.35, 0.35, () => ffmpeg2.exec(...filterArgs));
     tempFiles.push(effectsFile);
     currentPcmFile = effectsFile;
+  }
+  if (options.usePlaybackDevice && payload.playbackIR) {
+    const device = getPlaybackDevice(payload.dspSpec?.playback?.device);
+    if (!device) throw new Error("Unknown playback device");
+    const playbackIrFile = decodeWavIrToUnitEnergyF32(
+      ffmpeg2,
+      payload.playbackIR,
+      `${payload.fileId}-${jobId}-playback-ir`,
+      sampleRate,
+      tempFiles
+    );
+    const playbackFile = `${payload.fileId}-${jobId}-playback.f32`;
+    tempFiles.push(playbackFile);
+    const playbackArgs = [
+      "-f",
+      "f32le",
+      "-ac",
+      "2",
+      "-ar",
+      `${sampleRate}`,
+      "-i",
+      currentPcmFile,
+      "-f",
+      "f32le",
+      "-ac",
+      "2",
+      "-ar",
+      `${sampleRate}`,
+      "-i",
+      playbackIrFile,
+      "-filter_complex",
+      `[0:a][1:a]afir=dry=1:wet=1:gtype=none,volume=${device.makeupDb}dB,alimiter=limit=0.95:level=disabled[out]`,
+      "-map",
+      "[out]",
+      "-ac",
+      "2",
+      "-ar",
+      `${sampleRate}`,
+      "-f",
+      "f32le",
+      "-y",
+      playbackFile
+    ];
+    callbacks.withProgressStage("effects", 0.6, 0.1, () => ffmpeg2.exec(...playbackArgs));
+    currentPcmFile = playbackFile;
   }
   if (options.applyPhaseLimiter) {
     const mastering = payload.mastering;
@@ -5849,17 +5979,6 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
     });
     tempFiles.push(...mastered.tempFiles);
     currentPcmFile = mastered.outputFile;
-  }
-  if (isSimpleMasteringWithToneReverb(payload.mastering, options.useToneReverb)) {
-    const boosted = applySimpleMasteringBoostStage({
-      ffmpeg: ffmpeg2,
-      fileId: payload.fileId,
-      jobId,
-      sampleRate,
-      inputFile: currentPcmFile,
-      withProgressStage: callbacks.withProgressStage});
-    tempFiles.push(boosted.tempFile);
-    currentPcmFile = boosted.outputFile;
   }
   const encodeArgs = buildEncodePlan(currentPcmFile, outputFile, payload, sampleRate);
   callbacks.postEvent({ type: "PROGRESS", jobId, value: 0.9, stage: "encoding" });
@@ -5983,7 +6102,10 @@ function isSoundTouchEnabled(payload) {
 function isToneReverbEnabled(payload) {
   const spec = payload.dspSpec;
   const algorithm = spec?.quality?.reverb ?? "ffmpeg";
-  return algorithm === "tone" && spec?.reverb != null;
+  return (algorithm === "tone" || algorithm === "freeverb" || algorithm === "file") && spec?.reverb != null && spec.reverb.mix > 0;
+}
+function isPlaybackDeviceEnabled(payload) {
+  return payload.dspSpec?.playback != null && payload.playbackIR != null;
 }
 function isSimpleMasteringEnabled(payload) {
   return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
@@ -6172,7 +6294,8 @@ async function handleRender(request) {
   const shouldUsePhaseLimiter = isPhaseLimiterEnabled(payload);
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb;
+  const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
   const filesToCleanup = /* @__PURE__ */ new Set([payload.fileId]);
   activeJobId = jobId;
   try {
@@ -6227,7 +6350,8 @@ async function handleRender(request) {
       {
         applyPhaseLimiter: shouldUsePhaseLimiter,
         useSoundTouch: shouldUseSoundTouch,
-        useToneReverb: shouldUseToneReverb
+        useToneReverb: shouldUseToneReverb,
+        usePlaybackDevice: shouldUsePlayback
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );

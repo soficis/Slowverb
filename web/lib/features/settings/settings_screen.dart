@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:slowverb_web/app/colors.dart';
 import 'package:slowverb_web/app/app_config.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
 /// Settings screen for configuring experimental features
 class SettingsScreen extends ConsumerWidget {
@@ -15,92 +16,58 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Settings'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
           onPressed: () => context.go('/'),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
+      body: RetroDesktop(
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // App info card
-              _buildCard(
-                context,
-                title: 'About',
-                children: [
-                  const ListTile(
-                    leading: Icon(Icons.info_outline),
-                    title: Text('Slowverb'),
-                    subtitle: Text('Version ${AppConfig.version}'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final padding = EdgeInsets.all(
+                constraints.maxWidth < 600
+                    ? SlowverbTokens.spacingMd
+                    : SlowverbTokens.spacingLg,
+              );
+              return SingleChildScrollView(
+                padding: padding,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // App info
+                        const RetroWindow(
+                          title: 'About',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.info_outline),
+                            title: Text('Slowverb'),
+                            subtitle: Text('Version ${AppConfig.version}'),
+                          ),
+                        ),
+                        const SizedBox(height: SlowverbTokens.spacingMd),
 
-              // Legal disclaimer
-              _buildCard(
-                context,
-                title: 'Usage Guidelines',
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'Use Slowverb only with content you have rights to transform. '
-                      'All processing happens locally in your browser.',
-                      style: TextStyle(
-                        color: SlowverbColors.textSecondary,
-                        fontSize: 12,
-                      ),
+                        // Legal disclaimer
+                        RetroWindow(
+                          title: 'Usage Guidelines',
+                          child: Text(
+                            'Use Slowverb only with content you have rights to transform. '
+                            'All processing happens locally in your browser.',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(height: 1.5),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              );
+            },
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCard(
-    BuildContext context, {
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            SlowverbColors.surface.withValues(alpha: 0.9),
-            SlowverbColors.surfaceVariant.withValues(alpha: 0.8),
-          ],
-        ),
-        border: Border.all(
-          color: SlowverbColors.primaryPurple.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: SlowverbColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ...children,
-          const SizedBox(height: 8),
-        ],
       ),
     );
   }

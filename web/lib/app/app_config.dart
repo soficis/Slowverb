@@ -1,8 +1,8 @@
 /// Application configuration and feature flags
 abstract final class AppConfig {
-  /// Version information
-  static const String version = '2.1.0';
-  static const String buildNumber = '1';
+  /// Shown in Settings and About. Keep in sync with `version:` in pubspec.yaml
+  /// and `version` in package.json.
+  static const String version = '2.2.0';
 
   /// Feature flags
 

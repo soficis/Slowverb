@@ -115,7 +115,6 @@ function normalizeRender(params) {
   const source = normalizeSource(params.source);
   return {
     source,
-    filterGraph: params.filterGraph ?? params.filterChain,
     dspSpec: params.dspSpec ?? params.spec,
     format: params.format ?? "mp3",
     bitrateKbps: params.bitrateKbps,
@@ -149,12 +148,21 @@ function emitProgress(jobId, value, stage) {
   }
 }
 
+// FFmpeg reports every stream/progress line as info; printing them all buries real errors
+// (~7k console lines for one 20 s file). Set localStorage "slowverb.debug" = "1" to see them.
+const verboseLogs = (() => {
+  try {
+    return globalThis.localStorage?.getItem("slowverb.debug") === "1";
+  } catch {
+    return false;
+  }
+})();
+
 function emitLog(jobId, level, message) {
   const logLine = `[SlowverbBridge][${jobId ?? "job"}][${level}] ${message}`;
   if (level === "error") console.error(logLine);
   else if (level === "warn") console.warn(logLine);
-  else if (level === "debug") console.debug(logLine);
-  else console.info(logLine);
+  else if (verboseLogs) console.info(logLine);
   if (logHandler) {
     logHandler({ jobId, level, message });
   }

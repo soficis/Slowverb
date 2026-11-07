@@ -203,7 +203,8 @@ Future<void> regenerateImpl(
       AudioEditorNotifier._log.warning('Regeneration failed - preview URI is null');
       notifier.editorState = notifier.editorState.copyWith(
         isLoading: false,
-        error: 'Failed to regenerate audio preview',
+        // Keep generatePreview's specific error (e.g. "track too long").
+        error: notifier.editorState.error ?? 'Failed to regenerate audio preview',
       );
     }
   } catch (e, stack) {

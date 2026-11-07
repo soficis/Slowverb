@@ -25,13 +25,6 @@ interface PhaseLimiterStageInput extends StageContext {
   isToneReverbEnabled: boolean;
 }
 
-export function isSimpleMasteringWithToneReverb(
-  mastering: MasteringSpec | undefined,
-  toneReverbEnabled: boolean
-): boolean {
-  return mastering?.enabled === true && mastering?.algorithm === "simple" && toneReverbEnabled;
-}
-
 export async function applyPhaseLimiterStage(
   input: PhaseLimiterStageInput
 ): Promise<{ outputFile: string; tempFiles: string[] }> {
@@ -85,14 +78,4 @@ export async function applyPhaseLimiterStage(
   }
 
   return { outputFile: currentFile, tempFiles };
-}
-
-export function applySimpleMasteringBoostStage(
-  input: StageContext & { inputFile: string }
-): { outputFile: string; tempFile: string } {
-  const { ffmpeg, fileId, jobId, sampleRate, inputFile, withProgressStage } = input;
-  const boostedFile = `${fileId}-${jobId}-simple-boosted.f32`;
-  const boostArgs = buildPcmFilterPlan(inputFile, boostedFile, "volume=12dB", sampleRate);
-  withProgressStage("simple-mastering-boost", 0.9, 0.0, () => ffmpeg.exec(...boostArgs));
-  return { outputFile: boostedFile, tempFile: boostedFile };
 }

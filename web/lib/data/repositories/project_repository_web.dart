@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:idb_shim/idb_browser.dart';
+import 'package:slowverb_web/data/repositories/slowverb_idb.dart';
 import 'package:slowverb_web/domain/exceptions/app_exceptions.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/project_repository.dart';
@@ -9,10 +10,8 @@ import 'package:web/web.dart' as web;
 
 /// IndexedDB-backed project repository with a localStorage fallback.
 class ProjectRepositoryWeb implements ProjectRepository {
-  static const _dbName = 'slowverb_web';
-  static const _storeName = 'projects';
-  static const _handleStoreName = 'project_handles';
-  static const _dbVersion = 2;
+  static const _storeName = SlowverbIdb.projects;
+  static const _handleStoreName = SlowverbIdb.projectHandles;
   static const _localStorageKey = 'slowverb.projects';
 
   final IdbFactory? _factory;
@@ -34,19 +33,8 @@ class ProjectRepositoryWeb implements ProjectRepository {
         return;
       }
 
-      _db = await _factory.open(
-        _dbName,
-        version: _dbVersion,
-        onUpgradeNeeded: (VersionChangeEvent e) {
-          final db = e.database;
-          if (!db.objectStoreNames.contains(_storeName)) {
-            db.createObjectStore(_storeName, keyPath: 'id');
-          }
-          if (!db.objectStoreNames.contains(_handleStoreName)) {
-            db.createObjectStore(_handleStoreName);
-          }
-        },
-      );
+      _db = await SlowverbIdb.open(_factory);
+      await _migrateFromLocalStorage();
     } catch (error) {
       debugPrint(
         'IndexedDB unavailable, using localStorage for projects: $error',
@@ -69,10 +57,14 @@ class ProjectRepositoryWeb implements ProjectRepository {
     final result = await store.getAll();
     await txn.completed;
 
-    final projects = result
-        .whereType<Map>()
-        .map((json) => Project.fromJson(Map<String, dynamic>.from(json)))
-        .toList();
+    final projects = <Project>[];
+    for (final json in result.whereType<Map>()) {
+      try {
+        projects.add(Project.fromJson(Map<String, dynamic>.from(json)));
+      } catch (error) {
+        debugPrint('Skipping malformed project record: $error');
+      }
+    }
 
     projects.sort(_sortByUpdatedAt);
     return projects;
@@ -221,6 +213,27 @@ class ProjectRepositoryWeb implements ProjectRepository {
     };
   }
 
+  /// Projects saved while IndexedDB failed to open went to localStorage.
+  /// Move them into IndexedDB (without overwriting) so the Library shows them.
+  Future<void> _migrateFromLocalStorage() async {
+    final List<Project> stranded;
+    try {
+      if (web.window.localStorage.getItem(_localStorageKey) == null) return;
+      stranded = _getAllFromLocalStorage();
+    } catch (_) {
+      return;
+    }
+    final txn = _db!.transaction(_storeName, idbModeReadWrite);
+    final store = txn.objectStore(_storeName);
+    for (final project in stranded) {
+      if (await store.getObject(project.id) == null) {
+        await store.put(_projectToJson(project));
+      }
+    }
+    await txn.completed;
+    web.window.localStorage.removeItem(_localStorageKey);
+  }
+
   List<Project> _getAllFromLocalStorage() {
     final raw = web.window.localStorage.getItem(_localStorageKey);
     if (raw == null || raw.isEmpty) return [];
@@ -228,14 +241,24 @@ class ProjectRepositoryWeb implements ProjectRepository {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
-        return decoded
-            .whereType<Map>()
-            .map((e) => Project.fromJson(Map<String, dynamic>.from(e)))
-            .toList()
-          ..sort(_sortByUpdatedAt);
+        final projects = <Project>[];
+        for (final e in decoded.whereType<Map>()) {
+          try {
+            projects.add(Project.fromJson(Map<String, dynamic>.from(e)));
+          } catch (error) {
+            debugPrint('Skipping malformed project record: $error');
+          }
+        }
+        return projects..sort(_sortByUpdatedAt);
       }
     } catch (error) {
-      debugPrint('Malformed project storage payload, resetting cache: $error');
+      debugPrint('Malformed project storage payload, backing up: $error');
+      // Keep one backup of the unreadable payload; reads repeat until the next
+      // save, so a timestamped key per read would pile up toward the quota.
+      const backupKey = '$_localStorageKey.corrupt';
+      if (web.window.localStorage.getItem(backupKey) == null) {
+        web.window.localStorage.setItem(backupKey, raw);
+      }
     }
     return [];
   }

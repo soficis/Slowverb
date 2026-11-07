@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
 
 /// Widget displaying the mastering file queue
@@ -18,80 +20,59 @@ class MasteringQueue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: SlowverbTokens.spacingSm,
+          runSpacing: SlowverbTokens.spacingSm,
           children: [
-            Text(
-              'FILES (${files.length})',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                color: Colors.white54,
-              ),
+            HwKey(
+              onPressed: onAddMore,
+              icon: Icons.add,
+              label: 'Add more',
             ),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: onAddMore,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add More'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.purple),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: onClearAll,
-                  icon: const Icon(Icons.clear_all, size: 18),
-                  label: const Text('Clear All'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade300,
-                  ),
-                ),
-              ],
+            HwKey(
+              onPressed: onClearAll,
+              icon: Icons.clear_all,
+              label: 'Clear all',
+              style: HwKeyStyle.danger,
             ),
           ],
         ),
-        const SizedBox(height: 12),
-
-        // File list
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: files.length,
-            separatorBuilder: (_, _) =>
-                Divider(height: 1, color: Colors.white.withValues(alpha: 0.05)),
-            itemBuilder: (context, index) => _buildFileRow(files[index]),
+        const SizedBox(height: SlowverbTokens.spacingSm),
+        Faceplate(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (var i = 0; i < files.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _buildFileRow(context, files[i]),
+              ],
+            ],
           ),
         ),
-
         // Warning if batch contains lossy files
         if (!files.every((f) => f.isLossless) && files.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-            ),
-            child: const Row(
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          VfdPanel(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: SlowverbTokens.warning,
+                ),
+                const SizedBox(width: SlowverbTokens.spacingSm),
                 Expanded(
                   child: Text(
                     'Batch contains lossy files. FLAC export disabled.',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: SlowverbTokens.warning,
+                    ),
                   ),
                 ),
               ],
@@ -102,53 +83,59 @@ class MasteringQueue extends StatelessWidget {
     );
   }
 
-  Widget _buildFileRow(MasteringQueueFile file) {
+  Widget _buildFileRow(BuildContext context, MasteringQueueFile file) {
+    final theme = Theme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: SlowverbTokens.spacingSm,
+        vertical: 8,
+      ),
       child: Row(
         children: [
-          // File icon
-          const Icon(Icons.insert_drive_file, size: 20, color: Colors.white54),
-          const SizedBox(width: 12),
-
-          // File name
+          const Icon(
+            Icons.insert_drive_file,
+            size: 20,
+            color: SlowverbTokens.textSecondary,
+          ),
+          const SizedBox(width: SlowverbTokens.spacingSm),
           Expanded(
-            flex: 3,
-            child: Text(
-              file.fileName,
-              style: const TextStyle(color: Colors.white70),
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  file.fileName,
+                  style: theme.textTheme.bodyMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Wrap(
+                  spacing: SlowverbTokens.spacingSm,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    VfdText(
+                      _formatDuration(file.metadata.duration),
+                      size: 12,
+                    ),
+                    _buildFormatBadge(file),
+                    VfdText(
+                      _formatSampleRate(file.metadata.sampleRate),
+                      size: 12,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-
-          // Duration
-          Expanded(
-            child: Text(
-              _formatDuration(file.metadata.duration),
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ),
-
-          // Format badge
-          SizedBox(width: 80, child: _buildFormatBadge(file)),
-
-          // Sample rate
-          SizedBox(
-            width: 70,
-            child: Text(
-              _formatSampleRate(file.metadata.sampleRate),
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ),
-
-          // Remove button
-          IconButton(
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          HwKey(
             onPressed: () => onRemoveFile(file.fileId),
-            icon: const Icon(Icons.close, size: 18),
-            color: Colors.white38,
-            hoverColor: Colors.red.withValues(alpha: 0.1),
+            icon: Icons.close,
+            tooltip: 'Remove file',
+            style: HwKeyStyle.danger,
+            size: 28,
           ),
         ],
       ),
@@ -158,32 +145,17 @@ class MasteringQueue extends StatelessWidget {
   Widget _buildFormatBadge(MasteringQueueFile file) {
     final format = _extractFormat(file.fileName).toUpperCase();
     final isLossless = file.isLossless;
+    final color = isLossless ? SlowverbTokens.success : SlowverbTokens.warning;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: isLossless
-                ? Colors.green.withValues(alpha: 0.2)
-                : Colors.yellow.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            format,
-            style: TextStyle(
-              color: isLossless ? Colors.green : Colors.yellow,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
+        VfdText(format, size: 12, color: color),
         const SizedBox(width: 4),
         Icon(
           isLossless ? Icons.check_circle : Icons.warning,
           size: 14,
-          color: isLossless ? Colors.green : Colors.orange,
+          color: color,
         ),
       ],
     );

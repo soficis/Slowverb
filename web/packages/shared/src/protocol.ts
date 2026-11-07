@@ -37,6 +37,8 @@ export interface RenderPayload {
   readonly dspSpec?: DspSpec;
   readonly reverbIR?: ArrayBuffer;
   readonly reverbIRSampleRate?: number;
+  readonly reverbIRWav?: ArrayBuffer; // WAV bytes for quality.reverb === "file"; decoded in the worker
+  readonly playbackIR?: ArrayBuffer; // WAV bytes for dspSpec.playback
   readonly mastering?: MasteringSpec;
   readonly format: ExportFormat;
   readonly bitrateKbps?: number;

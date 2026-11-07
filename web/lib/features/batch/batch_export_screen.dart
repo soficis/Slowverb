@@ -4,7 +4,8 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/features/batch/widgets/batch_progress_widget.dart';
 import 'package:slowverb_web/providers/batch_export_provider.dart';
@@ -24,19 +25,30 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(batchExportProvider);
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final padding = isNarrow
+        ? SlowverbTokens.spacingMd
+        : SlowverbTokens.spacingXl;
 
     return Scaffold(
-      backgroundColor: SlowverbColors.backgroundDark,
       appBar: AppBar(
-        title: const Text('BATCH EXPORT'),
+        title: const Text('Batch export'),
+        leading: const BackButton(),
         actions: [
           if (state.queuedFiles.isNotEmpty &&
               state.status == BatchExportStatus.idle)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Clear all files',
-              onPressed: () =>
-                  ref.read(batchExportProvider.notifier).clearQueue(),
+            Padding(
+              padding: const EdgeInsets.only(right: SlowverbTokens.spacingSm),
+              child: Center(
+                child: HwKey(
+                  onPressed: () =>
+                      ref.read(batchExportProvider.notifier).clearQueue(),
+                  icon: Icons.delete_outline,
+                  tooltip: 'Clear all files',
+                  style: HwKeyStyle.danger,
+                  size: 36,
+                ),
+              ),
             ),
         ],
       ),
@@ -71,30 +83,19 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
         },
         onDragEntered: (_) => setState(() => _isHoveringFiles = true),
         onDragExited: (_) => setState(() => _isHoveringFiles = false),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            gradient: SlowverbColors.backgroundGradient,
-            border: _isHoveringFiles
-                ? Border.all(color: SlowverbColors.primaryPurple, width: 4)
-                : null,
-            boxShadow: _isHoveringFiles
-                ? [
-                    BoxShadow(
-                      color: SlowverbColors.primaryPurple.withValues(
-                        alpha: 0.5,
-                      ),
-                      blurRadius: 30,
-                      spreadRadius: 5,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Center(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 700),
-              margin: const EdgeInsets.all(24),
-              child: _buildContent(context, ref, state),
+        child: RetroDesktop(
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(padding),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 960),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [_buildContent(context, ref, state)],
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -126,134 +127,141 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return SingleChildScrollView(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: SlowverbColors.surface,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            ShaderMask(
-              shaderCallback: (bounds) =>
-                  SlowverbColors.primaryGradient.createShader(bounds),
-              child: Text(
-                'BATCH EXPORT',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 3.0,
-                ),
-                textAlign: TextAlign.center,
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RetroWindow(
+          title: 'Files',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Process multiple files with the same effects',
+                style: theme.textTheme.bodyMedium,
               ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              'Process multiple files with the same effects',
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 24),
-
-            // Add files button
-            _buildAddFilesButton(context, ref, state),
-
-            const SizedBox(height: 16),
-
-            // File list
-            if (state.queuedFiles.isNotEmpty) ...[
-              _buildFileList(context, ref, state),
-              const SizedBox(height: 24),
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              _buildAddFilesButton(context, ref, state),
+              if (state.queuedFiles.isNotEmpty) ...[
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                _buildFileList(context, ref, state),
+              ],
             ],
-
-            // Format selector
-            _buildFormatSelector(context, ref, state),
-
-            const SizedBox(height: 24),
-
-            // Format-specific settings
-            _buildFormatSettings(context, ref, state),
-
-            const SizedBox(height: 24),
-
-            // Preset selector
-            _buildPresetSelector(context, ref, state),
-
-            const SizedBox(height: 24),
-
-            // ZIP export toggle (only for multiple files)
-            if (state.showZipOption) ...[
-              _buildZipExportToggle(context, ref, state),
-              const SizedBox(height: 24),
-            ],
-
-            const SizedBox(height: 24),
-
-            // Error message
-            if (state.errorMessage != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: SlowverbColors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: SlowverbColors.error,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        state.errorMessage!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: SlowverbColors.error,
-                        ),
+          ),
+        ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        RetroWindow(
+          title: 'Format',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const PlateLabel('Output format'),
+                  const Spacer(),
+                  if (!state.allFilesLossless && state.queuedFiles.isNotEmpty)
+                    Tooltip(
+                      message:
+                          'Some files are lossy. FLAC export requires all lossless sources.',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: SlowverbTokens.warning,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Mixed formats',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: SlowverbTokens.warning,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () =>
-                          ref.read(batchExportProvider.notifier).clearError(),
-                    ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: SlowverbTokens.spacingSm),
+              _buildFormatSelector(context, ref, state),
+              if (state.selectedFormat != 'wav') ...[
+                const Divider(height: SlowverbTokens.spacingLg),
+                _buildFormatSettings(context, ref, state),
+              ],
             ],
-
-            // Start button
-            ElevatedButton.icon(
-              onPressed: state.canStart
-                  ? () => ref.read(batchExportProvider.notifier).startBatch()
-                  : null,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(Icons.play_arrow, size: 24),
-              label: Text(
-                state.queuedFiles.isEmpty
-                    ? 'ADD FILES TO START'
-                    : 'EXPORT ${state.fileCount} FILES AS ${state.selectedFormat.toUpperCase()}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        RetroWindow(
+          title: 'Settings',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildPresetSelector(context, ref, state),
+              if (state.showZipOption) ...[
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                _buildZipExportToggle(context, ref, state),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        RetroWindow(
+          title: 'Export',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state.errorMessage != null) ...[
+                VfdPanel(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: SlowverbTokens.error,
+                        size: 18,
+                      ),
+                      const SizedBox(width: SlowverbTokens.spacingSm),
+                      Expanded(
+                        child: Text(
+                          state.errorMessage!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: SlowverbTokens.error,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: SlowverbTokens.spacingSm),
+                      HwKey(
+                        onPressed: () => ref
+                            .read(batchExportProvider.notifier)
+                            .clearError(),
+                        icon: Icons.close,
+                        tooltip: 'Dismiss error',
+                        style: HwKeyStyle.danger,
+                        size: 28,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: SlowverbTokens.spacingMd),
+              ],
+              HwKey(
+                onPressed: state.canStart
+                    ? () => ref.read(batchExportProvider.notifier).startBatch()
+                    : null,
+                icon: Icons.play_arrow,
+                label: state.queuedFiles.isEmpty
+                    ? 'Add files to start'
+                    : 'Export ${state.fileCount} files as ${state.selectedFormat.toUpperCase()}',
+                style: HwKeyStyle.primary,
+                isDefault: true,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -262,6 +270,8 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
+    final theme = Theme.of(context);
+
     return DropTarget(
       onDragDone: (details) async {
         if (details.files.isEmpty) return;
@@ -289,39 +299,51 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
           await ref.read(batchExportProvider.notifier).addFiles(files);
         }
       },
-      child: OutlinedButton.icon(
-        onPressed: () => _pickFiles(ref),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(
-            vertical: 32,
-          ), // Larger touch target
-          side: BorderSide(
-            color: SlowverbColors.primaryPurple.withValues(alpha: 0.5),
-            width: 2,
+      child: InkWell(
+        onTap: () => _pickFiles(ref),
+        borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
+            border: Border.all(
+              color: _isHoveringFiles
+                  ? SlowverbTokens.vfdCyan
+                  : Colors.transparent,
+              width: 2,
+            ),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        icon: const Icon(Icons.add, size: 32), // Larger icon
-        label: Column(
-          children: [
-            const Text(
-              '+ ADD AUDIO FILES',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
+          child: VfdPanel(
+            child: SizedBox(
+              width: double.infinity,
+              height: 180,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add,
+                    size: 40,
+                    color: _isHoveringFiles
+                        ? SlowverbTokens.vfdCyan
+                        : SlowverbTokens.textSecondary,
+                  ),
+                  const SizedBox(height: SlowverbTokens.spacingSm),
+                  const VfdText(
+                    'Drop files here or click to browse',
+                    size: 18,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: SlowverbTokens.spacingXs),
+                  Text(
+                    'Add audio files — MP3, WAV, FLAC, AAC, M4A, OGG, AIFF',
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Drop files here or click to browse',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: SlowverbColors.textSecondary,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -359,63 +381,93 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 200),
-      decoration: BoxDecoration(
-        color: SlowverbColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: state.queuedFiles.length,
-        itemBuilder: (context, index) {
-          final file = state.queuedFiles[index];
-          return ListTile(
-            leading: const Icon(Icons.audio_file),
-            title: Text(file.fileName, overflow: TextOverflow.ellipsis),
-            subtitle: Row(
-              children: [
-                _buildFormatBadge(file.metadata.format, file.isLossless),
-                const SizedBox(width: 8),
-                if (file.metadata.duration != null)
-                  Text(_formatDuration(file.metadata.duration!)),
-              ],
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: () => ref
-                  .read(batchExportProvider.notifier)
-                  .removeFile(file.fileId),
-            ),
-          );
-        },
+    final theme = Theme.of(context);
+
+    return Faceplate(
+      padding: EdgeInsets.zero,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 240),
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: state.queuedFiles.length,
+          itemBuilder: (context, index) {
+            final file = state.queuedFiles[index];
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: SlowverbTokens.spacingSm,
+                vertical: SlowverbTokens.spacingSm,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.audio_file,
+                    size: 20,
+                    color: SlowverbTokens.textSecondary,
+                  ),
+                  const SizedBox(width: SlowverbTokens.spacingSm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          file.fileName,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          spacing: SlowverbTokens.spacingSm,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _buildFormatBadge(
+                              file.metadata.format,
+                              file.isLossless,
+                            ),
+                            if (file.metadata.duration != null)
+                              VfdText(
+                                _formatDuration(file.metadata.duration!),
+                                size: 12,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: SlowverbTokens.spacingSm),
+                  HwKey(
+                    onPressed: () => ref
+                        .read(batchExportProvider.notifier)
+                        .removeFile(file.fileId),
+                    icon: Icons.close,
+                    tooltip: 'Remove file',
+                    style: HwKeyStyle.danger,
+                    size: 28,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildFormatBadge(String format, bool isLossless) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
-            .withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color:
-              (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
-                  .withValues(alpha: 0.4),
+    final color = isLossless ? SlowverbTokens.success : SlowverbTokens.warning;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isLossless ? Icons.high_quality : Icons.compress,
+          size: 12,
+          color: color,
         ),
-      ),
-      child: Text(
-        format.toUpperCase(),
-        style: TextStyle(
-          color: isLossless
-              ? SlowverbColors.accentMint
-              : SlowverbColors.warning,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+        const SizedBox(width: 4),
+        VfdText(format.toUpperCase(), size: 12, color: color),
+      ],
     );
   }
 
@@ -424,171 +476,50 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('FORMAT', style: Theme.of(context).textTheme.labelLarge),
-            const Spacer(),
-            if (!state.allFilesLossless && state.queuedFiles.isNotEmpty)
-              const Tooltip(
-                message:
-                    'Some files are lossy. FLAC export requires all lossless sources.',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: SlowverbColors.warning,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Mixed formats',
-                      style: TextStyle(
-                        color: SlowverbColors.warning,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildFormatButton(
-              context,
-              ref,
-              state,
-              format: 'mp3',
-              label: 'MP3',
-              icon: Icons.music_note,
-            ),
-            const SizedBox(width: 8),
-            _buildFormatButton(
-              context,
-              ref,
-              state,
-              format: 'aac',
-              label: 'AAC',
-              icon: Icons.high_quality_outlined,
-            ),
-            const SizedBox(width: 8),
-            _buildFormatButton(
-              context,
-              ref,
-              state,
-              format: 'wav',
-              label: 'WAV',
-              icon: Icons.graphic_eq,
-            ),
-            const SizedBox(width: 8),
-            _buildFlacButton(context, ref, state),
-          ],
-        ),
-      ],
+    return Semantics(
+      label: 'Export format',
+      container: true,
+      child: Wrap(
+        spacing: SlowverbTokens.spacingSm,
+        runSpacing: SlowverbTokens.spacingSm,
+        children: [
+          _buildFormatButton(ref, state, format: 'mp3', label: 'MP3'),
+          _buildFormatButton(ref, state, format: 'aac', label: 'AAC'),
+          _buildFormatButton(ref, state, format: 'wav', label: 'WAV'),
+          _buildFlacButton(ref, state),
+        ],
+      ),
     );
   }
 
   Widget _buildFormatButton(
-    BuildContext context,
     WidgetRef ref,
     BatchExportState state, {
     required String format,
     required String label,
-    required IconData icon,
   }) {
-    final isSelected = state.selectedFormat == format;
-
-    return Expanded(
-      child: InkWell(
-        onTap: () => ref.read(batchExportProvider.notifier).setFormat(format),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
-                : SlowverbColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected
-                  ? SlowverbColors.primaryPurple
-                  : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? SlowverbColors.primaryPurple : null,
-              ),
-              const SizedBox(height: 4),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      ),
+    return HwKey(
+      onPressed: () =>
+          ref.read(batchExportProvider.notifier).setFormat(format),
+      label: label,
+      lit: state.selectedFormat == format,
+      size: 32,
     );
   }
 
-  Widget _buildFlacButton(
-    BuildContext context,
-    WidgetRef ref,
-    BatchExportState state,
-  ) {
+  Widget _buildFlacButton(WidgetRef ref, BatchExportState state) {
     final isEnabled = state.isFlacEnabled;
-    final isSelected = state.selectedFormat == 'flac';
 
-    return Expanded(
-      child: Opacity(
-        opacity: isEnabled ? 1.0 : 0.5,
-        child: Tooltip(
-          message: !isEnabled && state.queuedFiles.isNotEmpty
-              ? 'FLAC export requires all files to be lossless sources (WAV, FLAC, AIFF).'
-              : '',
-          child: InkWell(
-            onTap: isEnabled
-                ? () => ref.read(batchExportProvider.notifier).setFormat('flac')
-                : null,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: isSelected && isEnabled
-                    ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
-                    : SlowverbColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isSelected && isEnabled
-                      ? SlowverbColors.primaryPurple
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.high_quality,
-                    color: isSelected && isEnabled
-                        ? SlowverbColors.primaryPurple
-                        : null,
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'FLAC',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    return HwKey(
+      onPressed: isEnabled
+          ? () => ref.read(batchExportProvider.notifier).setFormat('flac')
+          : null,
+      label: 'FLAC',
+      lit: state.selectedFormat == 'flac',
+      size: 32,
+      tooltip: !isEnabled && state.queuedFiles.isNotEmpty
+          ? 'FLAC export requires all files to be lossless sources (WAV, FLAC, AIFF).'
+          : null,
     );
   }
 
@@ -601,8 +532,7 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
       case 'mp3':
         return _buildBitrateSlider(
           context,
-          ref,
-          label: 'MP3 BITRATE',
+          label: 'MP3 bitrate',
           value: state.mp3Bitrate,
           min: 128,
           max: 320,
@@ -613,8 +543,7 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
       case 'aac':
         return _buildBitrateSlider(
           context,
-          ref,
-          label: 'AAC BITRATE',
+          label: 'AAC bitrate',
           value: state.aacBitrate,
           min: 128,
           max: 256,
@@ -630,8 +559,7 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
   }
 
   Widget _buildBitrateSlider(
-    BuildContext context,
-    WidgetRef ref, {
+    BuildContext context, {
     required String label,
     required int value,
     required int min,
@@ -640,10 +568,10 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     required void Function(int) onChanged,
   }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 12),
+        PlateLabel(label),
+        const SizedBox(height: SlowverbTokens.spacingXs),
         Row(
           children: [
             Expanded(
@@ -656,19 +584,10 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
                 onChanged: (v) => onChanged(v.toInt()),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: SlowverbColors.backgroundLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '$value kbps',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: SlowverbColors.accentPink,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            VfdPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: _buildReadout('$value', 'kbps'),
             ),
           ],
         ),
@@ -682,13 +601,10 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     BatchExportState state,
   ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'FLAC COMPRESSION LEVEL',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: 12),
+        const PlateLabel('FLAC compression level'),
+        const SizedBox(height: SlowverbTokens.spacingXs),
         Row(
           children: [
             Expanded(
@@ -703,21 +619,30 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
                     .setFlacCompressionLevel(v.toInt()),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: SlowverbColors.backgroundLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Level ${state.flacCompressionLevel}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: SlowverbColors.accentCyan,
-                  fontWeight: FontWeight.w600,
-                ),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            VfdPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: _buildReadout(
+                '${state.flacCompressionLevel}',
+                'level',
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReadout(String value, String unit) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        SegmentReadout(value, size: 22),
+        const SizedBox(width: 4),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: PlateLabel(unit),
         ),
       ],
     );
@@ -729,29 +654,21 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     BatchExportState state,
   ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('EFFECT PRESET', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: state.selectedPreset.id,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: SlowverbColors.backgroundLight,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          items: Presets.all.map((preset) {
-            return DropdownMenuItem(value: preset.id, child: Text(preset.name));
-          }).toList(),
+        const PlateLabel('Effect preset'),
+        const SizedBox(height: SlowverbTokens.spacingSm),
+        RetroSelect<String>(
+          semanticLabel: 'Effect preset',
+          value: state.selectedPreset.id,
+          options: [
+            for (final preset in Presets.all)
+              RetroOption(preset.id, preset.name),
+          ],
           onChanged: (value) {
-            if (value != null) {
-              final preset = Presets.getById(value);
-              if (preset != null) {
-                ref.read(batchExportProvider.notifier).setPreset(preset);
-              }
+            final preset = Presets.getById(value);
+            if (preset != null) {
+              ref.read(batchExportProvider.notifier).setPreset(preset);
             }
           },
         ),
@@ -764,47 +681,39 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(24),
-      ),
+    return RetroWindow(
+      title: 'Progress',
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (state.progress != null)
             BatchProgressWidget(progress: state.progress!),
-
-          const SizedBox(height: 24),
-
-          // Control buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            alignment: WrapAlignment.center,
             children: [
               if (state.status == BatchExportStatus.running)
-                TextButton.icon(
+                HwKey(
                   onPressed: () =>
                       ref.read(batchExportProvider.notifier).pauseBatch(),
-                  icon: const Icon(Icons.pause),
-                  label: const Text('PAUSE'),
+                  icon: Icons.pause,
+                  label: 'Pause',
                 ),
               if (state.status == BatchExportStatus.paused)
-                TextButton.icon(
+                HwKey(
                   onPressed: () =>
                       ref.read(batchExportProvider.notifier).resumeBatch(),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('RESUME'),
+                  icon: Icons.play_arrow,
+                  label: 'Resume',
                 ),
-              const SizedBox(width: 16),
-              TextButton.icon(
+              HwKey(
                 onPressed: () =>
                     ref.read(batchExportProvider.notifier).cancelBatch(),
-                icon: const Icon(Icons.cancel),
-                label: const Text('CANCEL'),
-                style: TextButton.styleFrom(
-                  foregroundColor: SlowverbColors.error,
-                ),
+                icon: Icons.cancel,
+                label: 'Cancel',
+                style: HwKeyStyle.danger,
               ),
             ],
           ),
@@ -818,101 +727,104 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
+    final theme = Theme.of(context);
     final progress = state.progress!;
+    final hasFailed = progress.failedFiles > 0;
 
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(24),
-      ),
+    return RetroWindow(
+      title: 'Results',
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            progress.failedFiles == 0 ? Icons.check_circle : Icons.warning,
-            size: 64,
-            color: progress.failedFiles == 0
-                ? SlowverbColors.accentMint
-                : SlowverbColors.warning,
+          Center(
+            child: Annunciator(
+              hasFailed ? 'FAILED' : 'DONE',
+              lit: true,
+              color: hasFailed
+                  ? SlowverbTokens.error
+                  : SlowverbTokens.success,
+            ),
           ),
-
-          const SizedBox(height: 16),
-
+          const SizedBox(height: SlowverbTokens.spacingSm),
           Text(
-            progress.failedFiles == 0
-                ? 'BATCH COMPLETE'
-                : 'BATCH FINISHED WITH ERRORS',
-            style: Theme.of(context).textTheme.headlineSmall,
+            hasFailed ? 'Batch finished with errors' : 'Batch complete',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium,
           ),
-
-          const SizedBox(height: 8),
-
+          const SizedBox(height: SlowverbTokens.spacingXs),
           Text(
             '${progress.completedFiles} of ${progress.totalFiles} files exported successfully',
-            style: Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
           ),
-
-          const SizedBox(height: 24),
-
+          const SizedBox(height: SlowverbTokens.spacingLg),
           if (progress.errors.isNotEmpty) ...[
-            Container(
-              constraints: const BoxConstraints(maxHeight: 150),
-              decoration: BoxDecoration(
-                color: SlowverbColors.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: progress.errors.length,
-                itemBuilder: (context, index) {
-                  final entry = progress.errors.entries.elementAt(index);
-                  return ListTile(
-                    leading: const Icon(
-                      Icons.error_outline,
-                      color: SlowverbColors.error,
-                    ),
-                    title: Text(entry.key),
-                    subtitle: Text(
-                      entry.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                },
+            Faceplate(
+              padding: EdgeInsets.zero,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final entry in progress.errors.entries)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: SlowverbTokens.spacingSm,
+                            vertical: SlowverbTokens.spacingSm,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: SlowverbTokens.error,
+                                size: 16,
+                              ),
+                              const SizedBox(width: SlowverbTokens.spacingSm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.key,
+                                      style: theme.textTheme.titleSmall,
+                                    ),
+                                    Text(
+                                      entry.value,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: SlowverbTokens.spacingLg),
           ],
-
-          // Action buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            alignment: WrapAlignment.center,
             children: [
               if (state.zipExportEnabled && state.zipResult != null)
-                ElevatedButton.icon(
+                HwKey(
                   onPressed: () => _downloadZip(state),
-                  icon: const Icon(Icons.archive),
-                  label: const Text('DOWNLOAD ZIP'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                  ),
+                  icon: Icons.archive,
+                  label: 'Download ZIP',
                 ),
-              if (state.zipExportEnabled && state.zipResult != null)
-                const SizedBox(width: 16),
-              ElevatedButton.icon(
-                onPressed: () => ref.read(batchExportProvider.notifier).reset(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('START NEW BATCH'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 16,
-                    horizontal: 32,
-                  ),
-                ),
+              HwKey(
+                onPressed: () =>
+                    ref.read(batchExportProvider.notifier).reset(),
+                icon: Icons.refresh,
+                label: 'Start new batch',
               ),
             ],
           ),
@@ -932,63 +844,45 @@ class _BatchExportScreenState extends ConsumerState<BatchExportScreen> {
     WidgetRef ref,
     BatchExportState state,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: SlowverbColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: state.zipExportEnabled
-              ? SlowverbColors.primaryPurple.withValues(alpha: 0.5)
-              : Colors.transparent,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.archive_outlined,
-            color: state.zipExportEnabled
-                ? SlowverbColors.primaryPurple
-                : SlowverbColors.textSecondary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'EXPORT AS ZIP',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Bundle all exported files into a single zip archive',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: SlowverbColors.textSecondary,
-                  ),
-                ),
-              ],
+    final theme = Theme.of(context);
+
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: SlowverbTokens.spacingXs),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.archive_outlined,
+              size: 20,
+              color: SlowverbTokens.textSecondary,
             ),
-          ),
-          Switch(
-            value: state.zipExportEnabled,
-            onChanged: (value) {
-              if (value) {
-                ref.read(batchExportProvider.notifier).enableZipExport();
-              } else {
-                ref.read(batchExportProvider.notifier).disableZipExport();
-              }
-            },
-            thumbColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
-                return SlowverbColors.primaryPurple;
-              }
-              return null;
-            }),
-          ),
-        ],
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Export as ZIP', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Bundle all exported files into a single zip archive',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            Switch(
+              value: state.zipExportEnabled,
+              onChanged: (value) {
+                if (value) {
+                  ref.read(batchExportProvider.notifier).enableZipExport();
+                } else {
+                  ref.read(batchExportProvider.notifier).disableZipExport();
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,7 +1,7 @@
 name: slowverb_web
 description: "Slowverb Web - Browser-based slowed + reverb vaporwave editor"
 publish_to: 'none'
-version: 0.1.0+1
+version: 2.2.0+2
 
 environment:
   sdk: ^3.9.2
@@ -49,6 +49,23 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # Bundled OFL fonts (see assets/google_fonts/*-OFL.txt); no runtime fetching.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/google_fonts/Roboto-Variable.ttf
+    # Dot-matrix titles (subset: Latin, punctuation, katakana, full-width forms). OFL.
+    - family: DotGothic16
+      fonts:
+        - asset: assets/google_fonts/DotGothic16-Regular.ttf
+    # Segment-display readouts. OFL (keshikan/DSEG v0.46).
+    - family: DSEG7
+      fonts:
+        - asset: assets/google_fonts/DSEG7Classic-Bold.ttf
+    - family: DSEG14
+      fonts:
+        - asset: assets/google_fonts/DSEG14Classic-Regular.ttf
+
   # GPU visualizer shaders
   shaders:
     - shaders/maze_3d.frag
@@ -64,3 +81,4 @@ flutter:
   assets:
 
     - web/js/
+    - assets/google_fonts/

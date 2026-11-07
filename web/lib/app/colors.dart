@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 
 /// VaporXP Luna color palette mapped to legacy names for compatibility.
+///
+/// Thin alias layer over [SlowverbTokens]; new code should use
+/// [SlowverbTokens] directly. Do not define raw colors here.
 class SlowverbColors {
   // Primary palette
   static const primaryPurple = SlowverbTokens.primaryPurple;
@@ -18,21 +21,21 @@ class SlowverbColors {
 
   // Background
   static const backgroundDark = SlowverbTokens.surfaceBase;
-  static const backgroundMedium = Color(0xFF0F1628);
-  static const backgroundLight = Color(0xFF23304A);
+  static const backgroundMedium = SlowverbTokens.backgroundMedium;
+  static const backgroundLight = SlowverbTokens.backgroundLight;
 
   // Surface colors
-  static const surface = Color(0xFF1F1B2F);
-  static const surfaceVariant = Color(0xFF2A2343);
+  static const surface = SlowverbTokens.surface;
+  static const surfaceVariant = SlowverbTokens.surfaceVariant;
 
   // Text
-  static const textPrimary = Color(0xFFF5F1FF);
-  static const textSecondary = Color(0xFFCBC6DD);
-  static const textHint = Color(0xFF9FA4BF);
+  static const textPrimary = SlowverbTokens.textPrimary;
+  static const textSecondary = SlowverbTokens.textSecondary;
+  static const textHint = SlowverbTokens.textHint;
 
   // Waveform
   static const waveformActive = accentPink;
-  static const waveformInactive = Color(0xFF3B3A55);
+  static const waveformInactive = SlowverbTokens.waveformInactive;
   static const playhead = accentCyan;
 
   // Success/Error

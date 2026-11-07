@@ -2,8 +2,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
 import 'package:slowverb_web/app/router.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
@@ -16,66 +17,106 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final projectsAsync = ref.watch(projectsProvider);
+    final padding = EdgeInsets.all(
+      MediaQuery.sizeOf(context).width < 600
+          ? SlowverbTokens.spacingMd
+          : SlowverbTokens.spacingLg,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
           onPressed: () => context.go(AppRoutes.import_),
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
             onPressed: () => ref.invalidate(projectsProvider),
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
+      body: RetroDesktop(
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: projectsAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(
-                  color: SlowverbColors.primaryPurple,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              child: projectsAsync.when(
+                loading: () => Padding(
+                  padding: padding,
+                  child: const RetroWindow(
+                    title: 'Library',
+                    child: SizedBox(
+                      height: 120,
+                      width: double.infinity,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: SlowverbTokens.vfdCyan,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              error: (e, _) => _LibraryMessage(
-                icon: Icons.error_outline,
-                title: 'Failed to load library',
-                message: e.toString(),
-              ),
-              data: (projects) {
-                if (projects.isEmpty) {
-                  return const _LibraryMessage(
-                    icon: Icons.library_music_outlined,
-                    title: 'No projects yet',
-                    message:
-                        'Import a file to create your first project entry.',
-                  );
-                }
-
-                return ListView.separated(
-                  itemCount: projects.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final project = projects[index];
-                    return _ProjectCard(
-                      project: project,
-                      onOpen: () => _openProject(context, ref, project),
-                      onDelete: () async {
-                        final repo = ref.read(projectRepositoryProvider);
-                        await repo.deleteProject(project.id);
-                        ref.invalidate(projectsProvider);
-                      },
+                error: (e, _) => Padding(
+                  padding: padding,
+                  child: RetroWindow(
+                    title: 'Library',
+                    child: _LibraryMessage(
+                      icon: Icons.error_outline,
+                      title: 'Failed to load library',
+                      message: e.toString(),
+                    ),
+                  ),
+                ),
+                data: (projects) {
+                  if (projects.isEmpty) {
+                    return Padding(
+                      padding: padding,
+                      child: const RetroWindow(
+                        title: 'Library',
+                        child: _LibraryMessage(
+                          icon: Icons.library_music_outlined,
+                          title: 'No projects yet',
+                          message:
+                              'Import a file to create your first project entry.',
+                        ),
+                      ),
                     );
-                  },
-                );
-              },
+                  }
+
+                  return ListView(
+                    padding: padding,
+                    children: [
+                      RetroWindow(
+                        title: 'Library',
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < projects.length; i++) ...[
+                              if (i > 0) const Divider(height: 1),
+                              _ProjectCard(
+                                project: projects[i],
+                                onOpen: () =>
+                                    _openProject(context, ref, projects[i]),
+                                onDelete: () async {
+                                  final repo = ref.read(
+                                    projectRepositoryProvider,
+                                  );
+                                  await repo.deleteProject(projects[i].id);
+                                  ref.invalidate(projectsProvider);
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -109,10 +150,9 @@ class LibraryScreen extends ConsumerWidget {
       final shouldRelink = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: SlowverbColors.surface,
           title: const Row(
             children: [
-              Icon(Icons.link_off, color: SlowverbColors.warning),
+              Icon(Icons.link_off, color: SlowverbTokens.warning),
               SizedBox(width: 12),
               Text('File Access Required'),
             ],
@@ -128,9 +168,7 @@ class LibraryScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               Text(
                 'Please select the file again to continue editing this project.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: SlowverbColors.textSecondary,
-                ),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -163,7 +201,7 @@ class LibraryScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to read file data'),
-            backgroundColor: SlowverbColors.error,
+            backgroundColor: SlowverbTokens.error,
           ),
         );
         return;
@@ -180,7 +218,7 @@ class LibraryScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error opening project: $e'),
-          backgroundColor: SlowverbColors.error,
+          backgroundColor: SlowverbTokens.error,
         ),
       );
     }
@@ -206,223 +244,137 @@ class _ProjectCard extends StatelessWidget {
     final preset = Presets.getById(project.presetId);
     final presetName = preset?.name ?? project.presetId;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            SlowverbColors.surface.withValues(alpha: 0.9),
-            SlowverbColors.surfaceVariant.withValues(alpha: 0.8),
-          ],
-        ),
-        border: Border.all(
-          color: SlowverbColors.primaryPurple.withValues(alpha: 0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: SlowverbColors.primaryPurple.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SlowverbTokens.spacingMd,
+        vertical: SlowverbTokens.spacingMd,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            // Album art placeholder with gradient
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    SlowverbColors.primaryPurple,
-                    SlowverbColors.accentPink,
+      child: Row(
+        children: [
+          // Album art placeholder.
+          const Faceplate(
+            padding: EdgeInsets.zero,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                Icons.music_note,
+                color: SlowverbTokens.textSecondary,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: SlowverbTokens.spacingMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Track name
+                Text(
+                  project.name,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                // File name
+                Text(
+                  project.sourceFileName ?? 'Unknown file',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                // Preset, duration and export format readouts
+                Wrap(
+                  spacing: SlowverbTokens.spacingSm,
+                  runSpacing: SlowverbTokens.spacingXs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    VfdText(
+                      presetName,
+                      size: 12,
+                      color: SlowverbTokens.sunsetPink,
+                    ),
+                    if (durationLabel != null) VfdText(durationLabel, size: 12),
+                    if (project.lastExportFormat != null)
+                      VfdText(
+                        project.lastExportFormat!.toUpperCase(),
+                        size: 12,
+                        color: SlowverbTokens.success,
+                      ),
                   ],
                 ),
-              ),
-              child: const Icon(
-                Icons.music_note,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Track name
-                  Text(
-                    project.name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: SlowverbColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  // File name
-                  Text(
-                    project.sourceFileName ?? 'Unknown file',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: SlowverbColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  // Chips row
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      // Preset chip
-                      _buildChip(presetName, SlowverbColors.primaryPurple),
-                      // Duration chip
-                      if (durationLabel != null)
-                        _buildChip(durationLabel, SlowverbColors.accentCyan),
-                      // Export format chip
-                      if (project.lastExportFormat != null)
-                        _buildChip(
-                          project.lastExportFormat!.toUpperCase(),
-                          SlowverbColors.success,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Timestamps row
-                  Row(
-                    children: [
-                      if (project.updatedAt != null) ...[
-                        const Icon(
-                          Icons.update,
-                          size: 12,
-                          color: SlowverbColors.textHint,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatRelativeTime(project.updatedAt!),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: SlowverbColors.textHint,
-                                fontSize: 11,
-                              ),
-                        ),
-                      ],
-                      if (project.lastExportDate != null) ...[
-                        const SizedBox(width: 12),
-                        const Icon(
-                          Icons.download_done,
-                          size: 12,
-                          color: SlowverbColors.textHint,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Exported ${_formatRelativeTime(project.lastExportDate!)}',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: SlowverbColors.textHint,
-                                fontSize: 11,
-                              ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Action buttons
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Open button with gradient
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: const LinearGradient(
-                      colors: [
-                        SlowverbColors.primaryPurple,
-                        SlowverbColors.accentPink,
-                      ],
-                    ),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onOpen,
-                      borderRadius: BorderRadius.circular(24),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.play_arrow,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Open',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                const SizedBox(height: 4),
+                // Timestamps
+                Wrap(
+                  spacing: SlowverbTokens.spacingSm,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (project.updatedAt != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.update,
+                            size: 12,
+                            color: SlowverbTokens.textHint,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatRelativeTime(project.updatedAt!),
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(fontSize: 11),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Delete button
-                TextButton(
-                  onPressed: onDelete,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: const Text(
-                    'Delete',
-                    style: TextStyle(color: SlowverbColors.error, fontSize: 12),
-                  ),
+                    if (project.lastExportDate != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.download_done,
+                            size: 12,
+                            color: SlowverbTokens.textHint,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Exported ${_formatRelativeTime(project.lastExportDate!)}',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
+          ),
+          const SizedBox(width: SlowverbTokens.spacingMd),
+          // Actions
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              HwKey(
+                onPressed: onOpen,
+                icon: Icons.play_arrow,
+                label: 'Open',
+                style: HwKeyStyle.primary,
+              ),
+              const SizedBox(height: 6),
+              HwKey(
+                onPressed: onDelete,
+                icon: Icons.delete_outline,
+                tooltip: 'Delete',
+                style: HwKeyStyle.danger,
+                size: 36,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -461,26 +413,22 @@ class _LibraryMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 48, color: SlowverbColors.textSecondary),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: SlowverbColors.textPrimary,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: SlowverbTokens.textSecondary),
+            const SizedBox(height: 12),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: SlowverbColors.textSecondary,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

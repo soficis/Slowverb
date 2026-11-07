@@ -58,7 +58,12 @@ self.onmessage = async (event) => {
         console.log(`[PhaseLimiterWorker] rightPtrRaw: ${rightPtrRaw} (type: ${typeof rightPtrRaw})`);
 
         if (!leftPtrRaw || !rightPtrRaw) {
-            throw new Error("WASM malloc failed");
+            if (leftPtrRaw) Module._free(leftPtrRaw);
+            if (rightPtrRaw) Module._free(rightPtrRaw);
+            throw new Error(
+                "Track too long for Level 5 mastering (not enough browser memory). " +
+                "Turn mastering off for this track, or split it into shorter parts."
+            );
         }
 
         // Convert to Number for heap indexing (always safe for 32-bit offset)

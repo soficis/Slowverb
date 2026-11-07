@@ -17,8 +17,10 @@ class ResponsiveLayout {
     return ScreenSize.ultrawide;
   }
 
-  static bool isMobile(BuildContext context) => of(context) == ScreenSize.mobile;
-  static bool isTablet(BuildContext context) => of(context) == ScreenSize.tablet;
+  static bool isMobile(BuildContext context) =>
+      of(context) == ScreenSize.mobile;
+  static bool isTablet(BuildContext context) =>
+      of(context) == ScreenSize.tablet;
   static bool isDesktop(BuildContext context) =>
       of(context) == ScreenSize.desktop;
   static bool isUltraWide(BuildContext context) =>
@@ -38,8 +40,10 @@ class ResponsiveLayout {
       ScreenSize.mobile => const EdgeInsets.all(16),
       ScreenSize.tablet => const EdgeInsets.all(24),
       ScreenSize.desktop => const EdgeInsets.all(32),
-      ScreenSize.ultrawide =>
-          const EdgeInsets.symmetric(horizontal: 64, vertical: 32),
+      ScreenSize.ultrawide => const EdgeInsets.symmetric(
+        horizontal: 64,
+        vertical: 32,
+      ),
     };
   }
 }

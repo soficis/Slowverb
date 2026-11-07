@@ -23,7 +23,6 @@ class EditorScreenArgs {
 class AppRoutes {
   static const import_ = '/';
   static const editor = '/editor';
-  static const presets = '/presets';
   static const export = '/export';
   static const batchExport = '/batch-export';
   static const mastering = '/mastering';
@@ -55,16 +54,6 @@ final appRouter = GoRouter(
           fileData = extra;
         }
         return EditorScreen(fileData: fileData, project: project);
-      },
-    ),
-    GoRoute(
-      path: AppRoutes.presets,
-      name: 'presets',
-      builder: (context, state) {
-        // TODO: Implement PresetsScreen
-        return const Scaffold(
-          body: Center(child: Text('Presets Screen - Coming Soon')),
-        );
       },
     ),
     GoRoute(
