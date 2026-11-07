@@ -127,7 +127,7 @@ class AboutScreen extends StatelessWidget {
                             'impulse responses from the IR Library by Conner (github.com/itsmusician/IR-Library), '
                             'Copyright © 2022 Conner, MIT License. The full licence text is shipped at '
                             'irs/LICENSE-itsmusician-IR-Library.md.\n\n'
-                            'Fonts: Rajdhani, Orbitron and Roboto (SIL Open Font License). '
+                            'Fonts: Rajdhani, DotGothic16, DSEG and Roboto (SIL Open Font License). '
                             'ZIP export: JSZip (MIT).',
                             style: bodyStyle,
                           ),

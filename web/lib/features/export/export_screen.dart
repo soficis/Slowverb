@@ -4,7 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:slowverb_web/app/colors.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
@@ -42,25 +43,33 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final padding = isNarrow
+        ? SlowverbTokens.spacingMd
+        : SlowverbTokens.spacingXl;
+
     return Scaffold(
-      backgroundColor: SlowverbColors.backgroundDark,
-      appBar: AppBar(title: const Text('EXPORT')),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: SlowverbColors.backgroundGradient,
-        ),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 600),
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: SlowverbColors.surface,
-              borderRadius: BorderRadius.circular(24),
+      appBar: AppBar(
+        title: const Text('Export'),
+        leading: const BackButton(),
+      ),
+      body: RetroDesktop(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(padding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 960),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _isExporting
+                        ? _buildExportingView()
+                        : _buildConfigurationView(),
+                  ],
+                ),
+              ),
             ),
-            child: _isExporting
-                ? _buildExportingView()
-                : _buildConfigurationView(),
           ),
         ),
       ),
@@ -68,282 +77,170 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   Widget _buildConfigurationView() {
+    final theme = Theme.of(context);
+
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header
-        ShaderMask(
-          shaderCallback: (bounds) =>
-              SlowverbColors.primaryGradient.createShader(bounds),
-          child: Text(
-            'EXPORT AUDIO',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: Colors.white,
-              letterSpacing: 3.0,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        Text(
-          'Choose your export format and settings',
-          style: Theme.of(context).textTheme.bodyMedium,
-          textAlign: TextAlign.center,
-        ),
-
-        const SizedBox(height: 32),
-
-        // Format selector with source format indicator
-        Row(
-          children: [
-            Text('FORMAT', style: Theme.of(context).textTheme.labelLarge),
-            const Spacer(),
-            _buildSourceFormatBadge(context),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        Row(
-          children: [
-            Expanded(
-              child: _FormatButton(
-                label: 'MP3',
-                description: 'Compressed, universally compatible',
-                icon: Icons.music_note,
-                isSelected: _selectedFormat == 'mp3',
-                onTap: () => setState(() => _selectedFormat = 'mp3'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _FormatButton(
-                label: 'AAC',
-                description: 'High quality, modern codec',
-                icon: Icons.high_quality_outlined,
-                isSelected: _selectedFormat == 'aac',
-                onTap: () => setState(() => _selectedFormat = 'aac'),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        Row(
-          children: [
-            Expanded(
-              child: _FormatButton(
-                label: 'WAV',
-                description: 'Uncompressed, max quality',
-                icon: Icons.graphic_eq,
-                isSelected: _selectedFormat == 'wav',
-                onTap: () => setState(() => _selectedFormat = 'wav'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: _buildFlacButton()),
-          ],
-        ),
-
-        const SizedBox(height: 32),
-
-        // Format-specific settings
-        if (_selectedFormat == 'mp3') ...[
-          Text('MP3 BITRATE', style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 12),
-          Row(
+        RetroWindow(
+          title: 'Format',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Slider(
-                  value: _mp3Bitrate.toDouble(),
-                  min: 128,
-                  max: 320,
-                  divisions: 3,
-                  label: '$_mp3Bitrate kbps',
-                  onChanged: (value) =>
-                      setState(() => _mp3Bitrate = value.toInt()),
-                ),
+              Text(
+                'Choose your export format and settings',
+                style: theme.textTheme.bodyMedium,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: SlowverbColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$_mp3Bitrate kbps',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: SlowverbColors.accentPink,
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              Row(
+                children: [
+                  const PlateLabel('Output format'),
+                  const Spacer(),
+                  _buildSourceFormatBadge(context),
+                ],
+              ),
+              const SizedBox(height: SlowverbTokens.spacingSm),
+              Wrap(
+                spacing: SlowverbTokens.spacingSm,
+                runSpacing: SlowverbTokens.spacingSm,
+                children: [
+                  HwKey(
+                    onPressed: () => setState(() => _selectedFormat = 'mp3'),
+                    label: 'MP3',
+                    lit: _selectedFormat == 'mp3',
+                    size: 32,
                   ),
-                ),
-              ),
-            ],
-          ),
-        ],
-
-        if (_selectedFormat == 'aac') ...[
-          Text('AAC BITRATE', style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _aacBitrate.toDouble(),
-                  min: 128,
-                  max: 256,
-                  divisions: 2,
-                  label: '$_aacBitrate kbps',
-                  onChanged: (value) =>
-                      setState(() => _aacBitrate = value.toInt()),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: SlowverbColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$_aacBitrate kbps',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: SlowverbColors.accentPink,
-                    fontWeight: FontWeight.w600,
+                  HwKey(
+                    onPressed: () => setState(() => _selectedFormat = 'aac'),
+                    label: 'AAC',
+                    lit: _selectedFormat == 'aac',
+                    size: 32,
                   ),
-                ),
-              ),
-            ],
-          ),
-        ],
-
-        if (_selectedFormat == 'flac') ...[
-          Text(
-            'FLAC COMPRESSION LEVEL',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _flacCompressionLevel.toDouble(),
-                  min: 0,
-                  max: 8,
-                  divisions: 8,
-                  label: 'Level $_flacCompressionLevel',
-                  onChanged: (value) =>
-                      setState(() => _flacCompressionLevel = value.toInt()),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: SlowverbColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Level $_flacCompressionLevel',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: SlowverbColors.accentCyan,
-                    fontWeight: FontWeight.w600,
+                  HwKey(
+                    onPressed: () => setState(() => _selectedFormat = 'wav'),
+                    label: 'WAV',
+                    lit: _selectedFormat == 'wav',
+                    size: 32,
                   ),
-                ),
+                  _buildFlacKey(),
+                ],
               ),
-            ],
-          ),
-        ],
-
-        const SizedBox(height: 32),
-
-        // Privacy notice
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: SlowverbColors.backgroundLight,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.lock,
-                color: SlowverbColors.accentMint,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'All processing happens locally in your browser. Your audio never leaves your device.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: SlowverbColors.textSecondary,
+              const SizedBox(height: SlowverbTokens.spacingSm),
+              Wrap(
+                spacing: SlowverbTokens.spacingMd,
+                runSpacing: SlowverbTokens.spacingXs,
+                children: [
+                  _buildFormatNote('MP3', 'Compressed, universally compatible'),
+                  _buildFormatNote('AAC', 'High quality, modern codec'),
+                  _buildFormatNote('WAV', 'Uncompressed, max quality'),
+                  _buildFormatNote(
+                    'FLAC',
+                    _isSourceLossless
+                        ? 'Lossless compression'
+                        : 'Requires lossless source',
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
-        // Export button
-        ElevatedButton.icon(
-          onPressed: _startExport,
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          icon: const Icon(Icons.download, size: 24),
-          label: Text(
-            'EXPORT AS ${_selectedFormat.toUpperCase()}',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ),
-
-        if (_errorMessage != null) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: SlowverbColors.error.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, color: SlowverbColors.error),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: SlowverbColors.error,
+              if (_selectedFormat != 'wav') ...[
+                const Divider(height: SlowverbTokens.spacingLg),
+                if (_selectedFormat == 'mp3')
+                  _buildBitrateSetting(
+                    label: 'MP3 bitrate',
+                    value: _mp3Bitrate,
+                    min: 128,
+                    max: 320,
+                    divisions: 3,
+                    onChanged: (value) =>
+                        setState(() => _mp3Bitrate = value),
+                  ),
+                if (_selectedFormat == 'aac')
+                  _buildBitrateSetting(
+                    label: 'AAC bitrate',
+                    value: _aacBitrate,
+                    min: 128,
+                    max: 256,
+                    divisions: 2,
+                    onChanged: (value) =>
+                        setState(() => _aacBitrate = value),
+                  ),
+                if (_selectedFormat == 'flac')
+                  _buildSliderSetting(
+                    label: 'FLAC compression level',
+                    readout: _buildReadout('$_flacCompressionLevel', 'level'),
+                    slider: Slider(
+                      value: _flacCompressionLevel.toDouble(),
+                      min: 0,
+                      max: 8,
+                      divisions: 8,
+                      label: 'Level $_flacCompressionLevel',
+                      onChanged: (value) =>
+                          setState(() => _flacCompressionLevel = value.toInt()),
                     ),
                   ),
-                ),
               ],
-            ),
+            ],
           ),
-        ],
-
+        ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        RetroWindow(
+          title: 'Export',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    color: SlowverbTokens.success,
+                    size: 18,
+                  ),
+                  const SizedBox(width: SlowverbTokens.spacingSm),
+                  Expanded(
+                    child: Text(
+                      'All processing happens locally in your browser. Your audio never leaves your device.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              if (_errorMessage != null) ...[
+                VfdPanel(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: SlowverbTokens.error,
+                        size: 18,
+                      ),
+                      const SizedBox(width: SlowverbTokens.spacingSm),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: SlowverbTokens.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: SlowverbTokens.spacingMd),
+              ],
+              HwKey(
+                onPressed: _startExport,
+                icon: Icons.download,
+                label: 'Export as ${_selectedFormat.toUpperCase()}',
+                style: HwKeyStyle.primary,
+                isDefault: true,
+              ),
+            ],
+          ),
+        ),
         if (_downloadUrl != null) ...[
-          const SizedBox(height: 24),
+          const SizedBox(height: SlowverbTokens.spacingMd),
           _buildDownloadReadyCard(),
         ],
       ],
@@ -351,63 +248,125 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   Widget _buildExportingView() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(
-          Icons.downloading,
-          size: 64,
-          color: SlowverbColors.primaryPurple,
-        ),
+    final theme = Theme.of(context);
+    final percent = (_exportProgress * 100).toInt();
 
-        const SizedBox(height: 24),
-
-        Text(
-          'EXPORTING',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(letterSpacing: 2.0),
-        ),
-
-        const SizedBox(height: 8),
-
-        Text(
-          _formatExportStage(_exportStage),
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: SlowverbColors.textSecondary),
-        ),
-
-        const SizedBox(height: 32),
-
-        // Progress bar
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: _exportProgress,
-            minHeight: 12,
-            backgroundColor: SlowverbColors.backgroundLight,
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              SlowverbColors.primaryPurple,
+    return RetroWindow(
+      title: 'Progress',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Annunciator(
+                'EXPORTING',
+                lit: true,
+                color: SlowverbTokens.vfdAmber,
+              ),
+            ],
+          ),
+          const SizedBox(height: SlowverbTokens.spacingMd),
+          Center(child: VfdText('$percent%', size: 40)),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          Text(
+            _formatExportStage(_exportStage),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          LinearProgressIndicator(value: _exportProgress, minHeight: 12),
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: HwKey(
+              onPressed: _cancelExport,
+              icon: Icons.cancel,
+              label: 'Cancel',
+              style: HwKeyStyle.danger,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliderSetting({
+    required String label,
+    required Widget readout,
+    required Slider slider,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PlateLabel(label),
+        const SizedBox(height: SlowverbTokens.spacingXs),
+        Row(
+          children: [
+            Expanded(child: slider),
+            const SizedBox(width: SlowverbTokens.spacingSm),
+            VfdPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: readout,
+            ),
+          ],
         ),
-
-        const SizedBox(height: 16),
-
-        Text(
-          '${(_exportProgress * 100).toInt()}%',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: SlowverbColors.accentPink,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
-        // Cancel button
-        TextButton(onPressed: _cancelExport, child: const Text('CANCEL')),
       ],
+    );
+  }
+
+  Widget _buildBitrateSetting({
+    required String label,
+    required int value,
+    required int min,
+    required int max,
+    required int divisions,
+    required ValueChanged<int> onChanged,
+  }) {
+    return _buildSliderSetting(
+      label: label,
+      readout: _buildReadout('$value', 'kbps'),
+      slider: Slider(
+        value: value.toDouble(),
+        min: min.toDouble(),
+        max: max.toDouble(),
+        divisions: divisions,
+        label: '$value kbps',
+        onChanged: (newValue) => onChanged(newValue.toInt()),
+      ),
+    );
+  }
+
+  Widget _buildReadout(String value, String unit) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        SegmentReadout(value, size: 22),
+        const SizedBox(width: 4),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: PlateLabel(unit),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormatNote(String label, String description) {
+    final style = Theme.of(context).textTheme.bodySmall;
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$label ',
+            style: style?.copyWith(
+              color: SlowverbTokens.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          TextSpan(text: description, style: style),
+        ],
+      ),
     );
   }
 
@@ -425,45 +384,41 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   Widget _buildDownloadReadyCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: SlowverbColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: SlowverbColors.accentMint.withValues(alpha: 0.4),
-        ),
-      ),
+    final theme = Theme.of(context);
+
+    return RetroWindow(
+      title: 'Download',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, color: SlowverbColors.accentMint),
-              const SizedBox(width: 12),
+              const Icon(
+                Icons.check_circle,
+                color: SlowverbTokens.success,
+                size: 20,
+              ),
+              const SizedBox(width: SlowverbTokens.spacingSm),
               Expanded(
                 child: Text(
                   'Export ready',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: theme.textTheme.titleSmall,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          if (_downloadFilename != null)
-            Text(
-              _downloadFilename!,
-              style: Theme.of(context).textTheme.bodySmall,
+          if (_downloadFilename != null) ...[
+            const SizedBox(height: SlowverbTokens.spacingXs),
+            Text(_downloadFilename!, style: theme.textTheme.bodySmall),
+          ],
+          const SizedBox(height: SlowverbTokens.spacingMd),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: HwKey(
+              onPressed: _triggerDownload,
+              icon: Icons.download,
+              label: 'Download',
             ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _triggerDownload,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: SlowverbColors.primaryPurple,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            icon: const Icon(Icons.download),
-            label: const Text('Download'),
           ),
         ],
       ),
@@ -477,7 +432,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Load a track before exporting.'),
-            backgroundColor: SlowverbColors.error,
+            backgroundColor: SlowverbTokens.error,
           ),
         );
       }
@@ -644,7 +599,6 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Export ready. Click Download to save $filename.'),
-          backgroundColor: SlowverbColors.primaryPurple,
         ),
       );
     }
@@ -732,142 +686,36 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
 
   Widget _buildSourceFormatBadge(BuildContext context) {
     final isLossless = _isSourceLossless;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
-            .withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color:
-              (isLossless ? SlowverbColors.accentMint : SlowverbColors.warning)
-                  .withValues(alpha: 0.4),
+    final color = isLossless ? SlowverbTokens.success : SlowverbTokens.warning;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isLossless ? Icons.high_quality : Icons.compress,
+          size: 14,
+          color: color,
         ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isLossless ? Icons.high_quality : Icons.compress,
-            size: 12,
-            color: isLossless
-                ? SlowverbColors.accentMint
-                : SlowverbColors.warning,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'Source: $_sourceFormat',
-            style: TextStyle(
-              color: isLossless
-                  ? SlowverbColors.accentMint
-                  : SlowverbColors.warning,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
+        const SizedBox(width: 4),
+        VfdText('Source: $_sourceFormat', size: 11, color: color),
+      ],
     );
   }
 
-  Widget _buildFlacButton() {
+  Widget _buildFlacKey() {
     final isLossless = _isSourceLossless;
 
-    final button = _FormatButton(
-      label: 'FLAC',
-      description: isLossless
-          ? 'Lossless compression'
-          : 'Requires lossless source',
-      icon: Icons.high_quality,
-      isSelected: _selectedFormat == 'flac',
-      onTap: isLossless
+    return HwKey(
+      onPressed: isLossless
           ? () => setState(() => _selectedFormat = 'flac')
-          : () {},
-      isDisabled: !isLossless,
-    );
-
-    if (!isLossless) {
-      return Tooltip(
-        message:
-            'FLAC export requires a lossless source file (WAV, FLAC, AIFF).\n'
-            'Your source is $_sourceFormat which is lossy.',
-        child: button,
-      );
-    }
-
-    return button;
-  }
-}
-
-/// Format button widget
-class _FormatButton extends StatelessWidget {
-  final String label;
-  final String description;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final bool isDisabled;
-
-  const _FormatButton({
-    required this.label,
-    required this.description,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-    this.isDisabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: isDisabled ? null : onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Opacity(
-        opacity: isDisabled ? 0.5 : 1.0,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? SlowverbColors.primaryPurple.withValues(alpha: 0.2)
-                : SlowverbColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected && !isDisabled
-                  ? SlowverbColors.primaryPurple
-                  : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 32,
-                color: isSelected && !isDisabled
-                    ? SlowverbColors.accentPink
-                    : SlowverbColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isSelected && !isDisabled
-                      ? SlowverbColors.textPrimary
-                      : SlowverbColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: Theme.of(context).textTheme.bodySmall,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-      ),
+          : null,
+      label: 'FLAC',
+      lit: _selectedFormat == 'flac',
+      size: 32,
+      tooltip: isLossless
+          ? null
+          : 'FLAC export requires a lossless source file (WAV, FLAC, AIFF).\n'
+                'Your source is $_sourceFormat which is lossy.',
     );
   }
 }

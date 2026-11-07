@@ -5,12 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
 import 'package:slowverb_web/features/mastering/widgets/mastering_controls.dart';
 import 'package:slowverb_web/features/mastering/widgets/mastering_progress.dart';
 import 'package:slowverb_web/features/mastering/widgets/mastering_queue.dart';
 import 'package:slowverb_web/providers/mastering_provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:web/web.dart' as web;
 
 /// Screen for PhaseLimiter mastering interface
@@ -27,44 +28,32 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(masteringProvider);
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final padding = isNarrow
+        ? SlowverbTokens.spacingMd
+        : SlowverbTokens.spacingXl;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0F),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        toolbarHeight: 180,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Column(
-          children: [
-            const Text(
-              'PHASELIMITER',
-              style: TextStyle(
-                fontFamily: 'Orbitron',
-                fontVariations: [FontVariation('wght', 700)],
-                fontSize: 72,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-                color: Colors.purpleAccent,
+        title: const Text('Mastering'),
+        leading: const BackButton(),
+      ),
+      body: RetroDesktop(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(padding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 960),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [_buildContent(context, ref, state)],
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Free and local browser-powered AI mastering',
-              style: GoogleFonts.rajdhani(
-                fontSize: 20,
-                color: Colors.white70,
-                letterSpacing: 2,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-      body: SafeArea(child: _buildContent(context, ref, state)),
     );
   }
 
@@ -99,16 +88,23 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
     WidgetRef ref,
     MasteringState state,
   ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
+    final theme = Theme.of(context);
+    final hasFiles = state.queuedFiles.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RetroWindow(
+          title: hasFiles ? 'Files (${state.queuedFiles.length})' : 'Files',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Drop zone or file list
-              if (state.queuedFiles.isEmpty)
+              Text(
+                'Free and local browser-powered AI mastering',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: SlowverbTokens.spacingMd),
+              if (!hasFiles)
                 _buildDropZone(context, ref, state)
               else
                 MasteringQueue(
@@ -119,11 +115,49 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
                       ref.read(masteringProvider.notifier).clearQueue(),
                   onAddMore: () => _pickFiles(ref),
                 ),
-
-              const SizedBox(height: 32),
-
-              // Controls
-              if (state.queuedFiles.isNotEmpty) ...[
+              if (state.errorMessage != null) ...[
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                VfdPanel(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber,
+                        color: SlowverbTokens.warning,
+                        size: 18,
+                      ),
+                      const SizedBox(width: SlowverbTokens.spacingSm),
+                      Expanded(
+                        child: Text(
+                          state.errorMessage!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: SlowverbTokens.warning,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: SlowverbTokens.spacingSm),
+                      HwKey(
+                        onPressed: () =>
+                            ref.read(masteringProvider.notifier).clearError(),
+                        icon: Icons.close,
+                        tooltip: 'Dismiss error',
+                        style: HwKeyStyle.danger,
+                        size: 28,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (hasFiles) ...[
+          const SizedBox(height: SlowverbTokens.spacingMd),
+          RetroWindow(
+            title: 'Settings',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 MasteringControls(
                   state: state,
                   onTargetLufsChanged: (v) =>
@@ -150,45 +184,15 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
                     }
                   },
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: SlowverbTokens.spacingMd),
+                const Divider(height: 1),
+                const SizedBox(height: SlowverbTokens.spacingMd),
                 _buildStartButton(context, ref, state),
               ],
-
-              // Error message
-              if (state.errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber, color: Colors.orange),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          state.errorMessage!,
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        onPressed: () =>
-                            ref.read(masteringProvider.notifier).clearError(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 
@@ -197,6 +201,8 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
     WidgetRef ref,
     MasteringState state,
   ) {
+    final theme = Theme.of(context);
+
     return DropTarget(
       onDragEntered: (_) => setState(() => _isDragging = true),
       onDragExited: (_) => setState(() => _isDragging = false),
@@ -208,47 +214,44 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
         onTap: () => _pickFiles(ref),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: MediaQuery.of(context).size.height * 0.5,
+          padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: _isDragging
-                ? Colors.purple.withValues(alpha: 0.1)
-                : Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(SlowverbTokens.radiusSm),
             border: Border.all(
               color: _isDragging
-                  ? Colors.purple.withValues(alpha: 0.6)
-                  : Colors.white.withValues(alpha: 0.1),
-              width: 4,
+                  ? SlowverbTokens.vfdCyan
+                  : Colors.transparent,
+              width: 2,
             ),
           ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.upload_file,
-                  size: 160,
-                  color: _isDragging ? Colors.purple : Colors.white54,
-                ),
-                const SizedBox(height: 40),
-                Text(
-                  'DROP FILES HERE OR CLICK TO BROWSE',
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 3,
-                    color: _isDragging ? Colors.purple : Colors.white70,
+          child: VfdPanel(
+            child: SizedBox(
+              width: double.infinity,
+              height: 220,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.upload_file,
+                    size: 56,
+                    color: _isDragging
+                        ? SlowverbTokens.vfdCyan
+                        : SlowverbTokens.textSecondary,
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Supports: MP3, WAV, FLAC, AAC, OGG',
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 20,
-                    color: Colors.white.withValues(alpha: 0.5),
+                  const SizedBox(height: SlowverbTokens.spacingMd),
+                  const VfdText(
+                    'Drop files here or click to browse',
+                    size: 18,
+                    maxLines: 2,
                   ),
-                ),
-              ],
+                  const SizedBox(height: SlowverbTokens.spacingXs),
+                  Text(
+                    'Supports: MP3, WAV, FLAC, AAC, OGG',
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -297,27 +300,17 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
     MasteringState state,
   ) {
     final buttonText = state.isSingleFile
-        ? 'START MASTERING'
-        : 'MASTER ${state.fileCount} FILES';
+        ? 'Start mastering'
+        : 'Master ${state.fileCount} files';
 
-    return ElevatedButton(
+    return HwKey(
       onPressed: state.canStart
           ? () => ref.read(masteringProvider.notifier).startMastering()
           : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.purple,
-        disabledBackgroundColor: Colors.white12,
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Text(
-        buttonText,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 2,
-        ),
-      ),
+      icon: Icons.play_arrow,
+      label: buttonText,
+      style: HwKeyStyle.primary,
+      isDefault: true,
     );
   }
 
@@ -326,101 +319,94 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
     WidgetRef ref,
     MasteringState state,
   ) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.check_circle, size: 80, color: Colors.green),
-              const SizedBox(height: 24),
-              Text(
-                'MASTERING COMPLETE',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${state.fileCount} file${state.fileCount > 1 ? 's' : ''} processed successfully',
-                style: const TextStyle(color: Colors.white54),
-              ),
-              const SizedBox(height: 32),
+    final theme = Theme.of(context);
 
-              // File list
-              ...state.queuedFiles.map(
-                (f) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check, color: Colors.green, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _getMasteredFileName(
-                            f.fileName,
-                            state.selectedFormat,
+    return RetroWindow(
+      title: 'Complete',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Center(
+            child: Annunciator(
+              'DONE',
+              lit: true,
+              color: SlowverbTokens.success,
+            ),
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          Text(
+            'Mastering complete',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: SlowverbTokens.spacingXs),
+          Text(
+            '${state.fileCount} file${state.fileCount > 1 ? 's' : ''} processed successfully',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Faceplate(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (final file in state.queuedFiles)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: SlowverbTokens.spacingSm,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check,
+                          color: SlowverbTokens.success,
+                          size: 18,
+                        ),
+                        const SizedBox(width: SlowverbTokens.spacingSm),
+                        Expanded(
+                          child: Text(
+                            _getMasteredFileName(
+                              file.fileName,
+                              state.selectedFormat,
+                            ),
+                            style: theme.textTheme.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          style: const TextStyle(color: Colors.white70),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+              ],
+            ),
+          ),
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            alignment: WrapAlignment.center,
+            children: [
+              if (state.zipExportEnabled && state.isBatchMode)
+                HwKey(
+                  onPressed: () => _downloadZip(state),
+                  icon: Icons.archive,
+                  label: 'Download ZIP',
+                )
+              else
+                HwKey(
+                  onPressed: () => _downloadFiles(state),
+                  icon: Icons.download,
+                  label: 'Download',
                 ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (state.zipExportEnabled && state.isBatchMode)
-                    ElevatedButton.icon(
-                      onPressed: () => _downloadZip(state),
-                      icon: const Icon(Icons.archive),
-                      label: const Text('DOWNLOAD ZIP'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                      ),
-                    )
-                  else
-                    ElevatedButton.icon(
-                      onPressed: () => _downloadFiles(state),
-                      icon: const Icon(Icons.download),
-                      label: const Text('DOWNLOAD'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(width: 16),
-                  OutlinedButton(
-                    onPressed: () =>
-                        ref.read(masteringProvider.notifier).reset(),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                    ),
-                    child: const Text('Master More Files'),
-                  ),
-                ],
+              HwKey(
+                onPressed: () =>
+                    ref.read(masteringProvider.notifier).reset(),
+                icon: Icons.refresh,
+                label: 'Master more files',
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -430,34 +416,41 @@ class _MasteringScreenState extends ConsumerState<MasteringScreen> {
     WidgetRef ref,
     MasteringState state,
   ) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 80, color: Colors.red),
-            const SizedBox(height: 24),
-            Text(
-              'Mastering Failed',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+    final theme = Theme.of(context);
+
+    return RetroWindow(
+      title: 'Error',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Center(
+            child: Annunciator(
+              'FAILED',
+              lit: true,
+              color: SlowverbTokens.error,
             ),
-            const SizedBox(height: 12),
-            Text(
-              state.errorMessage ?? 'Unknown error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          Text(
+            'Mastering Failed',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          Text(
+            state.errorMessage ?? 'Unknown error',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Center(
+            child: HwKey(
               onPressed: () => ref.read(masteringProvider.notifier).reset(),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-              child: const Text('Try Again'),
+              icon: Icons.refresh,
+              label: 'Try again',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

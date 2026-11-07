@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:slowverb_web/app/retro/retro_widgets.dart';
+import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/mastering_settings.dart';
 import 'package:slowverb_web/providers/mastering_provider.dart';
 
@@ -17,113 +19,133 @@ class MasteringProgressView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final progress =
         state.progress ?? MasteringProgress.initial(state.fileCount);
     final percent = (progress.percent * 100).round();
+    final stage = _getStageText(state.status);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return RetroWindow(
+      title: 'Progress',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              // Circular progress
-              SizedBox(
-                width: 160,
-                height: 160,
-                child: Stack(
-                  alignment: Alignment.center,
+              if (stage.isNotEmpty)
+                Annunciator(
+                  stage.toUpperCase(),
+                  lit: true,
+                  color: SlowverbTokens.vfdAmber,
+                ),
+              const Spacer(),
+              VfdPanel(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    SizedBox(
-                      width: 160,
-                      height: 160,
-                      child: CircularProgressIndicator(
-                        value: progress.percent,
-                        strokeWidth: 8,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Colors.purple,
-                        ),
-                      ),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$percent%',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          _getStageText(state.status),
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                    SegmentReadout('$percent', size: 28),
+                    const SizedBox(width: 2),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 2),
+                      child: VfdText('%', size: 12),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-
-              // Current file info
-              if (progress.currentFileName.isNotEmpty) ...[
-                Text(
-                  'Current: ${progress.currentFileName}',
-                  style: const TextStyle(color: Colors.white70),
+            ],
+          ),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          LinearProgressIndicator(
+            value: progress.percent,
+            minHeight: 12,
+          ),
+          if (progress.currentFileName.isNotEmpty) ...[
+            const SizedBox(height: SlowverbTokens.spacingSm),
+            Text(
+              'Current: ${progress.currentFileName}',
+              style: theme.textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '(${progress.currentFileIndex} of ${progress.totalFiles})',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          Wrap(
+            spacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('Stage:', style: theme.textTheme.bodySmall),
+              VfdText(progress.stage, size: 12),
+            ],
+          ),
+          if (progress.estimatedTimeRemaining != null) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Estimated:', style: theme.textTheme.bodySmall),
+                VfdText(
+                  _formatDuration(progress.estimatedTimeRemaining!),
+                  size: 12,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '(${progress.currentFileIndex} of ${progress.totalFiles})',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
+                Text('remaining', style: theme.textTheme.bodySmall),
               ],
-              const SizedBox(height: 8),
-              Text(
-                'Stage: ${progress.stage}',
-                style: const TextStyle(color: Colors.purple, fontSize: 14),
-              ),
-
-              // Estimated time
-              if (progress.estimatedTimeRemaining != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Estimated: ${_formatDuration(progress.estimatedTimeRemaining!)} remaining',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ],
-              const SizedBox(height: 32),
-
-              // File status list
-              if (progress.totalFiles > 1) _buildFileStatusList(progress),
-
-              const SizedBox(height: 32),
-
-              // Cancel button
-              OutlinedButton(
+            ),
+          ],
+          if (progress.totalFiles > 1) ...[
+            const SizedBox(height: SlowverbTokens.spacingLg),
+            _buildFileStatusList(context, progress),
+          ],
+          const SizedBox(height: SlowverbTokens.spacingLg),
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            alignment: WrapAlignment.center,
+            children: [
+              HwKey(
                 onPressed: onCancel,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade300,
-                  side: BorderSide(color: Colors.red.shade300),
-                ),
-                child: const Text('CANCEL'),
+                icon: Icons.cancel,
+                label: 'Cancel',
+                style: HwKeyStyle.danger,
               ),
-              const SizedBox(height: 12),
-              // Force Stop button
-              ElevatedButton(
+              HwKey(
                 onPressed: onForceStop,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('FORCE STOP ALL'),
+                icon: Icons.stop,
+                label: 'Force stop all',
+                style: HwKeyStyle.danger,
               ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileStatusList(
+    BuildContext context,
+    MasteringProgress progress,
+  ) {
+    return Faceplate(
+      padding: EdgeInsets.zero,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 200),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              for (var index = 0; index < state.queuedFiles.length; index++) ...[
+                if (index > 0) const Divider(height: 1),
+                _buildFileStatusRow(context, index, progress),
+              ],
             ],
           ),
         ),
@@ -131,54 +153,42 @@ class MasteringProgressView extends StatelessWidget {
     );
   }
 
-  Widget _buildFileStatusList(MasteringProgress progress) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 200),
-      child: SingleChildScrollView(
-        child: Column(
-          children: List.generate(state.queuedFiles.length, (index) {
-            final file = state.queuedFiles[index];
-            final status = file.status;
+  Widget _buildFileStatusRow(
+    BuildContext context,
+    int index,
+    MasteringProgress progress,
+  ) {
+    final theme = Theme.of(context);
+    final file = state.queuedFiles[index];
+    final status = file.status;
+    final isCurrent = index + 1 == progress.currentFileIndex;
 
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  _buildStatusIcon(
-                    status,
-                    index + 1 == progress.currentFileIndex,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      file.fileName,
-                      style: TextStyle(
-                        color: status == FileProcessStatus.completed
-                            ? Colors.white70
-                            : status == FileProcessStatus.processing
-                            ? Colors.purple
-                            : Colors.white38,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _getStatusText(status),
-                    style: TextStyle(
-                      color: status == FileProcessStatus.completed
-                          ? Colors.green
-                          : status == FileProcessStatus.processing
-                          ? Colors.purple
-                          : Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SlowverbTokens.spacingSm,
+        vertical: 6,
+      ),
+      child: Row(
+        children: [
+          _buildStatusIcon(status, isCurrent),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          Expanded(
+            child: Text(
+              file.fileName,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _statusTextColor(status),
               ),
-            );
-          }),
-        ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          Annunciator(
+            _getStatusText(status),
+            lit: status != FileProcessStatus.pending,
+            color: _statusColor(status),
+          ),
+        ],
       ),
     );
   }
@@ -186,7 +196,11 @@ class MasteringProgressView extends StatelessWidget {
   Widget _buildStatusIcon(FileProcessStatus status, bool isCurrent) {
     switch (status) {
       case FileProcessStatus.completed:
-        return const Icon(Icons.check_circle, color: Colors.green, size: 18);
+        return const Icon(
+          Icons.check_circle,
+          color: SlowverbTokens.success,
+          size: 18,
+        );
       case FileProcessStatus.processing:
         return SizedBox(
           width: 18,
@@ -194,31 +208,61 @@ class MasteringProgressView extends StatelessWidget {
           child: CircularProgressIndicator(
             strokeWidth: 2,
             valueColor: AlwaysStoppedAnimation<Color>(
-              isCurrent ? Colors.purple : Colors.white38,
+              isCurrent ? SlowverbTokens.vfdCyan : SlowverbTokens.textHint,
             ),
           ),
         );
       case FileProcessStatus.failed:
-        return const Icon(Icons.error, color: Colors.red, size: 18);
-      case FileProcessStatus.pending:
-        return Icon(
-          Icons.circle_outlined,
-          color: Colors.white.withValues(alpha: 0.3),
+        return const Icon(
+          Icons.error,
+          color: SlowverbTokens.error,
           size: 18,
         );
+      case FileProcessStatus.pending:
+        return const Icon(
+          Icons.circle_outlined,
+          color: SlowverbTokens.textHint,
+          size: 18,
+        );
+    }
+  }
+
+  Color _statusColor(FileProcessStatus status) {
+    switch (status) {
+      case FileProcessStatus.completed:
+        return SlowverbTokens.success;
+      case FileProcessStatus.processing:
+        return SlowverbTokens.vfdAmber;
+      case FileProcessStatus.failed:
+        return SlowverbTokens.error;
+      case FileProcessStatus.pending:
+        return SlowverbTokens.textHint;
+    }
+  }
+
+  Color _statusTextColor(FileProcessStatus status) {
+    switch (status) {
+      case FileProcessStatus.completed:
+        return SlowverbTokens.textPrimary;
+      case FileProcessStatus.processing:
+        return SlowverbTokens.vfdCyan;
+      case FileProcessStatus.failed:
+        return SlowverbTokens.error;
+      case FileProcessStatus.pending:
+        return SlowverbTokens.textHint;
     }
   }
 
   String _getStatusText(FileProcessStatus status) {
     switch (status) {
       case FileProcessStatus.completed:
-        return 'Done';
+        return 'DONE';
       case FileProcessStatus.processing:
-        return 'Mastering...';
+        return 'RENDERING';
       case FileProcessStatus.failed:
-        return 'Failed';
+        return 'FAILED';
       case FileProcessStatus.pending:
-        return 'Pending';
+        return 'QUEUED';
     }
   }
 
