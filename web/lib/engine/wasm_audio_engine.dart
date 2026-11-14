@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
+import 'package:slowverb_web/domain/entities/audio_analysis_track.dart';
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
@@ -17,6 +18,7 @@ class WasmAudioEngine implements AudioEngine {
 
   final Set<String> _activeBlobUrls = {};
   String? _currentPreviewUrl;
+  AudioAnalysisTrack? _previewAnalysis;
 
   bool _isInitialized = false;
   bool _progressHandlerInstalled = false;
@@ -36,6 +38,9 @@ class WasmAudioEngine implements AudioEngine {
 
   @override
   bool get isReady => _isInitialized;
+
+  @override
+  AudioAnalysisTrack? get previewAnalysis => _previewAnalysis;
 
   @override
   Future<void> initialize() async {
@@ -179,6 +184,7 @@ class WasmAudioEngine implements AudioEngine {
     }
     _activeBlobUrls.clear();
     _currentPreviewUrl = null;
+    _previewAnalysis = null;
     _warningCallback = null;
 
     // Close all progress controllers

@@ -1,5 +1,6 @@
 import { compileFilterChain, getPlaybackDevice, getReverbIr, normalizeStereoIrEnergy } from "@slowverb/shared";
 import type {
+  AnalysisTrack,
   CancelPayload,
   EngineInitOptions,
   ExportFormat,
@@ -46,6 +47,7 @@ export interface RenderResult {
   readonly fileId: string;
   readonly format: ExportFormat;
   readonly buffer: ArrayBuffer;
+  readonly analysis?: AnalysisTrack;
 }
 
 export interface RenderCallbacks {
@@ -149,7 +151,7 @@ export class SlowverbEngine {
       await this.prepareSource(runner, request.source);
       const payload = await this.buildRenderPayload(request);
       const result = await runner.render(type, payload, jobId);
-      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer };
+      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer, analysis: result.analysis };
     } finally {
       this.active.delete(jobId);
       runner.terminate();

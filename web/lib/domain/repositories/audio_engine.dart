@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
+import 'package:slowverb_web/domain/entities/audio_analysis_track.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 
 /// Abstract interface for audio processing operations
@@ -45,6 +46,10 @@ abstract class AudioEngine {
     Duration? startAt,
     Duration? duration,
   });
+
+  /// Analysis of the most recent successful preview, or null if the preview path
+  /// produced none, a preview is in flight, or the last preview failed.
+  AudioAnalysisTrack? get previewAnalysis;
 
   /// Start a full render job with progress tracking
   ///

@@ -122,6 +122,7 @@ Future<Uri> renderPreviewImpl(
     engine._activeBlobUrls.remove(engine._currentPreviewUrl);
     engine._currentPreviewUrl = null;
   }
+  engine._previewAnalysis = null;
 
   final jobId = 'preview-${DateTime.now().millisecondsSinceEpoch}';
   engine._currentPreviewJobId = jobId;
@@ -139,9 +140,8 @@ Future<Uri> renderPreviewImpl(
     });
 
     final response = await BridgeInterop.renderPreview(payload);
-    final buffer = response
-        .getProperty<JSObject>('payload'.toJS)
-        .getProperty<JSObject>('buffer'.toJS);
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
     final bytes = BridgeInterop.bufferToUint8List(buffer);
 
     final blob = web.Blob(
@@ -152,6 +152,9 @@ Future<Uri> renderPreviewImpl(
 
     engine._currentPreviewUrl = url;
     engine._activeBlobUrls.add(url);
+    engine._previewAnalysis = BridgeInterop.analysisTrackFromJs(
+      payloadObj.getProperty<JSAny?>('analysis'.toJS),
+    );
     return Uri.parse(url);
   } finally {
     engine._currentPreviewJobId = null;

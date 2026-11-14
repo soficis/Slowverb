@@ -44,7 +44,7 @@ async function renderPreview(params) {
   const jobId = normalized.jobId ?? createJobId();
   const result = await engine.renderPreview({ ...normalized, jobId }, buildCallbacks(jobId));
   console.info("[SlowverbBridge] renderPreview:ok", { jobId, fileId: result.fileId });
-  return { type: "render-preview-ok", payload: { buffer: result.buffer, jobId } };
+  return { type: "render-preview-ok", payload: { buffer: result.buffer, jobId, analysis: result.analysis ?? null } };
 }
 
 async function renderFull(params) {

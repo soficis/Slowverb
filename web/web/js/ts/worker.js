@@ -4696,6 +4696,205 @@ function log(level, message, data) {
     console[level](message, data);
   }
 }
+var ANALYSIS_BAND_COUNT = 64;
+var ANALYSIS_STRIDE = ANALYSIS_BAND_COUNT + 4;
+var RMS_OFFSET = ANALYSIS_BAND_COUNT;
+var BASS_OFFSET = ANALYSIS_BAND_COUNT + 1;
+var MID_OFFSET = ANALYSIS_BAND_COUNT + 2;
+var TREBLE_OFFSET = ANALYSIS_BAND_COUNT + 3;
+var ANALYSIS_MIN_HZ = 20;
+var ANALYSIS_MAX_HZ = 16e3;
+var ANALYSIS_NORMALISED_PEAK = 0.95;
+var BASS_HZ = [20, 200];
+var MID_HZ = [200, 2e3];
+var TREBLE_HZ = [2e3, 16e3];
+var HANN_ENERGY_GAIN = Math.sqrt(3 / 8);
+function analysisMaxHz(sampleRate) {
+  return Math.min(ANALYSIS_MAX_HZ, sampleRate / 2);
+}
+function analysisBandEdges(sampleRate) {
+  const maxHz = analysisMaxHz(sampleRate);
+  const edges = new Float64Array(ANALYSIS_BAND_COUNT + 1);
+  const ratio = maxHz / ANALYSIS_MIN_HZ;
+  for (let i = 0; i <= ANALYSIS_BAND_COUNT; i++) {
+    edges[i] = ANALYSIS_MIN_HZ * Math.pow(ratio, i / ANALYSIS_BAND_COUNT);
+  }
+  return edges;
+}
+function bandEnergies(magnitudes, sampleRate, fftSize) {
+  const binHz = sampleRate / fftSize;
+  const energy = (lo, hi) => {
+    const first = Math.max(0, Math.ceil(lo / binHz));
+    const last = Math.min(magnitudes.length - 1, Math.ceil(hi / binHz) - 1);
+    let sum = 0;
+    for (let k = first; k <= last; k++) sum += magnitudes[k] * magnitudes[k];
+    return Math.min(1, Math.sqrt(sum) / HANN_ENERGY_GAIN);
+  };
+  return {
+    bass: energy(BASS_HZ[0], BASS_HZ[1]),
+    mid: energy(MID_HZ[0], MID_HZ[1]),
+    treble: energy(TREBLE_HZ[0], TREBLE_HZ[1])
+  };
+}
+function normaliseTrack(track) {
+  const src = track.data;
+  const out = new Float32Array(src.length);
+  const frames = track.frameCount;
+  let rmsPeak = 0;
+  let spectrumPeak = 0;
+  let rangePeak = 0;
+  for (let f = 0; f < frames; f++) {
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) spectrumPeak = Math.max(spectrumPeak, src[base + b]);
+    rmsPeak = Math.max(rmsPeak, src[base + RMS_OFFSET]);
+    rangePeak = Math.max(rangePeak, src[base + BASS_OFFSET], src[base + MID_OFFSET], src[base + TREBLE_OFFSET]);
+  }
+  const gain = (peak) => peak > 0 ? ANALYSIS_NORMALISED_PEAK / peak : 0;
+  const rmsGain = gain(rmsPeak);
+  const spectrumGain = gain(spectrumPeak);
+  const rangeGain = gain(rangePeak);
+  const scale = (v, g) => Math.min(1, Math.max(0, v * g));
+  for (let f = 0; f < frames; f++) {
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) out[base + b] = scale(src[base + b], spectrumGain);
+    out[base + RMS_OFFSET] = scale(src[base + RMS_OFFSET], rmsGain);
+    out[base + BASS_OFFSET] = scale(src[base + BASS_OFFSET], rangeGain);
+    out[base + MID_OFFSET] = scale(src[base + MID_OFFSET], rangeGain);
+    out[base + TREBLE_OFFSET] = scale(src[base + TREBLE_OFFSET], rangeGain);
+  }
+  return { sampleRate: track.sampleRate, fps: track.fps, frameCount: frames, data: out };
+}
+
+// src/analysis_track.ts
+function isPowerOfTwo(n) {
+  if (!Number.isInteger(n)) return false;
+  if (n < 1) return false;
+  let v = n;
+  while (v % 2 === 0) v /= 2;
+  return v === 1;
+}
+function fft(re, im) {
+  if (re.length !== im.length) throw new RangeError("fft: re/im length mismatch");
+  const n = re.length;
+  if (n < 2 || !isPowerOfTwo(n)) throw new RangeError("fft: length must be a power of two >= 2");
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    while (j & bit) {
+      j ^= bit;
+      bit >>= 1;
+    }
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      const ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1;
+      let wIm = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const uRe = re[i + j];
+        const uIm = im[i + j];
+        const vRe = re[i + j + half] * wRe - im[i + j + half] * wIm;
+        const vIm = re[i + j + half] * wIm + im[i + j + half] * wRe;
+        re[i + j] = uRe + vRe;
+        im[i + j] = uIm + vIm;
+        re[i + j + half] = uRe - vRe;
+        im[i + j + half] = uIm - vIm;
+        const nRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nRe;
+      }
+    }
+  }
+}
+function buildAnalysisTrack(pcm, sampleRate, options) {
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new RangeError("buildAnalysisTrack: sampleRate must be finite and > 0");
+  }
+  const fftSize = 2048;
+  const hopSize = 1024;
+  if (!isPowerOfTwo(fftSize) || fftSize < 32) {
+    throw new RangeError("buildAnalysisTrack: fftSize must be a power of two >= 32");
+  }
+  if (!Number.isInteger(hopSize) || hopSize < 1) {
+    throw new RangeError("buildAnalysisTrack: hopSize must be an integer >= 1");
+  }
+  let mono;
+  {
+    mono = pcm;
+  }
+  const len = mono.length;
+  const frameCount = len === 0 ? 0 : Math.ceil(len / hopSize);
+  const fps = sampleRate / hopSize;
+  const data = new Float32Array(frameCount * ANALYSIS_STRIDE);
+  const window2 = new Float64Array(fftSize);
+  for (let i = 0; i < fftSize; i++) {
+    window2[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / fftSize));
+  }
+  const edges = analysisBandEdges(sampleRate);
+  const binHz = sampleRate / fftSize;
+  const re = new Float64Array(fftSize);
+  const im = new Float64Array(fftSize);
+  const mag = new Float32Array(fftSize / 2 + 1);
+  const half = fftSize / 2;
+  const bandFirst = new Int32Array(ANALYSIS_BAND_COUNT);
+  const bandLast = new Int32Array(ANALYSIS_BAND_COUNT);
+  for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) {
+    const lo = edges[b];
+    const hi = edges[b + 1];
+    const first = Math.max(0, Math.ceil(lo / binHz));
+    const last = Math.min(half, Math.ceil(hi / binHz) - 1);
+    if (first <= last) {
+      bandFirst[b] = first;
+      bandLast[b] = last;
+    } else {
+      const idx = Math.min(half, Math.max(0, Math.round(Math.sqrt(lo * hi) / binHz)));
+      bandFirst[b] = idx;
+      bandLast[b] = idx;
+    }
+  }
+  for (let f = 0; f < frameCount; f++) {
+    const start = f * hopSize;
+    let sumSq = 0;
+    for (let i = 0; i < fftSize; i++) {
+      const idx = start + i;
+      const v = idx < len ? mono[idx] : 0;
+      sumSq += v * v;
+      re[i] = v * window2[i];
+      im[i] = 0;
+    }
+    const rms = Math.sqrt(sumSq / fftSize);
+    fft(re, im);
+    for (let k = 0; k <= half; k++) {
+      mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]) / half;
+    }
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) {
+      let best = 0;
+      for (let k = bandFirst[b]; k <= bandLast[b]; k++) {
+        if (mag[k] > best) best = mag[k];
+      }
+      data[base + b] = best > 1 ? 1 : best;
+    }
+    const { bass, mid, treble } = bandEnergies(mag, sampleRate, fftSize);
+    data[base + ANALYSIS_BAND_COUNT] = rms;
+    data[base + ANALYSIS_BAND_COUNT + 1] = bass;
+    data[base + ANALYSIS_BAND_COUNT + 2] = mid;
+    data[base + ANALYSIS_BAND_COUNT + 3] = treble;
+  }
+  const track = { sampleRate, fps, frameCount, data };
+  return normaliseTrack(track);
+}
 
 // src/worker_utils.ts
 function clampNumber(value, min, max) {
@@ -6318,7 +6517,7 @@ async function handleRender(request) {
       }
       const buffer = readOutput(engine, outputFile);
       log("info", "render:ok", { jobId, outputFile });
-      postRenderResult(request, buffer);
+      postRenderResult(request, buffer, outputFile);
       return;
     }
     if (shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
@@ -6331,7 +6530,7 @@ async function handleRender(request) {
       filesToCleanup.add(result2.outputFile);
       for (const temp of result2.tempFiles) filesToCleanup.add(temp);
       log("info", "render:ok(phaselimiter)", { jobId, outputFile: result2.outputFile });
-      postRenderResult(request, result2.buffer);
+      postRenderResult(request, result2.buffer, result2.outputFile);
       return;
     }
     log("info", "render:start(pcm-pipeline)", {
@@ -6358,7 +6557,7 @@ async function handleRender(request) {
     filesToCleanup.add(result.outputFile);
     for (const temp of result.tempFiles) filesToCleanup.add(temp);
     log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    postRenderResult(request, result.buffer, result.outputFile);
     return;
   } finally {
     activeJobId = void 0;
@@ -6417,8 +6616,36 @@ function cleanupFiles(...paths) {
 function postResult(requestId, payload, transfer) {
   postEvent({ type: "RESULT", requestId, payload }, transfer);
 }
-function postRenderResult(request, buffer) {
-  postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+function analyseRenderedOutput(engine, outputFile, jobId) {
+  const pcmFile = `${jobId}-analysis.f32`;
+  try {
+    withProgressStage("processing", 1, 0, () => engine.exec("-i", outputFile, "-ac", "1", "-ar", "44100", "-f", "f32le", "-y", pcmFile));
+    const bytes = readOutput(engine, pcmFile);
+    const pcm = new Float32Array(bytes, 0, Math.floor(bytes.byteLength / 4));
+    return buildAnalysisTrack(pcm, 44100);
+  } finally {
+    cleanupFiles(pcmFile);
+  }
+}
+function postRenderResult(request, buffer, outputFile) {
+  let analysis;
+  if (request.type === "RENDER_PREVIEW" && ffmpeg) {
+    try {
+      analysis = analyseRenderedOutput(ffmpeg, outputFile, request.jobId);
+    } catch (error) {
+      log("warn", "render:analysis-failed", { jobId: request.jobId, error: String(error) });
+      analysis = void 0;
+    }
+  }
+  if (analysis) {
+    postResult(
+      request.requestId,
+      { fileId: request.payload.fileId, format: request.payload.format, buffer, analysis },
+      [buffer, analysis.data.buffer]
+    );
+  } else {
+    postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  }
 }
 function getJobId(request) {
   return "jobId" in request ? request.jobId : void 0;
