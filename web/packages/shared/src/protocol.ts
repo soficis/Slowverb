@@ -1,3 +1,4 @@
+import type { AnalysisTrack } from "./analysis.js";
 import type { DspSpec, MasteringSpec } from "./dsp.js";
 
 export type WorkerRequestType =
@@ -95,6 +96,7 @@ export interface RenderResultPayload {
   readonly fileId: string;
   readonly format: ExportFormat;
   readonly buffer: ArrayBuffer;
+  readonly analysis?: AnalysisTrack;
 }
 
 export interface WaveformResultPayload {

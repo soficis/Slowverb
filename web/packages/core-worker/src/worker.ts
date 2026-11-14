@@ -1,12 +1,14 @@
 import createFFmpegCore from "@ffmpeg/core";
 import { log } from "@slowverb/shared";
 import type {
+  AnalysisTrack,
   InitPayload,
   WorkerEvent,
   WorkerLogLevel,
   WorkerRequest,
   WorkerResultPayload,
 } from "@slowverb/shared";
+import { buildAnalysisTrack } from "./analysis_track.js";
 import { clampInt } from "./worker_utils.js";
 import {
   buildRenderPlan,
@@ -238,7 +240,7 @@ async function handleRender(
       }
       const buffer = readOutput(engine, outputFile);
       log("info", "render:ok", { jobId, outputFile });
-      postRenderResult(request, buffer);
+      postRenderResult(request, buffer, outputFile);
       return;
     }
 
@@ -252,7 +254,7 @@ async function handleRender(
       filesToCleanup.add(result.outputFile);
       for (const temp of result.tempFiles) filesToCleanup.add(temp);
       log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
-      postRenderResult(request, result.buffer);
+      postRenderResult(request, result.buffer, result.outputFile);
       return;
     }
 
@@ -281,7 +283,7 @@ async function handleRender(
     filesToCleanup.add(result.outputFile);
     for (const temp of result.tempFiles) filesToCleanup.add(temp);
     log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    postRenderResult(request, result.buffer, result.outputFile);
     return;
   } finally {
     activeJobId = undefined;
@@ -349,11 +351,46 @@ function postResult(requestId: string, payload: WorkerResultPayload, transfer?: 
   postEvent({ type: "RESULT", requestId, payload }, transfer);
 }
 
+function analyseRenderedOutput(
+  engine: WorkerFfmpegBridge,
+  outputFile: string,
+  jobId: string
+): AnalysisTrack {
+  const pcmFile = `${jobId}-analysis.f32`;
+  try {
+    withProgressStage("processing", 1, 0, () =>
+      engine.exec("-i", outputFile, "-ac", "1", "-ar", "44100", "-f", "f32le", "-y", pcmFile));
+    const bytes = readOutput(engine, pcmFile);
+    const pcm = new Float32Array(bytes, 0, Math.floor(bytes.byteLength / 4));
+    return buildAnalysisTrack(pcm, 44100);
+  } finally {
+    cleanupFiles(pcmFile);
+  }
+}
+
 function postRenderResult(
   request: Extract<WorkerRequest, { type: "RENDER_PREVIEW" | "RENDER_FULL" }>,
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
+  outputFile: string
 ): void {
-  postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  let analysis: AnalysisTrack | undefined;
+  if (request.type === "RENDER_PREVIEW" && ffmpeg) {
+    try {
+      analysis = analyseRenderedOutput(ffmpeg, outputFile, request.jobId);
+    } catch (error) {
+      log("warn", "render:analysis-failed", { jobId: request.jobId, error: String(error) });
+      analysis = undefined;
+    }
+  }
+  if (analysis) {
+    postResult(
+      request.requestId,
+      { fileId: request.payload.fileId, format: request.payload.format, buffer, analysis },
+      [buffer, analysis.data.buffer]
+    );
+  } else {
+    postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  }
 }
 
 function getJobId(request: WorkerRequest): string | undefined {
