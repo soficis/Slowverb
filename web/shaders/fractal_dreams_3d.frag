@@ -8,6 +8,7 @@ uniform float uWarp;    // 0..1
 uniform float uChroma;  // 0..1
 uniform float uVig;     // 0..1
 uniform float uGrain;   // 0..1
+uniform float uLevel;   // 0..1 audio level
 
 out vec4 fragColor;
 
@@ -48,13 +49,15 @@ void main() {
 
   // For this implementation, we'll create a gradient effect
   // In a full post-processing setup, this would sample from the base layer
+  // Loud passages tighten the bands (10 -> 16) so the pattern visibly moves.
+  float fq = 10.0 + 6.0 * uLevel;
   vec3 baseColor = vec3(
-    0.5 + 0.5 * sin(uTime + uvR.x * 10.0),
-    0.5 + 0.5 * sin(uTime + uvG.y * 10.0),
-    0.5 + 0.5 * sin(uTime + uvB.x * 5.0 + uvB.y * 5.0)
+    0.5 + 0.5 * sin(uTime + uvR.x * fq),
+    0.5 + 0.5 * sin(uTime + uvG.y * fq),
+    0.5 + 0.5 * sin(uTime + uvB.x * 0.5 * fq + uvB.y * 0.5 * fq)
   );
 
-  vec3 col = baseColor;
+  vec3 col = baseColor * (0.78 + 0.35 * uLevel);
 
   // Vignette (soft, "tunnel" feel)
   float vig = 1.0 - (0.55 * uVig) * smoothstep(0.25, 1.05, r);

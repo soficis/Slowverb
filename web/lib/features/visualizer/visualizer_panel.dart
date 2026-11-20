@@ -412,6 +412,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
         return _MazePainter(
           frame: _currentFrame,
           time: _time,
+          levelTime: _levelTime,
           isPlaying: widget.isPlaying,
         );
       case 'mystify':
