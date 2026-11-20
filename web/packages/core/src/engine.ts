@@ -42,6 +42,7 @@ export interface RenderRequest {
   readonly startSec?: number;
   readonly durationSec?: number;
   readonly jobId?: string;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface RenderResult {
@@ -209,6 +210,7 @@ export class SlowverbEngine {
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec,
+      coverArt: request.coverArt ?? undefined,
     };
   }
 
@@ -446,6 +448,7 @@ class WorkerRunner {
   async encodePCM(payload: EncodePcmPayload): Promise<EncodePcmResultPayload> {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.coverArt instanceof ArrayBuffer) transfer.push(payload.coverArt);
     return this.sendWithLog<EncodePcmResultPayload>({ type: "ENCODE_PCM", requestId, payload }, { transfer });
   }
 

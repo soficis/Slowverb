@@ -46,6 +46,7 @@ export interface RenderPayload {
   readonly bitrateKbps?: number;
   readonly startSec?: number;
   readonly durationSec?: number;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface WaveformPayload {
@@ -67,6 +68,7 @@ export interface EncodePcmPayload {
   readonly sampleRate: number;
   readonly format: ExportFormat;
   readonly bitrateKbps?: number;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface MuxStillVideoPayload {
@@ -104,6 +106,7 @@ export interface ProbeResultPayload {
   readonly sampleRate: number;
   readonly channels: number;
   readonly format: string;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface RenderResultPayload {

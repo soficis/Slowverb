@@ -22,6 +22,7 @@ import {
   renderWithPhaseLimiter,
 } from "./ffmpeg_pipeline.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
+import { attachCoverArt, extractCoverArt, supportsCoverArt } from "./cover_art.js";
 import { muxStillVideo } from "./video_mux.js";
 import {
   isCrackleEnabled,
@@ -201,7 +202,8 @@ async function handleProbe(request: Extract<WorkerRequest, { type: "PROBE" }>): 
       stopLogCapture,
     });
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
-    postResult(request.requestId, metadata);
+    const coverArt = extractCoverArt(ffmpeg, fileId, cleanupFiles);
+    postResult(request.requestId, { ...metadata, coverArt }, coverArt ? [coverArt] : undefined);
   } finally {
     clearTimeout(warnTimeout);
   }
@@ -337,7 +339,19 @@ async function handleDecodePCM(request: Extract<WorkerRequest, { type: "DECODE_P
 
 async function handleEncodePCM(request: Extract<WorkerRequest, { type: "ENCODE_PCM" }>): Promise<void> {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  let buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  const cover = request.payload.coverArt;
+  if (
+    cover instanceof ArrayBuffer &&
+    cover.byteLength > 0 &&
+    supportsCoverArt(request.payload.format)
+  ) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.requestId, cleanupFiles);
+    } catch {
+      // keep original buffer; cover art must never fail an export
+    }
+  }
   postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
 }
 
@@ -386,6 +400,20 @@ function postRenderResult(
   buffer: ArrayBuffer,
   outputFile: string
 ): void {
+  const cover = request.payload.coverArt;
+  if (
+    request.type === "RENDER_FULL" &&
+    cover instanceof ArrayBuffer &&
+    cover.byteLength > 0 &&
+    supportsCoverArt(request.payload.format) &&
+    ffmpeg
+  ) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.jobId, cleanupFiles);
+    } catch {
+      // keep original buffer; cover art must never fail an export
+    }
+  }
   let analysis: AnalysisTrack | undefined;
   if (request.type === "RENDER_PREVIEW" && ffmpeg) {
     try {

@@ -18370,7 +18370,8 @@ var SlowverbEngine = class {
       format,
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
-      durationSec: request.durationSec
+      durationSec: request.durationSec,
+      coverArt: request.coverArt ?? void 0
     };
   }
   async resolvePlaybackIR(spec) {
@@ -18567,6 +18568,7 @@ var WorkerRunner = class {
   async encodePCM(payload) {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.coverArt instanceof ArrayBuffer) transfer.push(payload.coverArt);
     return this.sendWithLog({ type: "ENCODE_PCM", requestId, payload }, { transfer });
   }
   async muxStillVideo(payload) {

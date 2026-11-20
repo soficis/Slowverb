@@ -6399,6 +6399,114 @@ async function encodePcm(ffmpeg2, payload, cleanupFiles2) {
   }
 }
 
+// src/cover_art.ts
+var COVER_MAX_PX = 600;
+function supportsCoverArt(format) {
+  return format === "mp3" || format === "flac";
+}
+function buildExtractCoverArgs(input, out) {
+  return [
+    "-hide_banner",
+    "-i",
+    input,
+    "-map",
+    "0:v:0",
+    "-frames:v",
+    "1",
+    "-an",
+    "-vf",
+    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    "-c:v",
+    "mjpeg",
+    "-q:v",
+    "3",
+    "-f",
+    "image2",
+    "-y",
+    out
+  ];
+}
+function buildAttachCoverArgs(audio, cover, out, format) {
+  const args = [
+    "-hide_banner",
+    "-i",
+    audio,
+    "-i",
+    cover,
+    "-map",
+    "0:a:0",
+    "-map",
+    "1:v:0",
+    "-c:a",
+    "copy",
+    "-c:v",
+    "mjpeg",
+    "-q:v",
+    "3",
+    "-vf",
+    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    "-disposition:v:0",
+    "attached_pic"
+  ];
+  if (format === "mp3") {
+    args.push(
+      "-id3v2_version",
+      "3",
+      "-metadata:s:v",
+      "title=Album cover",
+      "-metadata:s:v",
+      "comment=Cover (front)"
+    );
+  }
+  args.push("-f", format, "-y", out);
+  return args;
+}
+function extractCoverArt(ffmpeg2, fileId, cleanupFiles2) {
+  const out = `${fileId}-cover.jpg`;
+  try {
+    ffmpeg2.reset?.();
+    const rc = ffmpeg2.exec(...buildExtractCoverArgs(fileId, out));
+    if (rc !== 0) return null;
+    try {
+      const info = ffmpeg2.FS.analyzePath(out);
+      if (!info?.exists) return null;
+    } catch {
+    }
+    const buf = readOutput(ffmpeg2, out);
+    if (buf.byteLength === 0) return null;
+    return buf;
+  } catch {
+    return null;
+  } finally {
+    try {
+      cleanupFiles2(out);
+    } catch {
+    }
+  }
+}
+function attachCoverArt(ffmpeg2, audio, cover, format, jobId, cleanupFiles2) {
+  const inAudio = `${jobId}-cover-in.${format}`;
+  const img = `${jobId}-cover.img`;
+  const out = `${jobId}-cover-out.${format}`;
+  try {
+    ffmpeg2.FS.writeFile(inAudio, new Uint8Array(audio));
+    ffmpeg2.FS.writeFile(img, new Uint8Array(cover));
+    ffmpeg2.reset?.();
+    const rc = ffmpeg2.exec(...buildAttachCoverArgs(inAudio, img, out, format));
+    if (rc !== 0) return audio;
+    const buf = readOutput(ffmpeg2, out);
+    if (buf.byteLength === 0) return audio;
+    return buf;
+  } catch {
+    return audio;
+  } finally {
+    try {
+      cleanupFiles2(inAudio, img, out);
+    } catch {
+    }
+  }
+}
+
 // src/video_mux.ts
 var BLACK_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==";
 function blackPngBytes() {
@@ -6719,7 +6827,8 @@ async function handleProbe(request) {
       stopLogCapture
     });
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
-    postResult(request.requestId, metadata);
+    const coverArt = extractCoverArt(ffmpeg, fileId, cleanupFiles);
+    postResult(request.requestId, { ...metadata, coverArt }, coverArt ? [coverArt] : void 0);
   } finally {
     clearTimeout(warnTimeout);
   }
@@ -6842,7 +6951,14 @@ async function handleDecodePCM(request) {
 }
 async function handleEncodePCM(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  let buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  const cover = request.payload.coverArt;
+  if (cover instanceof ArrayBuffer && cover.byteLength > 0 && supportsCoverArt(request.payload.format)) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.requestId, cleanupFiles);
+    } catch {
+    }
+  }
   postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
 }
 async function handleMuxStillVideo(request) {
@@ -6876,6 +6992,13 @@ function analyseRenderedOutput(engine, outputFile, jobId) {
   }
 }
 function postRenderResult(request, buffer, outputFile) {
+  const cover = request.payload.coverArt;
+  if (request.type === "RENDER_FULL" && cover instanceof ArrayBuffer && cover.byteLength > 0 && supportsCoverArt(request.payload.format) && ffmpeg) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.jobId, cleanupFiles);
+    } catch {
+    }
+  }
   let analysis;
   if (request.type === "RENDER_PREVIEW" && ffmpeg) {
     try {
