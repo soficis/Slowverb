@@ -58,6 +58,10 @@ abstract class AudioEngine {
     required String fileId,
     required EffectConfig config,
     required ExportOptions options,
+
+    /// Image bytes to embed as the output's cover (mp3/flac only). Per call,
+    /// not on [ExportOptions], because batch renders share one options object.
+    Uint8List? coverArt,
   });
 
   /// Watch progress of an ongoing render job
@@ -110,6 +114,7 @@ abstract class AudioEngine {
     required int sampleRate,
     required String format,
     int? bitrateKbps,
+    Uint8List? coverArt,
   });
 
   /// Resume the audio context to allow Tone.js reverb IR generation.
@@ -128,6 +133,9 @@ class AudioMetadata {
   final int channels;
   final String format; // 'mp3', 'wav', 'flac', etc.
 
+  /// Embedded cover image of the source, or null if it has none.
+  final Uint8List? coverArt;
+
   const AudioMetadata({
     required this.fileId,
     required this.filename,
@@ -135,6 +143,7 @@ class AudioMetadata {
     required this.sampleRate,
     required this.channels,
     required this.format,
+    this.coverArt,
   });
 
   /// Returns true if the source format is lossless.

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 
@@ -73,6 +75,33 @@ void main() {
         format: 'WAV',
       );
       expect(metadata.isLossless, isTrue);
+    });
+  });
+  group('AudioMetadata cover art', () {
+    test('coverArt defaults to null when the source has none', () {
+      const metadata = AudioMetadata(
+        fileId: '1',
+        filename: 'test.mp3',
+        duration: Duration.zero,
+        sampleRate: 44100,
+        channels: 2,
+        format: 'mp3',
+      );
+      expect(metadata.coverArt, isNull);
+    });
+
+    test('coverArt keeps the extracted image bytes', () {
+      final art = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+      final metadata = AudioMetadata(
+        fileId: '1',
+        filename: 'test.mp3',
+        duration: Duration.zero,
+        sampleRate: 44100,
+        channels: 2,
+        format: 'mp3',
+        coverArt: art,
+      );
+      expect(metadata.coverArt, same(art));
     });
   });
 }

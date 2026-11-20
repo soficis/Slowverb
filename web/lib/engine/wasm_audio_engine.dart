@@ -88,6 +88,7 @@ class WasmAudioEngine implements AudioEngine {
     required int sampleRate,
     required String format,
     int? bitrateKbps,
+    Uint8List? coverArt,
   }) => encodeFromFloatPcmImpl(
     this,
     left: left,
@@ -95,6 +96,7 @@ class WasmAudioEngine implements AudioEngine {
     sampleRate: sampleRate,
     format: format,
     bitrateKbps: bitrateKbps,
+    coverArt: coverArt,
   );
 
   /// Resume the audio context to allow Tone.js reverb IR generation.
@@ -129,7 +131,14 @@ class WasmAudioEngine implements AudioEngine {
     required String fileId,
     required EffectConfig config,
     required ExportOptions options,
-  }) => startRenderImpl(this, fileId: fileId, config: config, options: options);
+    Uint8List? coverArt,
+  }) => startRenderImpl(
+    this,
+    fileId: fileId,
+    config: config,
+    options: options,
+    coverArt: coverArt,
+  );
 
   /// Internal method that performs the actual render.
   /// Called asynchronously from startRender so the jobId can be returned immediately.
@@ -139,6 +148,7 @@ class WasmAudioEngine implements AudioEngine {
     required EffectConfig config,
     required ExportOptions options,
     required StreamController<RenderProgress> controller,
+    Uint8List? coverArt,
   }) => performRenderImpl(
     this,
     jobId: jobId,
@@ -146,6 +156,7 @@ class WasmAudioEngine implements AudioEngine {
     config: config,
     options: options,
     controller: controller,
+    coverArt: coverArt,
   );
 
   @override

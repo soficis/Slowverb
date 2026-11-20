@@ -18,6 +18,8 @@ Future<AudioMetadata> loadSourceImpl(
   final durationMs = payloadObj
       .getProperty<JSNumber?>('durationMs'.toJS)
       ?.toDartInt;
+  // The probe omits coverArt when the source has no embedded image.
+  final coverArtBuffer = payloadObj.getProperty<JSObject?>('coverArt'.toJS);
 
   return AudioMetadata(
     fileId: engine._getProperty<String>(payloadObj, 'fileId'),
@@ -26,6 +28,9 @@ Future<AudioMetadata> loadSourceImpl(
     sampleRate: engine._getProperty<int>(payloadObj, 'sampleRate'),
     channels: engine._getProperty<int>(payloadObj, 'channels'),
     format: engine._getProperty<String>(payloadObj, 'format'),
+    coverArt: coverArtBuffer == null
+        ? null
+        : BridgeInterop.bufferToUint8List(coverArtBuffer),
   );
 }
 
@@ -59,6 +64,7 @@ Future<Uint8List> encodeFromFloatPcmImpl(
   required int sampleRate,
   required String format,
   int? bitrateKbps,
+  Uint8List? coverArt,
 }) async {
   engine._ensureInitialized();
   final payloadData = <String, Object?>{
@@ -67,6 +73,7 @@ Future<Uint8List> encodeFromFloatPcmImpl(
     'sampleRate': sampleRate,
     'format': format,
     'bitrateKbps': bitrateKbps,
+    'coverArt': coverArt?.toJS,
   };
   payloadData.removeWhere((_, value) => value == null);
   final payload = BridgeInterop.toJsObject(payloadData);
@@ -166,6 +173,7 @@ Future<RenderJobId> startRenderImpl(
   required String fileId,
   required EffectConfig config,
   required ExportOptions options,
+  Uint8List? coverArt,
 }) async {
   engine._ensureInitialized();
 
@@ -183,6 +191,7 @@ Future<RenderJobId> startRenderImpl(
       config: config,
       options: options,
       controller: engine._progressControllers[jobId.value]!,
+      coverArt: coverArt,
     ),
   );
 
@@ -196,6 +205,7 @@ Future<void> performRenderImpl(
   required EffectConfig config,
   required ExportOptions options,
   required StreamController<RenderProgress> controller,
+  Uint8List? coverArt,
 }) async {
   try {
     final payload = BridgeInterop.toJsObject({
@@ -206,6 +216,7 @@ Future<void> performRenderImpl(
       'dspSpec': engine._toDspSpec(config),
       'format': options.format,
       'bitrateKbps': options.bitrateKbps ?? 192,
+      'coverArt': ?coverArt?.toJS,
       'jobId': jobId.value,
     });
 

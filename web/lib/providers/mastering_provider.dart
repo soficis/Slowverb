@@ -402,6 +402,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
                 bitrateKbps: state.selectedFormat == 'mp3'
                     ? state.mp3Bitrate
                     : (state.selectedFormat == 'aac' ? state.aacBitrate : null),
+                coverArt: decodedTasks[i].file.metadata.coverArt,
               );
 
               results.add(encoded);
@@ -471,6 +472,7 @@ class MasteringNotifier extends StateNotifier<MasteringState> {
             bitrateKbps: state.selectedFormat == 'mp3'
                 ? state.mp3Bitrate
                 : (state.selectedFormat == 'aac' ? state.aacBitrate : null),
+            coverArt: file.metadata.coverArt,
           );
 
           results.add(encoded);

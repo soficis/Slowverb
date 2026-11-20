@@ -26,6 +26,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   int _aacBitrate = 256;
   int _flacCompressionLevel = 8;
   bool _isExporting = false;
+  bool _embedCoverArt = true;
   double _exportProgress = 0.0;
   String _exportStage = 'processing';
   RenderJobId? _activeJobId;
@@ -177,6 +178,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                           setState(() => _flacCompressionLevel = value.toInt()),
                     ),
                   ),
+              ],
+              if (_canEmbedCoverArt) ...[
+                const Divider(height: SlowverbTokens.spacingLg),
+                _buildCoverArtToggle(theme),
               ],
             ],
           ),
@@ -464,6 +469,9 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         fileId: editorState.fileId!,
         config: config,
         options: options,
+        coverArt: _canEmbedCoverArt && _embedCoverArt
+            ? editorState.metadata?.coverArt
+            : null,
       );
 
       _activeJobId = jobId;
@@ -699,6 +707,39 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         const SizedBox(width: 4),
         VfdText('Source: $_sourceFormat', size: 11, color: color),
       ],
+    );
+  }
+
+  /// The worker embeds art only in mp3 and flac; wav and aac ignore it.
+  bool get _canEmbedCoverArt {
+    final hasArt = ref.read(audioEditorProvider).metadata?.coverArt != null;
+    return hasArt && (_selectedFormat == 'mp3' || _selectedFormat == 'flac');
+  }
+
+  Widget _buildCoverArtToggle(ThemeData theme) {
+    return MergeSemantics(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Embed cover art', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  "Copy the source file's artwork into the export",
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          Switch(
+            value: _embedCoverArt,
+            onChanged: (value) => setState(() => _embedCoverArt = value),
+          ),
+        ],
+      ),
     );
   }
 
