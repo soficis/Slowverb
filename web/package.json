@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/core-worker/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json",
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && npm run build -w @slowverb/shared && tsc --noEmit -p packages/core-worker/tsconfig.json && npm run build -w @slowverb/core-worker && tsc --noEmit -p packages/core/tsconfig.json",
     "lint:ts": "eslint \"packages/*/src/**/*.ts\" \"tests/**/*.ts\" --max-warnings=0",
     "check:ts": "npm run typecheck && npm run lint:ts && npm run build:ts",
     "test:dart": "flutter test --platform chrome --reporter compact test/data/repositories/preset_repository_web_test.dart && flutter test --platform chrome --reporter compact test/data/repositories/project_repository_web_test.dart && flutter test --platform chrome --reporter compact test/domain/entities/audio_metadata_test.dart && flutter test --platform chrome --reporter compact test/domain/entities/parameter_definitions_test.dart && flutter test --platform chrome --reporter compact test/domain/exceptions/app_exceptions_test.dart && flutter test --platform chrome --reporter compact test/domain/exceptions/slowverb_exceptions_test.dart && flutter test --platform chrome --reporter compact test/providers/audio_editor_provider_test.dart && flutter test --platform chrome --reporter compact test/providers/mastering_provider_test.dart && flutter test --platform chrome --reporter compact test/widget_test.dart && flutter test --platform chrome --reporter compact test/domain/entities/audio_analysis_track_test.dart",
