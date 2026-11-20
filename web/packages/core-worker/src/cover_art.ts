@@ -2,7 +2,11 @@ import { readOutput } from "./ffmpeg_pipeline.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
 
 export const COVER_MAX_PX = 600;
+// PNG, not mjpeg: the mjpeg encoder in the browser ffmpeg-core.wasm traps
+// ("memory access out of bounds") even though the Node build used by vitest works.
 export type CoverFormat = "mp3" | "flac";
+// Shrink to fit COVER_MAX_PX, never enlarge: upscaled PNG art only bloats the file.
+export const COVER_SCALE_FILTER = `scale='min(${COVER_MAX_PX},iw)':'min(${COVER_MAX_PX},ih)':force_original_aspect_ratio=decrease`;
 
 export function supportsCoverArt(format: string): format is CoverFormat {
   return format === "mp3" || format === "flac";
@@ -19,13 +23,13 @@ export function buildExtractCoverArgs(input: string, out: string): string[] {
     "1",
     "-an",
     "-vf",
-    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    COVER_SCALE_FILTER,
     "-c:v",
-    "mjpeg",
-    "-q:v",
-    "3",
+    "png",
     "-f",
     "image2",
+    "-update",
+    "1",
     "-y",
     out,
   ];
@@ -50,11 +54,9 @@ export function buildAttachCoverArgs(
     "-c:a",
     "copy",
     "-c:v",
-    "mjpeg",
-    "-q:v",
-    "3",
+    "png",
     "-vf",
-    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    COVER_SCALE_FILTER,
     "-disposition:v:0",
     "attached_pic",
   ];
@@ -77,7 +79,7 @@ export function extractCoverArt(
   fileId: string,
   cleanupFiles: (...p: string[]) => void
 ): ArrayBuffer | null {
-  const out = `${fileId}-cover.jpg`;
+  const out = `${fileId}-cover.png`;
   try {
     (ffmpeg as { reset?: () => void }).reset?.();
     const rc = ffmpeg.exec(...buildExtractCoverArgs(fileId, out));

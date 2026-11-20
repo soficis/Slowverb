@@ -34,13 +34,13 @@ describe("cover_art pure", () => {
       "1",
       "-an",
       "-vf",
-      `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+      "scale='min(600,iw)':'min(600,ih)':force_original_aspect_ratio=decrease",
       "-c:v",
-      "mjpeg",
-      "-q:v",
-      "3",
+      "png",
       "-f",
       "image2",
+      "-update",
+      "1",
       "-y",
       "o",
     ]);
@@ -60,11 +60,9 @@ describe("cover_art pure", () => {
       "-c:a",
       "copy",
       "-c:v",
-      "mjpeg",
-      "-q:v",
-      "3",
+      "png",
       "-vf",
-      `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+      "scale='min(600,iw)':'min(600,ih)':force_original_aspect_ratio=decrease",
       "-disposition:v:0",
       "attached_pic",
       "-id3v2_version",
@@ -182,14 +180,14 @@ describe("cover_art integration", () => {
     expect(rc).toBe(0);
   }, 60_000);
 
-  it("extractCoverArt on tagged.mp3 returns JPEG 600x300", async () => {
+  it("extractCoverArt on tagged.mp3 returns PNG 600x300", async () => {
     const out = extractCoverArt(core, "tagged.mp3", cleanupFiles);
     expect(out).not.toBeNull();
     const bytes = new Uint8Array(out as ArrayBuffer);
-    expect(bytes[0]).toBe(0xff);
-    expect(bytes[1]).toBe(0xd8);
-    core.FS.writeFile("x.jpg", bytes);
-    const lines = streamsOf("x.jpg");
+    expect(bytes[0]).toBe(0x89);
+    expect(bytes[1]).toBe(0x50);
+    core.FS.writeFile("x.png", bytes);
+    const lines = streamsOf("x.png");
     expect(lines.join("\n")).toContain("600x300");
   }, 60_000);
 
@@ -201,7 +199,7 @@ describe("cover_art integration", () => {
     expect(result).toBeNull();
   }, 60_000);
 
-  it("attachCoverArt mp3 embeds mjpeg attached pic", async () => {
+  it("attachCoverArt mp3 embeds png attached pic", async () => {
     const audio = readAsBuffer("tone.mp3");
     const cover = readAsBuffer("cover.png");
     const inLen = new Uint8Array(audio).length;
@@ -212,12 +210,12 @@ describe("cover_art integration", () => {
     core.FS.writeFile("out-mp3.mp3", outU8);
     const lines = streamsOf("out-mp3.mp3");
     const joined = lines.join("\n");
-    expect(lines.some((l) => l.includes("mjpeg") && l.includes("(attached pic)"))).toBe(true);
+    expect(lines.some((l) => l.includes("png") && l.includes("(attached pic)"))).toBe(true);
     expect(joined).toContain("mp3");
     void inLen;
   }, 60_000);
 
-  it("attachCoverArt flac embeds mjpeg attached pic", async () => {
+  it("attachCoverArt flac embeds png attached pic", async () => {
     const audio = readAsBuffer("tone.flac");
     const cover = readAsBuffer("cover.png");
     const jobId = "t-attach-flac";
@@ -227,7 +225,7 @@ describe("cover_art integration", () => {
     core.FS.writeFile("out-flac.flac", outU8);
     const lines = streamsOf("out-flac.flac");
     const joined = lines.join("\n");
-    expect(lines.some((l) => l.includes("mjpeg") && l.includes("(attached pic)"))).toBe(true);
+    expect(lines.some((l) => l.includes("png") && l.includes("(attached pic)"))).toBe(true);
     expect(joined).toContain("flac");
   }, 60_000);
 
@@ -241,8 +239,8 @@ describe("cover_art integration", () => {
 
   it("job temp files cleaned up", async () => {
     const temps = [
-      "tagged.mp3-cover.jpg",
-      "tone.mp3-cover.jpg",
+      "tagged.mp3-cover.png",
+      "tone.mp3-cover.png",
       "t-attach-mp3-cover-in.mp3",
       "t-attach-mp3-cover.img",
       "t-attach-mp3-cover-out.mp3",
@@ -256,6 +254,6 @@ describe("cover_art integration", () => {
     for (const p of temps) {
       expect(core.FS.analyzePath(p).exists).toBeFalsy();
     }
-    cleanupFiles("x.jpg", "out-mp3.mp3", "out-flac.flac");
+    cleanupFiles("x.png", "out-mp3.mp3", "out-flac.flac");
   }, 60_000);
 });

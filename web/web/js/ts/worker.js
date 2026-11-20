@@ -6401,6 +6401,7 @@ async function encodePcm(ffmpeg2, payload, cleanupFiles2) {
 
 // src/cover_art.ts
 var COVER_MAX_PX = 600;
+var COVER_SCALE_FILTER = `scale='min(${COVER_MAX_PX},iw)':'min(${COVER_MAX_PX},ih)':force_original_aspect_ratio=decrease`;
 function supportsCoverArt(format) {
   return format === "mp3" || format === "flac";
 }
@@ -6415,13 +6416,13 @@ function buildExtractCoverArgs(input, out) {
     "1",
     "-an",
     "-vf",
-    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    COVER_SCALE_FILTER,
     "-c:v",
-    "mjpeg",
-    "-q:v",
-    "3",
+    "png",
     "-f",
     "image2",
+    "-update",
+    "1",
     "-y",
     out
   ];
@@ -6440,11 +6441,9 @@ function buildAttachCoverArgs(audio, cover, out, format) {
     "-c:a",
     "copy",
     "-c:v",
-    "mjpeg",
-    "-q:v",
-    "3",
+    "png",
     "-vf",
-    `scale=${COVER_MAX_PX}:${COVER_MAX_PX}:force_original_aspect_ratio=decrease`,
+    COVER_SCALE_FILTER,
     "-disposition:v:0",
     "attached_pic"
   ];
@@ -6462,7 +6461,7 @@ function buildAttachCoverArgs(audio, cover, out, format) {
   return args;
 }
 function extractCoverArt(ffmpeg2, fileId, cleanupFiles2) {
-  const out = `${fileId}-cover.jpg`;
+  const out = `${fileId}-cover.png`;
   try {
     ffmpeg2.reset?.();
     const rc = ffmpeg2.exec(...buildExtractCoverArgs(fileId, out));
