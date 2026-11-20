@@ -73,6 +73,15 @@ abstract final class Presets {
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
     },
+    // Club-style: keep it a sped-up dance track. Past ~1.35x the stretch
+    // smears transients; a low shelf over +12 dB on top of this boost clips
+    // and muddies the kick; heavy reverb washes the beat out.
+    ranges: {
+      'tempo': ParameterRange(1.05, 1.35),
+      'pitch': ParameterRange(0.0, 6.0),
+      'bassGain': ParameterRange(0.0, 12.0),
+      'reverbAmount': ParameterRange(0.0, 0.3),
+    },
   );
 
   /// Slow Bass — Deep bass boost with dynamic level control
@@ -262,6 +271,15 @@ abstract final class Presets {
       'eqWarmth': 0.8,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
+    },
+    // Lo-fi stays relaxed: never sped up, not dragged below 0.8x, warm
+    // enough to keep the character, and echo capped so it doesn't smear
+    // the groove.
+    ranges: {
+      'tempo': ParameterRange(0.8, 1.0),
+      'pitch': ParameterRange(-4.0, 0.0),
+      'eqWarmth': ParameterRange(0.4, 1.0),
+      'echoAmount': ParameterRange(0.0, 0.4),
     },
   );
 

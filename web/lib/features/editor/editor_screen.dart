@@ -8,6 +8,7 @@ import 'package:slowverb_web/app/slowverb_design_tokens.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 import 'package:slowverb_web/domain/entities/parameter_definitions.dart';
+import 'package:slowverb_web/domain/entities/preset_bounds.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/processing_indicator.dart';

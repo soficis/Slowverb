@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:slowverb_web/domain/entities/audio_file_data.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
+import 'package:slowverb_web/domain/entities/preset_bounds.dart';
 import 'package:slowverb_web/domain/entities/project.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
@@ -37,6 +38,14 @@ class AudioEditorState {
   final bool isPreviewDirty;
   final bool previewMasteringApplied;
 
+  /// Values moved to fit the selected preset's ranges on the last preset
+  /// change or project load. Shown in the editor; empty when nothing moved.
+  final List<ParameterClamp> rangeClamps;
+
+  /// True when one Speed control drives both tempo and pitch
+  /// (pitch = 12 * log2(tempo)); false shows the two sliders separately.
+  final bool speedPitchLinked;
+
   const AudioEditorState({
     this.audioFileName,
     this.fileId,
@@ -54,6 +63,8 @@ class AudioEditorState {
     this.currentPreviewUri,
     this.isPreviewDirty = true,
     this.previewMasteringApplied = false,
+    this.rangeClamps = const [],
+    this.speedPitchLinked = false,
   });
 
   Duration? get audioDuration => metadata?.duration;
@@ -75,6 +86,8 @@ class AudioEditorState {
     Uri? currentPreviewUri,
     bool? isPreviewDirty,
     bool? previewMasteringApplied,
+    List<ParameterClamp>? rangeClamps,
+    bool? speedPitchLinked,
   }) {
     return AudioEditorState(
       audioFileName: audioFileName ?? this.audioFileName,
@@ -94,6 +107,8 @@ class AudioEditorState {
       isPreviewDirty: isPreviewDirty ?? this.isPreviewDirty,
       previewMasteringApplied:
           previewMasteringApplied ?? this.previewMasteringApplied,
+      rangeClamps: rangeClamps ?? this.rangeClamps,
+      speedPitchLinked: speedPitchLinked ?? this.speedPitchLinked,
     );
   }
 }
@@ -126,6 +141,9 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
             params['masteringMode'] = masteringSettings.mode.toDouble();
             return params;
           }(),
+          speedPitchLinked: SpeedPitch.isLinked(
+            Presets.slowedReverb.parameters,
+          ),
         ),
       ) {
     _initPlaybackListener();
@@ -192,9 +210,12 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
     newParams['masteringMode'] =
         state.currentParameters['masteringMode'] ?? 3.0;
 
+    final fitted = clampToPreset(preset, newParams);
     state = state.copyWith(
       selectedPreset: preset,
-      currentParameters: newParams,
+      currentParameters: fitted.parameters,
+      rangeClamps: fitted.clamps,
+      speedPitchLinked: SpeedPitch.isLinked(fitted.parameters),
       isPreviewDirty: true,
     );
     unawaited(_persistProjectSnapshot());
@@ -202,11 +223,79 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
   void updateParameter(String key, double value) {
     final newParams = Map<String, double>.from(state.currentParameters);
-    newParams[key] = value;
+    // The slider and the typed-value dialog are already bounded by the
+    // preset's range; this guards other callers.
+    final def = slideableDefinitionFor(key);
+    newParams[key] = def == null
+        ? value
+        : state.selectedPreset.rangeFor(def).clamp(value);
     if (key == 'masteringAlgorithm') {
       newParams['masteringMode'] = value >= 1.5 ? 5.0 : 3.0;
     }
-    state = state.copyWith(currentParameters: newParams, isPreviewDirty: true);
+    _commitParameters(newParams, touched: {key});
+  }
+
+  /// Sets the single Speed control: tempo, with pitch following it
+  /// (pitch = 12 * log2(tempo)). Bounded by [SpeedPitch.speedRange].
+  void setLinkedSpeed(double speed) {
+    final linked = SpeedPitch.link(state.selectedPreset, speed);
+    final newParams = Map<String, double>.from(state.currentParameters)
+      ..['tempo'] = linked.tempo
+      ..['pitch'] = linked.pitch;
+    _commitParameters(newParams, touched: {'tempo', 'pitch'});
+  }
+
+  /// Switches between one Speed control and separate speed/pitch sliders.
+  ///
+  /// Separating keeps both values exactly. Linking keeps the speed and moves
+  /// pitch onto it; if the speed itself has to move to fit the preset's
+  /// range, that is reported in [AudioEditorState.rangeClamps].
+  void setSpeedPitchLinked(bool linked) {
+    if (!linked) {
+      state = state.copyWith(speedPitchLinked: false);
+      return;
+    }
+    final tempo = state.currentParameters['tempo'] ?? 1.0;
+    final result = SpeedPitch.link(state.selectedPreset, tempo);
+    final newParams = Map<String, double>.from(state.currentParameters)
+      ..['tempo'] = result.tempo
+      ..['pitch'] = result.pitch;
+    final clamps = [
+      for (final c in state.rangeClamps)
+        if (c.id != 'tempo' && c.id != 'pitch') c,
+      if (result.tempo != tempo)
+        ParameterClamp(
+          id: 'tempo',
+          label: slideableDefinitionFor('tempo')!.label,
+          from: tempo,
+          to: result.tempo,
+        ),
+    ];
+    state = state.copyWith(speedPitchLinked: true, rangeClamps: clamps);
+    _commitParameters(newParams, touched: const {});
+  }
+
+  /// Hides the "fitted to range" notice without changing any value.
+  void dismissRangeClamps() {
+    state = state.copyWith(rangeClamps: const []);
+  }
+
+  void _commitParameters(
+    Map<String, double> newParams, {
+    required Set<String> touched,
+  }) {
+    // A notice about a value the user has since moved is stale.
+    final clamps = state.rangeClamps.any((c) => touched.contains(c.id))
+        ? [
+            for (final c in state.rangeClamps)
+              if (!touched.contains(c.id)) c,
+          ]
+        : state.rangeClamps;
+    state = state.copyWith(
+      currentParameters: newParams,
+      rangeClamps: clamps,
+      isPreviewDirty: true,
+    );
 
     _previewDebounce?.cancel();
     _previewDebounce = Timer(_debounceDuration, () {

@@ -12,6 +12,9 @@ Future<void> loadAudioFileImpl(
   if (project != null && project.parameters.isNotEmpty) {
     initialParams.addAll(project.parameters);
   }
+  // A saved project may predate the preset's ranges: fit and report, never
+  // snap silently.
+  final fitted = clampToPreset(preset, initialParams);
   final now = DateTime.now();
   final projectId = project?.id ?? const Uuid().v4();
   final createdAt = project?.createdAt ?? now;
@@ -21,7 +24,9 @@ Future<void> loadAudioFileImpl(
     audioFileName: fileData.filename,
     error: null,
     selectedPreset: preset,
-    currentParameters: initialParams,
+    currentParameters: fitted.parameters,
+    rangeClamps: fitted.clamps,
+    speedPitchLinked: SpeedPitch.isLinked(fitted.parameters),
     projectId: projectId,
     projectName: project?.name ?? fileData.filename,
     projectCreatedAt: createdAt,
