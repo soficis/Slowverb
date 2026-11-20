@@ -22,6 +22,7 @@ import {
   renderWithPhaseLimiter,
 } from "./ffmpeg_pipeline.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
+import { muxStillVideo } from "./video_mux.js";
 import {
   isCrackleEnabled,
   isPhaseLimiterEnabled,
@@ -89,6 +90,8 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
       return runWithEngine(() => handleDecodePCM(request), request.requestId);
     case "ENCODE_PCM":
       return runWithEngine(() => handleEncodePCM(request), request.requestId);
+    case "MUX_STILL_VIDEO":
+      return runWithEngine(() => handleMuxStillVideo(request), request.requestId);
   }
 }
 
@@ -336,6 +339,12 @@ async function handleEncodePCM(request: Extract<WorkerRequest, { type: "ENCODE_P
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
   const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
   postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
+}
+
+async function handleMuxStillVideo(request: Extract<WorkerRequest, { type: "MUX_STILL_VIDEO" }>): Promise<void> {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const buffer = await muxStillVideo(ffmpeg, request.payload, request.requestId, cleanupFiles);
+  postResult(request.requestId, { buffer }, [buffer]);
 }
 
 function cleanupFiles(...paths: string[]): void {

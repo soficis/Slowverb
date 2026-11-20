@@ -18317,6 +18317,15 @@ var SlowverbEngine = class {
       runner.terminate();
     }
   }
+  async muxStillVideo(payload, callbacks) {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.muxStillVideo(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
   async runRender(type, request, callbacks) {
     const runner = this.createRunner(callbacks);
     const jobId = request.jobId ?? createJobId();
@@ -18559,6 +18568,12 @@ var WorkerRunner = class {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
     return this.sendWithLog({ type: "ENCODE_PCM", requestId, payload }, { transfer });
+  }
+  async muxStillVideo(payload) {
+    const requestId = this.nextRequestId();
+    const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.still) transfer.push(payload.still.buffer);
+    return this.sendWithLog({ type: "MUX_STILL_VIDEO", requestId, payload }, { transfer });
   }
   async cancel(jobId) {
     const payload = { jobId };

@@ -19,6 +19,8 @@ import type {
   EncodePcmPayload,
   DecodePcmResultPayload,
   EncodePcmResultPayload,
+  MuxStillVideoPayload,
+  MuxStillVideoResultPayload,
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
 import { Reverb, start as toneStart } from "tone";
@@ -133,6 +135,19 @@ export class SlowverbEngine {
     try {
       await runner.init(this.initPayload);
       return await runner.encodePCM(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
+
+  async muxStillVideo(
+    payload: MuxStillVideoPayload,
+    callbacks?: RenderCallbacks
+  ): Promise<MuxStillVideoResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.muxStillVideo(payload);
     } finally {
       runner.terminate();
     }
@@ -432,6 +447,13 @@ class WorkerRunner {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
     return this.sendWithLog<EncodePcmResultPayload>({ type: "ENCODE_PCM", requestId, payload }, { transfer });
+  }
+
+  async muxStillVideo(payload: MuxStillVideoPayload): Promise<MuxStillVideoResultPayload> {
+    const requestId = this.nextRequestId();
+    const transfer: Transferable[] = [payload.left.buffer as Transferable, payload.right.buffer as Transferable];
+    if (payload.still) transfer.push(payload.still.buffer as Transferable);
+    return this.sendWithLog<MuxStillVideoResultPayload>({ type: "MUX_STILL_VIDEO", requestId, payload }, { transfer });
   }
 
   async cancel(jobId: string): Promise<void> {
