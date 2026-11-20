@@ -128,6 +128,8 @@ abstract final class VisualizerPresets {
     dvdBounce,
     rainyWindow,
     rainyWindow3d,
+    timeGate,
+    vortex,
   ];
 
   static const mystify = VisualizerPreset(

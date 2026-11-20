@@ -13,6 +13,7 @@ import 'package:slowverb_web/features/editor/widgets/effect_slider.dart';
 import 'package:slowverb_web/features/editor/widgets/processing_indicator.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_controller.dart';
 import 'package:slowverb_web/features/visualizer/visualizer_panel.dart';
+import 'package:slowverb_web/providers/analysis_stream_provider.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_playback_provider.dart';
 import 'package:slowverb_web/providers/preset_repository_provider.dart';
@@ -177,7 +178,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         preset: vis.activePreset,
                         // Reduced motion: keep the scene still.
                         isPlaying: vis.isPlaying && !reduceMotion,
-                        analysisStream: null,
+                        analysisStream: reduceMotion
+                            ? null
+                            : ref.watch(analysisStreamProvider),
                         isFullscreen: true,
                       );
                       return _fullscreenVisualizer
