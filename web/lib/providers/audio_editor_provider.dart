@@ -171,7 +171,14 @@ class AudioEditorNotifier extends StateNotifier<AudioEditorState> {
 
     player.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
+        // just_audio keeps `playing == true` after completion, so pause and
+        // rewind here (the single owner of end-of-track): the button returns
+        // to play and the next play starts from the beginning.
         state = state.copyWith(isPlaying: false, playbackPosition: 0.0);
+        unawaited(() async {
+          await player.pause();
+          await player.seek(Duration.zero);
+        }());
       }
     });
   }

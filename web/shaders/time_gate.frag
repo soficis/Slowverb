@@ -171,6 +171,13 @@ void main() {
     float beatFlash = smoothstep(0.7, 1.0, uLevel) * 0.3;
     col += beatFlash;
     
+    // Soft knee: the additive glow/grid terms are unbounded. Leave values below the knee
+    // untouched and compress highlights asymptotically toward 0.8 linear (~0.9 after
+    // gamma) so loud input never plateaus at white.
+    col = max(col, vec3(0.0));
+    vec3 over = max(col - 0.5, vec3(0.0));
+    col = min(col, vec3(0.5)) + 0.3 * over / (over + 0.3);
+
     // Gamma correction
     col = pow(col, vec3(0.4545));
     
