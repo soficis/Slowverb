@@ -171,8 +171,11 @@ class EffectConfig {
   final double? phaserDecay; // 0-1
   final double? phaserSpeedHz; // 0.1-5 Hz
   final int? phaserType; // 0=sinusoidal, 1=triangular
-  final double? playbackDevice; // 0=off, 1=car front, 2=car rear, 3=gramophone, 4=cassette
-  final double? reverbType; // 0=Tone, 1=Freeverb, 2=plate (Conner Plate I), 3=hotel bathroom
+  // 0=off, 1=car front, 2=car rear, 3=gramophone, 4=cassette
+  final double? playbackDevice;
+  // 0=Tone, 1=Freeverb, 2=plate (Conner Plate I), 3=hotel bathroom
+  final double? reverbType;
+  final double? crackle; // 0.0 - 1.0 (vinyl crackle bed intensity)
 
   const EffectConfig({
     required this.presetId,
@@ -201,6 +204,7 @@ class EffectConfig {
     this.phaserType,
     this.playbackDevice,
     this.reverbType,
+    this.crackle,
   });
 
   /// Create configuration from parameter map
@@ -232,6 +236,7 @@ class EffectConfig {
       phaserType: params['phaserType']?.toInt(),
       playbackDevice: params['playbackDevice'],
       reverbType: params['reverbType'],
+      crackle: params['crackle'],
     );
   }
 }

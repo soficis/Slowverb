@@ -568,6 +568,16 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
     };
   }
 
+  // Crackle is a fixed-seed bed, so the same settings always render the same
+  // pops: preview and export match, and re-renders don't reshuffle.
+  final crackle = config.crackle;
+  if (crackle != null && crackle > 0) {
+    spec['crackle'] = <String, Object?>{
+      'intensity': crackle.clamp(0.0, 1.0),
+      'seed': 1,
+    };
+  }
+
   // Phaser is on when depth (decay) > 0 or an explicit delay is set; delay defaults to 4 ms.
   final phaserDelayMs = config.phaserDelayMs;
   final phaserDecay = config.phaserDecay;
