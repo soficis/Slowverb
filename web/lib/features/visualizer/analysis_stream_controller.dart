@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/audio_analysis_track.dart';
 import 'package:slowverb_web/domain/entities/visualizer_preset.dart';
@@ -18,6 +19,10 @@ Stream<void> _periodicTicker(Duration interval) =>
 ///   emitted and the ticker stops until playback starts again. The stream
 ///   itself stays open: listeners hold one subscription across replays and
 ///   re-rendered previews.
+/// - Values are smoothed per emitted frame with a fast [attack] and a slower
+///   [release] (fractions of the gap closed per frame; 1.0 = no smoothing).
+///   Raw 43 fps frames jump by up to ~0.6 between neighbours on a loud master,
+///   which reads as strobing; 0.5/0.12 keeps beats punchy and removes that.
 /// - The track is read on every tick, so a re-rendered preview is picked up
 ///   without rebuilding the controller.
 class AnalysisStreamController {
@@ -27,6 +32,8 @@ class AnalysisStreamController {
     required Stream<bool> playing,
     this.interval = const Duration(milliseconds: 33),
     this.latency = defaultLatency,
+    this.attack = 0.5,
+    this.release = 0.12,
     TickerFactory ticker = _periodicTicker,
   }) : _track = track,
        _position = position,
@@ -41,6 +48,8 @@ class AnalysisStreamController {
 
   final Duration interval;
   final Duration latency;
+  final double attack;
+  final double release;
 
   final AudioAnalysisTrack? Function() _track;
   final Duration Function() _position;
@@ -54,6 +63,9 @@ class AnalysisStreamController {
   AudioAnalysisTrack? _lastTrack;
   int _lastIndex = -1;
   bool _ended = false;
+
+  // Smoothed state: spectrum (64 bands) then rms, bass, mid, treble.
+  final Float64List _smooth = Float64List(AudioAnalysisTrack.bandCount + 4);
 
   Stream<AudioAnalysisFrame> get stream => _out.stream;
 
@@ -82,6 +94,7 @@ class AnalysisStreamController {
     if (position >= track.duration) {
       if (!_ended) {
         _ended = true;
+        _smooth.fillRange(0, _smooth.length, 0.0);
         _emit(_silent(track.duration));
       }
       _stopTicker();
@@ -92,16 +105,27 @@ class AnalysisStreamController {
     if (index == _lastIndex) return; // Position stalled (buffering/seeking).
     _lastIndex = index;
     final frame = track.frameAt(position - latency);
+    const n = AudioAnalysisTrack.bandCount;
+    final spectrum = Float32List(n);
+    for (var k = 0; k < n; k++) {
+      spectrum[k] = _follow(k, frame.spectrum[k]);
+    }
     _emit(
       AudioAnalysisFrame(
-        spectrum: frame.spectrum,
-        rms: frame.rms,
-        bass: frame.bass,
-        mid: frame.mid,
-        treble: frame.treble,
+        spectrum: spectrum,
+        rms: _follow(n, frame.rms),
+        bass: _follow(n + 1, frame.bass),
+        mid: _follow(n + 2, frame.mid),
+        treble: _follow(n + 3, frame.treble),
         time: position,
       ),
     );
+  }
+
+  double _follow(int i, double target) {
+    final current = _smooth[i];
+    final k = target > current ? attack : release;
+    return _smooth[i] = current + k * (target - current);
   }
 
   static AudioAnalysisFrame _silent(Duration time) => AudioAnalysisFrame(

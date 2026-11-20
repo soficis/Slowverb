@@ -4,6 +4,7 @@ uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
 uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s)
 
 out vec4 fragColor;
 
@@ -89,7 +90,7 @@ void main() {
     
     // Camera setup - flying through vortex
     float speed = 5.0 + uLevel * 8.0; // Audio drives speed
-    vec3 ro = vec3(0.0, 0.0, uTime * speed);
+    vec3 ro = vec3(0.0, 0.0, uTime * 5.0 + uLevelTime * 8.0); // = integral of speed
     
     // Wobbling camera (audio-reactive)
     float shake = uLevel * 0.15;

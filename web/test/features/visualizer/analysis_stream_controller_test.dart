@@ -26,13 +26,19 @@ int _frameOf(AudioAnalysisFrame f) => (f.rms * 100).round();
 Future<void> _flush() => Future<void>.delayed(Duration.zero);
 
 class _Harness {
-  _Harness({AudioAnalysisTrack? track, Duration latency = Duration.zero})
-    : track = track ?? _track() {
+  _Harness({
+    AudioAnalysisTrack? track,
+    Duration latency = Duration.zero,
+    double attack = 1.0,
+    double release = 1.0,
+  }) : track = track ?? _track() {
     controller = AnalysisStreamController(
       track: () => this.track,
       position: () => position,
       playing: playing.stream,
       latency: latency,
+      attack: attack,
+      release: release,
       ticker: (interval) {
         requestedInterval = interval;
         return ticks.stream;
@@ -163,6 +169,41 @@ void main() {
     h.track = next;
     await h.tick(const Duration(milliseconds: 420)); // same position, new track
     expect(h.frames.map(_frameOf), [4, 8]);
+  });
+
+  test('default smoothing: fast attack, slow release, no strobe', () async {
+    final data = Float32List(10 * AudioAnalysisTrack.stride);
+    data[2 * AudioAnalysisTrack.stride + 64] = 1.0; // one loud frame
+    final h = _Harness(
+      track: AudioAnalysisTrack(
+        sampleRate: 44100,
+        fps: 10,
+        frameCount: 10,
+        data: data,
+      ),
+    );
+    h.controller.stream.listen((_) {});
+    final c = AnalysisStreamController(
+      track: () => h.track,
+      position: () => h.position,
+      playing: Stream.value(true),
+      latency: Duration.zero,
+      ticker: (_) => h.ticks.stream,
+    );
+    final out = <double>[];
+    c.stream.listen((f) => out.add(f.rms));
+    await _flush();
+    for (final ms in [100, 250, 350, 450, 550, 650]) {
+      await h.tick(Duration(milliseconds: ms));
+    }
+    expect(out[0], 0.0);
+    expect(out[1], closeTo(0.5, 1e-9)); // attack 0.5
+    expect(out[2], closeTo(0.44, 1e-9)); // release 0.12
+    for (var i = 3; i < out.length; i++) {
+      expect(out[i], lessThan(out[i - 1]));
+      expect(out[i - 1] - out[i], lessThan(0.1));
+    }
+    await c.dispose();
   });
 
   test('dispose closes the stream and stops ticking', () async {

@@ -6,12 +6,22 @@ class GpuVisualizerPainter extends CustomPainter {
   final double time;
   final String presetId;
 
+  /// Integral of [levelOf] over playback time. Shaders whose speed scales with
+  /// uLevel advance by this instead of `uTime * speed`; multiplying elapsed
+  /// time by an audio-driven speed teleports the scene on every level change.
+  final double levelTime;
+
   GpuVisualizerPainter({
     required this.shader,
     required this.frame,
     required this.time,
     required this.presetId,
+    this.levelTime = 0,
   });
+
+  /// Combine RMS with bass for a punchy audio-reactive response.
+  static double levelOf(AudioAnalysisFrame frame) =>
+      (frame.rms * 0.6 + frame.bass * 0.4).clamp(0.0, 1.0);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -45,17 +55,12 @@ class GpuVisualizerPainter extends CustomPainter {
       fragmentShader.setFloat(0, time);
       fragmentShader.setFloat(1, size.width);
       fragmentShader.setFloat(2, size.height);
-      fragmentShader.setFloat(3, _calculateLevel());
+      fragmentShader.setFloat(3, levelOf(frame));
+      fragmentShader.setFloat(4, levelTime);
     }
 
     final paint = Paint()..shader = fragmentShader;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-  }
-
-  double _calculateLevel() {
-    // Combine RMS with bass for a punchy audio-reactive response
-    final level = (frame.rms * 0.6 + frame.bass * 0.4).clamp(0.0, 1.0);
-    return level;
   }
 
   @override

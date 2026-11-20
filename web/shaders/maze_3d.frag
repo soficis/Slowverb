@@ -4,6 +4,7 @@ uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
 uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s)
 
 out vec4 fragColor;
 

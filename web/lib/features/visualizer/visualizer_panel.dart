@@ -76,6 +76,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
   StreamSubscription<AudioAnalysisFrame>? _sub;
   AudioAnalysisFrame _currentFrame = AudioAnalysisFrame.empty();
   double _time = 0;
+  double _levelTime = 0;
 
   // Frame rate throttling
   final Stopwatch _fpsWatch = Stopwatch();
@@ -153,7 +154,11 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
     }
 
     setState(() {
-      _time += _targetFps == 60 ? 0.016 : 0.033;
+      final dt = _targetFps == 60 ? 0.016 : 0.033;
+      _time += dt;
+      if (widget.isPlaying) {
+        _levelTime += dt * GpuVisualizerPainter.levelOf(_currentFrame);
+      }
     });
   }
 
@@ -198,6 +203,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                         shader: shader,
                         frame: _currentFrame,
                         time: _time,
+                        levelTime: _levelTime,
                         presetId: presetId,
                       ),
                       size: Size.infinite,
@@ -297,6 +303,7 @@ class _VisualizerPanelState extends ConsumerState<VisualizerPanel>
                         shader: shader,
                         frame: _currentFrame,
                         time: _time,
+                        levelTime: _levelTime,
                         presetId: presetId,
                       ),
                       size: Size.infinite,
