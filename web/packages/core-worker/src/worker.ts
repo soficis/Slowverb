@@ -23,6 +23,7 @@ import {
 } from "./ffmpeg_pipeline.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
 import {
+  isCrackleEnabled,
   isPhaseLimiterEnabled,
   isSimpleMasteringEnabled,
   isSoundTouchEnabled,
@@ -216,7 +217,8 @@ async function handleRender(
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
   const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
+  const shouldUseCrackle = isCrackleEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback || shouldUseCrackle;
   const filesToCleanup = new Set<string>([payload.fileId]);
 
   activeJobId = jobId;
@@ -265,6 +267,7 @@ async function handleRender(
       soundtouch: shouldUseSoundTouch,
       toneReverb: shouldUseToneReverb,
       phaselimiter: shouldUsePhaseLimiter,
+      crackle: shouldUseCrackle,
     });
 
     const result = await renderWithPcmPipeline(
@@ -277,6 +280,7 @@ async function handleRender(
         useSoundTouch: shouldUseSoundTouch,
         useToneReverb: shouldUseToneReverb,
         usePlaybackDevice: shouldUsePlayback,
+        useCrackle: shouldUseCrackle,
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );

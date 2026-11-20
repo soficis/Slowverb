@@ -490,8 +490,7 @@ var DSP_LIMITS = {
   lowPassCutoffHz: { min: 200, max: 2e4},
   eqWarmth: { min: 0, max: 1},
   hfDamping: { min: 0, max: 1, default: 0 },
-  stereoWidth: { min: 0.5, max: 2}
-};
+  stereoWidth: { min: 0.5, max: 2}};
 var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChain(spec) {

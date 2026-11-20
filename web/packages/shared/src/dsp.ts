@@ -68,6 +68,7 @@ export interface DspSpec {
   readonly dynaudnorm?: boolean;
   readonly coupledMode?: boolean;   // SoX speed behavior (no atempo, just asetrate)
   readonly playback?: { readonly device: PlaybackDeviceId };  // fully wet playback-device convolution
+  readonly crackle?: { readonly intensity: NormalizedUnit; readonly seed?: number };
 }
 
 export const DSP_SPEC_VERSION: SpecVersion = "1.0.0";
@@ -89,6 +90,7 @@ export const DSP_LIMITS = {
   eqWarmth: { min: 0.0, max: 1.0, default: 0.0 },
   hfDamping: { min: 0.0, max: 1.0, default: 0.0 },
   stereoWidth: { min: 0.5, max: 2.0, default: 1.0 },
+  crackle: { intensity: { min: 0.0, max: 1.0, default: 0.0 } },
 } as const;
 
 export const PRESET_ORDER = [

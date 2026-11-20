@@ -4498,8 +4498,7 @@ var DSP_LIMITS = {
   lowPassCutoffHz: { min: 200, max: 2e4},
   eqWarmth: { min: 0, max: 1},
   hfDamping: { min: 0, max: 1},
-  stereoWidth: { min: 0.5, max: 2}
-};
+  stereoWidth: { min: 0.5, max: 2}};
 var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChainParts(spec) {
@@ -5115,6 +5114,105 @@ function normalizeInPlace(values) {
   if (max <= 0) return;
   for (let i = 0; i < values.length; i += 1) {
     values[i] = values[i] / max;
+  }
+}
+
+// src/crackle.ts
+var MAX_POPS_PER_SEC = 8;
+var POP_DECAY = 0.985;
+function xorshift32(seed) {
+  let s = seed >>> 0 || 2654435769;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s / 4294967296;
+  };
+}
+function clampIntensity(intensity) {
+  if (typeof intensity !== "number" || Number.isNaN(intensity)) return 0;
+  if (intensity <= 0) return 0;
+  if (intensity >= 1) return 1;
+  return intensity;
+}
+function validateFramesAndRate(frames, sampleRate) {
+  if (!Number.isInteger(frames) || frames < 0) {
+    throw new RangeError(`Invalid frames: ${String(frames)}`);
+  }
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new RangeError(`Invalid sampleRate: ${String(sampleRate)}`);
+  }
+}
+function planCracklePops(seed, frames, intensity, sampleRate) {
+  validateFramesAndRate(frames, sampleRate);
+  const i = clampIntensity(intensity);
+  if (i === 0 || frames === 0) return new Uint32Array(0);
+  const rng = xorshift32(seed);
+  const popsPerSec = MAX_POPS_PER_SEC * i;
+  const slot = sampleRate / popsPerSec;
+  const onsets = [];
+  for (let k = 0; k * slot < frames; k += 1) {
+    const r1 = rng();
+    const r2 = rng();
+    if (r1 < 0.7) {
+      const onset = Math.floor(k * slot + r2 * slot);
+      if (onset < frames) onsets.push(onset);
+    }
+  }
+  return Uint32Array.from(onsets);
+}
+function clampSample(v) {
+  if (v > 1) return 1;
+  if (v < -1) return -1;
+  return v;
+}
+function renderCrackleBed(seed, frames, intensity, sampleRate) {
+  validateFramesAndRate(frames, sampleRate);
+  const i = clampIntensity(intensity);
+  const out = new Float32Array(frames * 2);
+  if (i === 0) return out;
+  const hrng = xorshift32((seed ^ 2779096485) >>> 0);
+  const hissGain = 4e-3 * i;
+  const onsets = planCracklePops(seed, frames, i, sampleRate);
+  const prng = xorshift32((seed ^ 1540483477) >>> 0);
+  let yL = 0;
+  let yR = 0;
+  let envL = 0;
+  let envR = 0;
+  let onsetIdx = 0;
+  for (let n = 0; n < frames; n += 1) {
+    const xL = (hrng() * 2 - 1) * hissGain;
+    const xR = (hrng() * 2 - 1) * hissGain;
+    yL += 0.35 * (xL - yL);
+    yR += 0.35 * (xR - yR);
+    while (onsetIdx < onsets.length && onsets[onsetIdx] === n) {
+      const a = (0.15 + 0.35 * prng()) * i;
+      const bal = prng();
+      envL = a * (0.6 + 0.4 * bal);
+      envR = a * (0.6 + 0.4 * (1 - bal));
+      onsetIdx += 1;
+    }
+    let popL = 0;
+    let popR = 0;
+    if (envL > 1e-5 || envR > 1e-5) {
+      const popNoise = prng() * 2 - 1;
+      popL = envL * popNoise;
+      popR = envR * popNoise;
+    }
+    envL *= POP_DECAY;
+    envR *= POP_DECAY;
+    out[2 * n] = clampSample(yL + popL);
+    out[2 * n + 1] = clampSample(yR + popR);
+  }
+  return out;
+}
+function mixCrackleInto(pcm, bed) {
+  if (pcm.length !== bed.length) {
+    throw new RangeError(`Length mismatch: pcm=${pcm.length} bed=${bed.length}`);
+  }
+  for (let j = 0; j < pcm.length; j += 1) {
+    pcm[j] += bed[j];
   }
 }
 
@@ -6109,6 +6207,23 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
     tempFiles.push(effectsFile);
     currentPcmFile = effectsFile;
   }
+  if (options.useCrackle && payload.dspSpec?.crackle) {
+    const bytes = ffmpeg2.FS.readFile(currentPcmFile);
+    const pcm = new Float32Array(bytes.byteLength / 4);
+    new Uint8Array(pcm.buffer).set(bytes);
+    const frames = pcm.length / 2;
+    const bed = renderCrackleBed(
+      payload.dspSpec.crackle.seed ?? 1,
+      frames,
+      payload.dspSpec.crackle.intensity,
+      sampleRate
+    );
+    mixCrackleInto(pcm, bed);
+    const crackleFile = `${payload.fileId}-${jobId}-crackle.f32`;
+    ffmpeg2.FS.writeFile(crackleFile, new Uint8Array(pcm.buffer));
+    tempFiles.push(crackleFile);
+    currentPcmFile = crackleFile;
+  }
   if (options.usePlaybackDevice && payload.playbackIR) {
     const device = getPlaybackDevice(payload.dspSpec?.playback?.device);
     if (!device) throw new Error("Unknown playback device");
@@ -6306,6 +6421,10 @@ function isToneReverbEnabled(payload) {
 function isPlaybackDeviceEnabled(payload) {
   return payload.dspSpec?.playback != null && payload.playbackIR != null;
 }
+function isCrackleEnabled(payload) {
+  const v = payload.dspSpec?.crackle?.intensity;
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
+}
 function isSimpleMasteringEnabled(payload) {
   return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
 }
@@ -6494,7 +6613,8 @@ async function handleRender(request) {
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
   const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
+  const shouldUseCrackle = isCrackleEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback || shouldUseCrackle;
   const filesToCleanup = /* @__PURE__ */ new Set([payload.fileId]);
   activeJobId = jobId;
   try {
@@ -6539,7 +6659,8 @@ async function handleRender(request) {
       format: payload.format,
       soundtouch: shouldUseSoundTouch,
       toneReverb: shouldUseToneReverb,
-      phaselimiter: shouldUsePhaseLimiter
+      phaselimiter: shouldUsePhaseLimiter,
+      crackle: shouldUseCrackle
     });
     const result = await renderWithPcmPipeline(
       engine,
@@ -6550,7 +6671,8 @@ async function handleRender(request) {
         applyPhaseLimiter: shouldUsePhaseLimiter,
         useSoundTouch: shouldUseSoundTouch,
         useToneReverb: shouldUseToneReverb,
-        usePlaybackDevice: shouldUsePlayback
+        usePlaybackDevice: shouldUsePlayback,
+        useCrackle: shouldUseCrackle
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );
