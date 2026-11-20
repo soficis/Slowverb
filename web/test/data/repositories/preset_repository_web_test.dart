@@ -26,5 +26,35 @@ void main() {
       await repository.deleteCustomPreset(preset.id);
       expect(await repository.hasCustomPreset(preset.id), isFalse);
     });
+
+    test('round-trips per-preset parameter ranges', () async {
+      final repository = PresetRepositoryWeb(factory: newIdbFactoryMemory());
+      await repository.initialize();
+
+      const ranged = EffectPreset(
+        id: 'preset-ranged',
+        name: 'Ranged',
+        description: '',
+        parameters: {'tempo': 0.8, 'reverbAmount': 0.3},
+        ranges: {
+          'tempo': ParameterRange(0.7, 0.95),
+          'reverbAmount': ParameterRange(0.0, 0.5),
+        },
+      );
+      const plain = EffectPreset(
+        id: 'preset-plain',
+        name: 'Plain',
+        description: '',
+        parameters: {'tempo': 1.0},
+      );
+
+      await repository.saveCustomPreset(ranged);
+      await repository.saveCustomPreset(plain);
+
+      final loadedRanged = await repository.getCustomPreset(ranged.id);
+      final loadedPlain = await repository.getCustomPreset(plain.id);
+      expect(loadedRanged!.ranges, ranged.ranges);
+      expect(loadedPlain!.ranges, isEmpty);
+    });
   });
 }

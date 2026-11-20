@@ -155,6 +155,8 @@ class PresetRepositoryWeb implements PresetRepository {
       'name': preset.name,
       'description': preset.description,
       'parameters': preset.parameters,
+      if (preset.ranges.isNotEmpty)
+        'ranges': ParameterRange.mapToJson(preset.ranges),
       'createdAt': timestamp.toIso8601String(),
       'updatedAt': timestamp.toIso8601String(),
     };
@@ -166,6 +168,7 @@ class PresetRepositoryWeb implements PresetRepository {
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
       parameters: Map<String, double>.from(json['parameters'] as Map),
+      ranges: ParameterRange.mapFromJson(json['ranges']),
     );
   }
 

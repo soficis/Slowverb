@@ -1,3 +1,8 @@
+import 'parameter_definitions.dart';
+import 'parameter_range.dart';
+
+export 'parameter_range.dart';
+
 /// Represents a named effect preset configuration
 ///
 /// Each preset defines default values for tempo, pitch,
@@ -8,12 +13,21 @@ class EffectPreset {
   final String description;
   final Map<String, double> parameters;
 
+  /// Optional per-parameter bounds that narrow the global slider range while
+  /// this preset is selected. Keyed by parameter id; most presets have none.
+  final Map<String, ParameterRange> ranges;
+
   const EffectPreset({
     required this.id,
     required this.name,
     required this.description,
     required this.parameters,
+    this.ranges = const {},
   });
+
+  /// Slider bounds for [def] under this preset (global bounds if unranged).
+  ParameterRange rangeFor(ParameterDefinition def) =>
+      ParameterRange.effectiveRange(def, ranges[def.id]);
 }
 
 /// Pre-defined effect presets for Slowverb Web
