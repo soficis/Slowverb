@@ -89,6 +89,40 @@ Future<Uint8List> encodeFromFloatPcmImpl(
   return BridgeInterop.bufferToUint8List(buffer);
 }
 
+Future<Uint8List> muxStillVideoImpl(
+  WasmAudioEngine engine, {
+  required Float32List left,
+  required Float32List right,
+  required int sampleRate,
+  required int width,
+  required int height,
+  required int fps,
+  required int crf,
+  Uint8List? still,
+}) async {
+  engine._ensureInitialized();
+  final payload = BridgeInterop.toJsObject({
+    'left': left.toJS,
+    'right': right.toJS,
+    'sampleRate': sampleRate,
+    'width': width,
+    'height': height,
+    'fps': fps,
+    'crf': crf,
+    if (still != null && still.isNotEmpty) 'still': still.toJS,
+  });
+
+  final response = await BridgeInterop.muxStillVideo(payload);
+  final type = engine._getProperty<String>(response, 'type');
+  if (type != 'mux-video-ok') {
+    throw StateError('Video export failed: $type');
+  }
+
+  final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+  final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
+  return BridgeInterop.bufferToUint8List(buffer);
+}
+
 Future<Float32List> getWaveformImpl(
   WasmAudioEngine engine,
   String fileId, {

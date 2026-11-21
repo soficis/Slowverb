@@ -117,6 +117,20 @@ abstract class AudioEngine {
     Uint8List? coverArt,
   });
 
+  /// Muxes stereo PCM with a still image into an MP4.
+  ///
+  /// A null or empty [still] gives a black picture.
+  Future<Uint8List> muxStillVideo({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required int width,
+    required int height,
+    required int fps,
+    required int crf,
+    Uint8List? still,
+  });
+
   /// Resume the audio context to allow Tone.js reverb IR generation.
   ///
   /// This must be called after a user gesture (e.g., clicking play button)
