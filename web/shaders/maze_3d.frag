@@ -4,6 +4,7 @@ uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
 uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s)
 
 out vec4 fragColor;
 
@@ -30,7 +31,7 @@ float sdBox(vec3 p, vec3 b) {
 }
 
 // Map the maze scene
-float map(vec3 p) {
+float map(vec3 p, vec2 camXZ) {
     // Floor and ceiling
     float floorDist = p.y + 1.0;
     float ceilingDist = 2.0 - p.y;
@@ -44,19 +45,23 @@ float map(vec3 p) {
     if (isWall > 0.5) {
         // Wall pillar
         vec3 cellCenter = vec3(cell.x * 2.0 + 1.0, 0.5, cell.y * 2.0 + 1.0);
-        wall = sdBox(p - cellCenter, vec3(0.9, 1.5, 0.9));
+        // Pillars grow in with distance from the camera. A camera inside a
+        // solid pillar never hits anything and renders flat void, so keep a
+        // clear pocket around it.
+        float grow = smoothstep(2.0, 4.5, length(cellCenter.xz - camXZ));
+        wall = sdBox(p - cellCenter, vec3(0.9 * grow, 1.5, 0.9 * grow));
     }
     
     return min(min(floorDist, ceilingDist), wall);
 }
 
 // Calculate normal
-vec3 calcNormal(vec3 p) {
+vec3 calcNormal(vec3 p, vec2 camXZ) {
     vec2 e = vec2(0.001, 0.0);
     return normalize(vec3(
-        map(p + e.xyy) - map(p - e.xyy),
-        map(p + e.yxy) - map(p - e.yxy),
-        map(p + e.yyx) - map(p - e.yyx)
+        map(p + e.xyy, camXZ) - map(p - e.xyy, camXZ),
+        map(p + e.yxy, camXZ) - map(p - e.yxy, camXZ),
+        map(p + e.yyx, camXZ) - map(p - e.yyx, camXZ)
     ));
 }
 
@@ -66,7 +71,9 @@ void main() {
     vec2 uv = (fragCoord * 2.0 - resolution) / min(resolution.x, resolution.y);
     
     // Camera moves through the maze
-    float t = uTime * 0.5;
+    // uLevelTime is the integral of the level, so loud passages move faster
+    // without the camera teleporting.
+    float t = uTime * 0.4 + uLevelTime * 1.2;
     vec3 ro = vec3(
         sin(t * 0.3) * 3.0 + t * 2.0,
         0.0,
@@ -76,7 +83,7 @@ void main() {
     // Look direction (forward with slight wobble)
     vec3 lookAt = ro + vec3(
         cos(t * 0.3) * 2.0,
-        sin(uTime) * 0.1 * uLevel,
+        sin(uTime) * 0.3 * uLevel,
         sin(t * 0.2) * 2.0
     );
     
@@ -94,11 +101,11 @@ void main() {
     
     for (int i = 0; i < 64; i++) {
         vec3 p = ro + rd * dist;
-        float d = map(p);
+        float d = map(p, ro.xz);
         
         if (d < 0.01) {
             hit = true;
-            vec3 n = calcNormal(p);
+            vec3 n = calcNormal(p, ro.xz);
             
             // Determine surface type
             vec3 baseColor;
@@ -111,7 +118,7 @@ void main() {
                     vec3(0.3, 0.15, 0.4), // Light purple
                     c
                 );
-                baseColor += vec3(0.0, uLevel * 0.3, uLevel * 0.2);
+                baseColor += vec3(0.0, uLevel * 0.7, uLevel * 0.5);
             } else if (p.y > 1.9) {
                 // Ceiling
                 baseColor = vec3(0.1, 0.1, 0.15);
@@ -129,7 +136,7 @@ void main() {
                 else baseColor = wallColor3;
                 
                 // Audio reactive brightness
-                baseColor *= (0.5 + uLevel * 0.8);
+                baseColor *= (0.35 + uLevel * 1.3);
             }
             
             // Simple lighting

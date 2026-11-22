@@ -2,6 +2,8 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import 'package:slowverb_web/domain/entities/audio_analysis_track.dart';
+
 @JS('SlowverbBridge')
 external SlowverbBridgeJS? get _slowverbBridgeJSNullable;
 
@@ -26,6 +28,7 @@ extension type SlowverbBridgeJS._(JSObject _) implements JSObject {
   external JSPromise<JSObject> cancel(JSString jobId);
   external JSPromise<JSObject> decodeToFloatPCM(JSObject source);
   external JSPromise<JSObject> encodeFromFloatPCM(JSObject payload);
+  external JSPromise<JSObject> muxStillVideo(JSObject payload);
   external JSPromise<JSObject> resumeAudioContext();
   external void setProgressHandler(JSFunction? callback);
   external void setLogHandler(JSFunction? callback);
@@ -61,6 +64,10 @@ class BridgeInterop {
     return slowverbBridgeJS.encodeFromFloatPCM(payload).toDart;
   }
 
+  static Future<JSObject> muxStillVideo(JSObject payload) {
+    return slowverbBridgeJS.muxStillVideo(payload).toDart;
+  }
+
   static void setProgressHandler(JSFunction? handler) {
     slowverbBridgeJS.setProgressHandler(handler);
   }
@@ -91,6 +98,47 @@ class BridgeInterop {
       return objBuffer.toDart.asUint8List();
     }
     throw ArgumentError('Unsupported buffer type from bridge');
+  }
+
+  static AudioAnalysisTrack? analysisTrackFromJs(JSAny? value) {
+    try {
+      if (value == null) {
+        return null;
+      }
+      if (!value.isA<JSObject>()) {
+        return null;
+      }
+      final obj = value as JSObject;
+      final sampleRateJs = obj.getProperty<JSNumber?>('sampleRate'.toJS);
+      final fpsJs = obj.getProperty<JSNumber?>('fps'.toJS);
+      final frameCountJs = obj.getProperty<JSNumber?>('frameCount'.toJS);
+      final dataJs = obj.getProperty<JSAny?>('data'.toJS);
+      if (sampleRateJs == null ||
+          fpsJs == null ||
+          frameCountJs == null ||
+          dataJs == null) {
+        return null;
+      }
+      if (!dataJs.isA<JSFloat32Array>()) {
+        return null;
+      }
+      final sampleRate = sampleRateJs.toDartInt;
+      final fps = fpsJs.toDartDouble;
+      final frameCount = frameCountJs.toDartInt;
+      final data = (dataJs as JSFloat32Array).toDart;
+      try {
+        return AudioAnalysisTrack(
+          sampleRate: sampleRate,
+          fps: fps,
+          frameCount: frameCount,
+          data: data,
+        );
+      } on ArgumentError {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
   }
 }
 

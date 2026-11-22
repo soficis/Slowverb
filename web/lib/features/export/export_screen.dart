@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:slowverb_web/app/retro/retro_widgets.dart';
 import 'package:slowverb_web/app/slowverb_design_tokens.dart';
+import 'package:slowverb_web/domain/entities/video_export_config.dart';
 import 'package:slowverb_web/domain/repositories/audio_engine.dart';
+import 'package:slowverb_web/features/export/wav_pcm.dart';
 import 'package:slowverb_web/providers/audio_editor_provider.dart';
 import 'package:slowverb_web/providers/audio_engine_provider.dart';
 import 'package:slowverb_web/providers/settings_provider.dart';
@@ -26,6 +28,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   int _aacBitrate = 256;
   int _flacCompressionLevel = 8;
   bool _isExporting = false;
+  bool _embedCoverArt = true;
+  VideoExportConfig _video = const VideoExportConfig();
   double _exportProgress = 0.0;
   String _exportStage = 'processing';
   RenderJobId? _activeJobId;
@@ -123,6 +127,12 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     size: 32,
                   ),
                   _buildFlacKey(),
+                  HwKey(
+                    onPressed: () => setState(() => _selectedFormat = 'mp4'),
+                    label: 'MP4',
+                    lit: _selectedFormat == 'mp4',
+                    size: 32,
+                  ),
                 ],
               ),
               const SizedBox(height: SlowverbTokens.spacingSm),
@@ -139,9 +149,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                         ? 'Lossless compression'
                         : 'Requires lossless source',
                   ),
+                  _buildFormatNote('MP4', 'Video: your audio over a still image'),
                 ],
               ),
-              if (_selectedFormat != 'wav') ...[
+              if (_selectedFormat != 'wav' && _selectedFormat != 'mp4') ...[
                 const Divider(height: SlowverbTokens.spacingLg),
                 if (_selectedFormat == 'mp3')
                   _buildBitrateSetting(
@@ -177,6 +188,14 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                           setState(() => _flacCompressionLevel = value.toInt()),
                     ),
                   ),
+              ],
+              if (_selectedFormat == 'mp4') ...[
+                const Divider(height: SlowverbTokens.spacingLg),
+                _buildVideoSettings(),
+              ],
+              if (_canEmbedCoverArt) ...[
+                const Divider(height: SlowverbTokens.spacingLg),
+                _buildCoverArtToggle(theme),
               ],
             ],
           ),
@@ -378,6 +397,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         return 'Mastering audio...';
       case 'encoding':
         return 'Encoding export...';
+      case 'video':
+        return 'Making the video...';
       default:
         return 'Processing your audio...';
     }
@@ -458,12 +479,16 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       editorState.currentParameters,
     );
     final options = _buildExportOptions();
+    final isVideo = _selectedFormat == 'mp4';
 
     try {
       final jobId = await engine.startRender(
         fileId: editorState.fileId!,
         config: config,
         options: options,
+        coverArt: _canEmbedCoverArt && _embedCoverArt
+            ? editorState.metadata?.coverArt
+            : null,
       );
 
       _activeJobId = jobId;
@@ -473,7 +498,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             (progress) {
               if (!mounted) return;
               setState(() {
-                _exportProgress = progress.progress;
+                // A video export spends the last stretch on the mux.
+                _exportProgress = isVideo
+                    ? progress.progress * 0.85
+                    : progress.progress;
                 _exportStage = progress.stage;
               });
             },
@@ -507,6 +535,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   return;
                 }
 
+                if (isVideo) {
+                  await _muxVideo(jobId, result.outputBytes!, editorState);
+                  return;
+                }
+
                 _onExportComplete(
                   result.outputBytes!,
                   options.format,
@@ -529,6 +562,49 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       setState(() {
         _isExporting = false;
         _errorMessage = 'Failed to start export: $e';
+        _activeJobId = null;
+        _exportStage = 'processing';
+      });
+    }
+  }
+
+  /// Second half of a video export: the rendered WAV plus a still image.
+  Future<void> _muxVideo(
+    RenderJobId jobId,
+    Uint8List wavBytes,
+    AudioEditorState editorState,
+  ) async {
+    _progressSub = null;
+    setState(() {
+      _exportProgress = 0.9;
+      _exportStage = 'video';
+    });
+
+    try {
+      final pcm = decodeWavToStereo(wavBytes);
+      final cover = _video.background == VideoBackground.cover
+          ? editorState.metadata?.coverArt
+          : null;
+      final mp4 = await ref
+          .read(audioEngineProvider)
+          .muxStillVideo(
+            left: pcm.left,
+            right: pcm.right,
+            sampleRate: pcm.sampleRate,
+            width: _video.width,
+            height: _video.height,
+            fps: VideoExportConfig.fps,
+            crf: _video.crf,
+            still: cover,
+          );
+      // Cancelled while the video was encoding.
+      if (!mounted || _activeJobId != jobId) return;
+      _onExportComplete(mp4, 'mp4', originalName: editorState.audioFileName);
+    } catch (e) {
+      if (!mounted || _activeJobId != jobId) return;
+      setState(() {
+        _isExporting = false;
+        _errorMessage = 'Video export failed: $e';
         _activeJobId = null;
         _exportStage = 'processing';
       });
@@ -628,6 +704,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           compressionLevel: _flacCompressionLevel,
         );
       case 'wav':
+      case 'mp4': // video is muxed from a rendered WAV
       default:
         return const ExportOptions(format: 'wav');
     }
@@ -668,6 +745,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         return 'audio/aac';
       case 'flac':
         return 'audio/flac';
+      case 'mp4':
+        return 'video/mp4';
       case 'wav':
       default:
         return 'audio/wav';
@@ -698,6 +777,105 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         ),
         const SizedBox(width: 4),
         VfdText('Source: $_sourceFormat', size: 11, color: color),
+      ],
+    );
+  }
+
+  /// The worker embeds art only in mp3 and flac; wav and aac ignore it.
+  bool get _canEmbedCoverArt {
+    final hasArt = ref.read(audioEditorProvider).metadata?.coverArt != null;
+    return hasArt && (_selectedFormat == 'mp3' || _selectedFormat == 'flac');
+  }
+
+  Widget _buildCoverArtToggle(ThemeData theme) {
+    return MergeSemantics(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Embed cover art', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  "Copy the source file's artwork into the export",
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: SlowverbTokens.spacingSm),
+          Switch(
+            value: _embedCoverArt,
+            onChanged: (value) => setState(() => _embedCoverArt = value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoSettings() {
+    final theme = Theme.of(context);
+    final hasArt = ref.read(audioEditorProvider).metadata?.coverArt != null;
+
+    Widget choice<T>(
+      String label,
+      List<(T, String)> options,
+      T current,
+      ValueChanged<T> onPick,
+    ) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PlateLabel(label),
+          const SizedBox(height: SlowverbTokens.spacingXs),
+          Wrap(
+            spacing: SlowverbTokens.spacingSm,
+            runSpacing: SlowverbTokens.spacingSm,
+            children: [
+              for (final (value, text) in options)
+                HwKey(
+                  onPressed: () => setState(() => onPick(value)),
+                  label: text,
+                  lit: value == current,
+                  size: 32,
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        choice<VideoResolution>(
+          'Resolution',
+          [for (final r in VideoResolution.values) (r, r.label)],
+          _video.resolution,
+          (v) => _video = _video.copyWith(resolution: v),
+        ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        choice<VideoQuality>(
+          'Quality',
+          [for (final q in VideoQuality.values) (q, q.label)],
+          _video.quality,
+          (v) => _video = _video.copyWith(quality: v),
+        ),
+        const SizedBox(height: SlowverbTokens.spacingMd),
+        choice<VideoBackground>(
+          'Picture',
+          [for (final b in VideoBackground.values) (b, b.label)],
+          _video.background,
+          (v) => _video = _video.copyWith(background: v),
+        ),
+        const SizedBox(height: SlowverbTokens.spacingSm),
+        Text(
+          _video.background == VideoBackground.cover && !hasArt
+              ? 'This file has no cover art, so the picture will be black.'
+              : 'Higher resolution and quality take longer to export.',
+          style: theme.textTheme.bodySmall,
+        ),
       ],
     );
   }

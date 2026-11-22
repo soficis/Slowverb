@@ -65,5 +65,14 @@ const bassGainDef = ParameterDefinition(
   0.0,
 );
 
+/// Vinyl crackle bed (hiss plus sparse pops) mixed after the effects.
+const crackleDef = ParameterDefinition(
+  'crackle',
+  'Vinyl Crackle',
+  0.0,
+  1.0,
+  0.0,
+);
+
 /// Seek step in milliseconds for backward/forward navigation.
 const int seekStepMs = 10000;

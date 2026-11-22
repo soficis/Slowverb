@@ -6,6 +6,7 @@ uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
 uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s)
 
 out vec4 fragColor;
 
@@ -22,7 +23,7 @@ void main() {
     vec2 centeredUV = uv - center;
     
     float warpSpeed = 1.0 + uLevel * 2.0;
-    float time = uTime * warpSpeed;
+    float time = uTime + 2.0 * uLevelTime; // = integral of warpSpeed
     
     // Deep space background
     vec3 color = vec3(0.0, 0.0, 0.02);

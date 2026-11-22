@@ -24,6 +24,7 @@ import {
   writeInterleavedF32Stereo,
 } from "./worker_utils.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
+import { renderCrackleBed, mixCrackleInto } from "./crackle.js";
 import { runSoundTouchStage } from "./soundtouch_pipeline.js";
 import {
   applyPhaseLimiterStage,
@@ -125,6 +126,7 @@ interface PcmPipelineOptions {
   useSoundTouch: boolean;
   useToneReverb: boolean;
   usePlaybackDevice: boolean;
+  useCrackle?: boolean;
 }
 
 // Measured on the bundled FFmpeg 5.1 core: unit-energy IRs (gtype=none) on -3 dBFS pink noise give wet
@@ -255,6 +257,20 @@ export async function renderWithPcmPipeline(
     callbacks.withProgressStage("effects", 0.35, 0.35, () => ffmpeg.exec(...filterArgs));
     tempFiles.push(effectsFile);
     currentPcmFile = effectsFile;
+  }
+
+  if (options.useCrackle && payload.dspSpec?.crackle) {
+    const bytes = ffmpeg.FS.readFile(currentPcmFile) as Uint8Array;
+    const pcm = new Float32Array(bytes.byteLength / 4);
+    new Uint8Array(pcm.buffer).set(bytes);
+    const frames = pcm.length / 2;
+    const bed = renderCrackleBed(payload.dspSpec.crackle.seed ?? 1, frames,
+      payload.dspSpec.crackle.intensity, sampleRate);
+    mixCrackleInto(pcm, bed);
+    const crackleFile = `${payload.fileId}-${jobId}-crackle.f32`;
+    ffmpeg.FS.writeFile(crackleFile, new Uint8Array(pcm.buffer));
+    tempFiles.push(crackleFile);
+    currentPcmFile = crackleFile;
   }
 
   if (options.usePlaybackDevice && payload.playbackIR) {

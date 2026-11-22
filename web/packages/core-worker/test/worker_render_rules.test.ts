@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RenderPayload } from "@slowverb/shared";
-import { isPlaybackDeviceEnabled, isToneReverbEnabled } from "../src/worker_render_rules.js";
+import { isCrackleEnabled, isPlaybackDeviceEnabled, isToneReverbEnabled } from "../src/worker_render_rules.js";
 import { renderWithPcmPipeline } from "../src/ffmpeg_pipeline.js";
 import { getPlaybackDevice, getReverbIr, normalizeStereoIrEnergy } from "@slowverb/shared";
 
@@ -166,5 +166,23 @@ describe("file reverb in the PCM pipeline", () => {
     expect(blend).toContain("afir=dry=1:wet=1:gtype=none,volume=-14.5dB[wv]");
     expect(blend).toContain("weights='0.7500 0.2500'");
     expect(Array.from(new Float32Array(files.get("f-j-reverb-ir.f32")!.slice().buffer))).toEqual([1, 0, 0, 1]);
+  });
+});
+
+describe("isCrackleEnabled", () => {
+  it("is false for missing dspSpec, intensity 0 and NaN", () => {
+    expect(isCrackleEnabled({} as RenderPayload)).toBe(false);
+    expect(
+      isCrackleEnabled({ dspSpec: { specVersion: "1.0.0", crackle: { intensity: 0 } } } as RenderPayload)
+    ).toBe(false);
+    expect(
+      isCrackleEnabled({ dspSpec: { specVersion: "1.0.0", crackle: { intensity: NaN } } } as RenderPayload)
+    ).toBe(false);
+  });
+
+  it("is true for intensity 0.3", () => {
+    expect(
+      isCrackleEnabled({ dspSpec: { specVersion: "1.0.0", crackle: { intensity: 0.3 } } } as RenderPayload)
+    ).toBe(true);
   });
 });

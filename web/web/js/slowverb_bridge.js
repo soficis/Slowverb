@@ -44,7 +44,7 @@ async function renderPreview(params) {
   const jobId = normalized.jobId ?? createJobId();
   const result = await engine.renderPreview({ ...normalized, jobId }, buildCallbacks(jobId));
   console.info("[SlowverbBridge] renderPreview:ok", { jobId, fileId: result.fileId });
-  return { type: "render-preview-ok", payload: { buffer: result.buffer, jobId } };
+  return { type: "render-preview-ok", payload: { buffer: result.buffer, jobId, analysis: result.analysis ?? null } };
 }
 
 async function renderFull(params) {
@@ -86,6 +86,7 @@ async function encodeFromFloatPCM(params) {
     sampleRate: params.sampleRate,
     format: params.format ?? "mp3",
     bitrateKbps: params.bitrateKbps,
+    coverArt: params.coverArt ? toArrayBuffer(params.coverArt) : undefined,
   }, buildCallbacks("encode"));
   return { type: "encode-pcm-ok", payload: { buffer: result.buffer } };
 }
@@ -93,6 +94,20 @@ async function encodeFromFloatPCM(params) {
 async function resumeAudioContext() {
   const ok = await engine.resumeAudioContext();
   return { type: ok ? "audio-context-ok" : "audio-context-blocked" };
+}
+
+async function muxStillVideo(params) {
+  const result = await engine.muxStillVideo({
+    left: params.left,
+    right: params.right,
+    sampleRate: params.sampleRate,
+    still: params.still ? new Uint8Array(toArrayBuffer(params.still)) : null,
+    width: params.width,
+    height: params.height,
+    fps: params.fps,
+    crf: params.crf,
+  }, buildCallbacks("video"));
+  return { type: "mux-video-ok", payload: { buffer: result.buffer } };
 }
 
 function buildCallbacks(jobId) {
@@ -121,6 +136,7 @@ function normalizeRender(params) {
     startSec: params.startSec,
     durationSec: params.durationSec,
     jobId: params.jobId,
+    coverArt: toArrayBuffer(params.coverArt) ?? undefined,
   };
 }
 
@@ -132,6 +148,7 @@ function normalizeWaveform(params) {
 }
 
 function toArrayBuffer(value) {
+  if (value == null) return undefined;
   if (value instanceof ArrayBuffer) return value;
   if (ArrayBuffer.isView(value)) {
     const offset = value.byteOffset ?? 0;
@@ -193,6 +210,7 @@ window.SlowverbBridge = {
   cancel,
   decodeToFloatPCM,
   encodeFromFloatPCM,
+  muxStillVideo,
   resumeAudioContext,
   setProgressHandler,
   setLogHandler,

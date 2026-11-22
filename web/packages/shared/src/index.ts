@@ -4,3 +4,4 @@ export * from "./filter-compiler.js";
 export * from "./ir.js";
 export * from "./ir-registry.js";
 export * from "./logger.js";
+export * from "./analysis.js";

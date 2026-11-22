@@ -8,7 +8,8 @@ precision highp float;
 uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
-uniform float uLevel; // Audio reactivity level (0.0 to 1.0)
+uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s) // Audio reactivity level (0.0 to 1.0)
 
 out vec4 fragColor;
 
@@ -46,7 +47,7 @@ void main() {
     
     // Time with modulus for precision
     float time = mod(uTime, 600.0); 
-    float t = time * speed;
+    float t = time + 1.5 * mod(uLevelTime, 600.0); // = integral of speed
     
     // Tunnel depth from radius
     float r = length(uv);

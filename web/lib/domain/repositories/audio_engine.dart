@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:slowverb_web/domain/entities/batch_render_progress.dart';
+import 'package:slowverb_web/domain/entities/audio_analysis_track.dart';
 import 'package:slowverb_web/domain/entities/effect_preset.dart';
 
 /// Abstract interface for audio processing operations
@@ -46,6 +47,10 @@ abstract class AudioEngine {
     Duration? duration,
   });
 
+  /// Analysis of the most recent successful preview, or null if the preview path
+  /// produced none, a preview is in flight, or the last preview failed.
+  AudioAnalysisTrack? get previewAnalysis;
+
   /// Start a full render job with progress tracking
   ///
   /// Returns a job ID for tracking progress via [watchProgress].
@@ -53,6 +58,10 @@ abstract class AudioEngine {
     required String fileId,
     required EffectConfig config,
     required ExportOptions options,
+
+    /// Image bytes to embed as the output's cover (mp3/flac only). Per call,
+    /// not on [ExportOptions], because batch renders share one options object.
+    Uint8List? coverArt,
   });
 
   /// Watch progress of an ongoing render job
@@ -105,6 +114,21 @@ abstract class AudioEngine {
     required int sampleRate,
     required String format,
     int? bitrateKbps,
+    Uint8List? coverArt,
+  });
+
+  /// Muxes stereo PCM with a still image into an MP4.
+  ///
+  /// A null or empty [still] gives a black picture.
+  Future<Uint8List> muxStillVideo({
+    required Float32List left,
+    required Float32List right,
+    required int sampleRate,
+    required int width,
+    required int height,
+    required int fps,
+    required int crf,
+    Uint8List? still,
   });
 
   /// Resume the audio context to allow Tone.js reverb IR generation.
@@ -123,6 +147,9 @@ class AudioMetadata {
   final int channels;
   final String format; // 'mp3', 'wav', 'flac', etc.
 
+  /// Embedded cover image of the source, or null if it has none.
+  final Uint8List? coverArt;
+
   const AudioMetadata({
     required this.fileId,
     required this.filename,
@@ -130,6 +157,7 @@ class AudioMetadata {
     required this.sampleRate,
     required this.channels,
     required this.format,
+    this.coverArt,
   });
 
   /// Returns true if the source format is lossless.
@@ -166,8 +194,11 @@ class EffectConfig {
   final double? phaserDecay; // 0-1
   final double? phaserSpeedHz; // 0.1-5 Hz
   final int? phaserType; // 0=sinusoidal, 1=triangular
-  final double? playbackDevice; // 0=off, 1=car front, 2=car rear, 3=gramophone, 4=cassette
-  final double? reverbType; // 0=Tone, 1=Freeverb, 2=plate (Conner Plate I), 3=hotel bathroom
+  // 0=off, 1=car front, 2=car rear, 3=gramophone, 4=cassette
+  final double? playbackDevice;
+  // 0=Tone, 1=Freeverb, 2=plate (Conner Plate I), 3=hotel bathroom
+  final double? reverbType;
+  final double? crackle; // 0.0 - 1.0 (vinyl crackle bed intensity)
 
   const EffectConfig({
     required this.presetId,
@@ -196,6 +227,7 @@ class EffectConfig {
     this.phaserType,
     this.playbackDevice,
     this.reverbType,
+    this.crackle,
   });
 
   /// Create configuration from parameter map
@@ -227,6 +259,7 @@ class EffectConfig {
       phaserType: params['phaserType']?.toInt(),
       playbackDevice: params['playbackDevice'],
       reverbType: params['reverbType'],
+      crackle: params['crackle'],
     );
   }
 }

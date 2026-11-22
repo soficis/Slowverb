@@ -1,5 +1,6 @@
 import { compileFilterChain, getPlaybackDevice, getReverbIr, normalizeStereoIrEnergy } from "@slowverb/shared";
 import type {
+  AnalysisTrack,
   CancelPayload,
   EngineInitOptions,
   ExportFormat,
@@ -18,6 +19,8 @@ import type {
   EncodePcmPayload,
   DecodePcmResultPayload,
   EncodePcmResultPayload,
+  MuxStillVideoPayload,
+  MuxStillVideoResultPayload,
 } from "@slowverb/shared";
 import type { DspSpec } from "@slowverb/shared";
 import { Reverb, start as toneStart } from "tone";
@@ -39,6 +42,7 @@ export interface RenderRequest {
   readonly startSec?: number;
   readonly durationSec?: number;
   readonly jobId?: string;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface RenderResult {
@@ -46,6 +50,7 @@ export interface RenderResult {
   readonly fileId: string;
   readonly format: ExportFormat;
   readonly buffer: ArrayBuffer;
+  readonly analysis?: AnalysisTrack;
 }
 
 export interface RenderCallbacks {
@@ -136,6 +141,19 @@ export class SlowverbEngine {
     }
   }
 
+  async muxStillVideo(
+    payload: MuxStillVideoPayload,
+    callbacks?: RenderCallbacks
+  ): Promise<MuxStillVideoResultPayload> {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.muxStillVideo(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
+
   private async runRender(
     type: "RENDER_PREVIEW" | "RENDER_FULL",
     request: RenderRequest,
@@ -149,7 +167,7 @@ export class SlowverbEngine {
       await this.prepareSource(runner, request.source);
       const payload = await this.buildRenderPayload(request);
       const result = await runner.render(type, payload, jobId);
-      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer };
+      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer, analysis: result.analysis };
     } finally {
       this.active.delete(jobId);
       runner.terminate();
@@ -192,6 +210,7 @@ export class SlowverbEngine {
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
       durationSec: request.durationSec,
+      coverArt: request.coverArt ?? undefined,
     };
   }
 
@@ -429,7 +448,15 @@ class WorkerRunner {
   async encodePCM(payload: EncodePcmPayload): Promise<EncodePcmResultPayload> {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.coverArt instanceof ArrayBuffer) transfer.push(payload.coverArt);
     return this.sendWithLog<EncodePcmResultPayload>({ type: "ENCODE_PCM", requestId, payload }, { transfer });
+  }
+
+  async muxStillVideo(payload: MuxStillVideoPayload): Promise<MuxStillVideoResultPayload> {
+    const requestId = this.nextRequestId();
+    const transfer: Transferable[] = [payload.left.buffer as Transferable, payload.right.buffer as Transferable];
+    if (payload.still) transfer.push(payload.still.buffer as Transferable);
+    return this.sendWithLog<MuxStillVideoResultPayload>({ type: "MUX_STILL_VIDEO", requestId, payload }, { transfer });
   }
 
   async cancel(jobId: string): Promise<void> {

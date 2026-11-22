@@ -6,12 +6,22 @@ class GpuVisualizerPainter extends CustomPainter {
   final double time;
   final String presetId;
 
+  /// Integral of [levelOf] over playback time. Shaders whose speed scales with
+  /// uLevel advance by this instead of `uTime * speed`; multiplying elapsed
+  /// time by an audio-driven speed teleports the scene on every level change.
+  final double levelTime;
+
   GpuVisualizerPainter({
     required this.shader,
     required this.frame,
     required this.time,
     required this.presetId,
+    this.levelTime = 0,
   });
+
+  /// Combine RMS with bass for a punchy audio-reactive response.
+  static double levelOf(AudioAnalysisFrame frame) =>
+      (frame.rms * 0.6 + frame.bass * 0.4).clamp(0.0, 1.0);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -26,16 +36,26 @@ class GpuVisualizerPainter extends CustomPainter {
       // uniform float uChroma;
       // uniform float uVig;
       // uniform float uGrain;
-      fragmentShader.setFloat(0, time);
+      // uniform float uLevel;
+      // The analysis frame drives uLevel plus the warp/chroma/grain
+      // parameters. levelTime (integral of level) speeds the scene up
+      // on loud passages without teleporting it.
+      final level = levelOf(frame);
+      fragmentShader.setFloat(0, time + levelTime * 2.0);
       fragmentShader.setFloat(1, size.width);
       fragmentShader.setFloat(2, size.height);
 
-      // Effect parameters with slow modulation
+      // Slow modulation plus audio: level pushes the warp, bass the colour
+      // fringing, treble the grain.
       final breath = 0.5 + 0.5 * sin(time * 0.11);
-      fragmentShader.setFloat(3, 0.4 + 0.2 * breath); // uWarp
-      fragmentShader.setFloat(4, 0.4 + 0.3 * breath); // uChroma
+      fragmentShader.setFloat(3, 0.4 + 0.2 * breath + 0.5 * level); // uWarp
+      fragmentShader.setFloat(
+        4,
+        0.4 + 0.3 * breath + 0.6 * frame.bass,
+      ); // uChroma
       fragmentShader.setFloat(5, 0.5); // uVig
-      fragmentShader.setFloat(6, 0.2); // uGrain
+      fragmentShader.setFloat(6, 0.2 + 0.2 * frame.treble); // uGrain
+      fragmentShader.setFloat(7, level); // uLevel
     } else {
       // Standard shader uniforms:
       // uniform float uTime;
@@ -45,22 +65,19 @@ class GpuVisualizerPainter extends CustomPainter {
       fragmentShader.setFloat(0, time);
       fragmentShader.setFloat(1, size.width);
       fragmentShader.setFloat(2, size.height);
-      fragmentShader.setFloat(3, _calculateLevel());
+      fragmentShader.setFloat(3, levelOf(frame));
+      fragmentShader.setFloat(4, levelTime);
     }
 
     final paint = Paint()..shader = fragmentShader;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
   }
 
-  double _calculateLevel() {
-    // Combine RMS with bass for a punchy audio-reactive response
-    final level = (frame.rms * 0.6 + frame.bass * 0.4).clamp(0.0, 1.0);
-    return level;
-  }
-
   @override
   bool shouldRepaint(covariant GpuVisualizerPainter oldDelegate) {
-    return oldDelegate.time != time || oldDelegate.frame.rms != frame.rms;
+    return oldDelegate.time != time ||
+        oldDelegate.levelTime != levelTime ||
+        oldDelegate.frame != frame;
   }
 }
 
@@ -281,10 +298,15 @@ class _MazePainter extends CustomPainter {
   final double time;
   final bool isPlaying;
 
+  /// Integral of the audio level (see [GpuVisualizerPainter.levelTime]); the
+  /// scroll advances by this so loudness changes speed, not position.
+  final double levelTime;
+
   _MazePainter({
     required this.frame,
     required this.time,
     required this.isPlaying,
+    this.levelTime = 0,
   });
 
   @override
@@ -293,14 +315,16 @@ class _MazePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
-    final speed = isPlaying ? 0.5 + frame.bass * 1.5 : 0.2;
-    final offset = (time * speed * 50) % 50;
+    final level = GpuVisualizerPainter.levelOf(frame);
+    final offset =
+        ((time * (isPlaying ? 0.4 : 0.2) + levelTime * 2.5) * 50) % 50;
 
     const cellSize = 50.0;
     final cols = (size.width / cellSize).ceil() + 1;
     final rows = (size.height / cellSize).ceil() + 1;
 
-    final flicker = isPlaying ? 0.7 + frame.treble * 0.3 : 0.8;
+    final flicker = isPlaying ? 0.45 + level * 0.9 + frame.treble * 0.3 : 0.8;
+    paint.strokeWidth = isPlaying ? 2 + frame.bass * 2.5 : 2;
 
     for (var row = 0; row < rows; row++) {
       for (var col = 0; col < cols; col++) {
@@ -342,7 +366,9 @@ class _MazePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MazePainter oldDelegate) {
-    return oldDelegate.time != time || oldDelegate.isPlaying != isPlaying;
+    return oldDelegate.time != time ||
+        oldDelegate.levelTime != levelTime ||
+        oldDelegate.isPlaying != isPlaying;
   }
 }
 

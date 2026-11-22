@@ -1,12 +1,14 @@
 import createFFmpegCore from "@ffmpeg/core";
 import { log } from "@slowverb/shared";
 import type {
+  AnalysisTrack,
   InitPayload,
   WorkerEvent,
   WorkerLogLevel,
   WorkerRequest,
   WorkerResultPayload,
 } from "@slowverb/shared";
+import { buildAnalysisTrack } from "./analysis_track.js";
 import { clampInt } from "./worker_utils.js";
 import {
   buildRenderPlan,
@@ -20,7 +22,10 @@ import {
   renderWithPhaseLimiter,
 } from "./ffmpeg_pipeline.js";
 import type { WorkerFfmpegBridge } from "./worker_types.js";
+import { attachCoverArt, extractCoverArt, supportsCoverArt } from "./cover_art.js";
+import { muxStillVideo } from "./video_mux.js";
 import {
+  isCrackleEnabled,
   isPhaseLimiterEnabled,
   isSimpleMasteringEnabled,
   isSoundTouchEnabled,
@@ -86,6 +91,8 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
       return runWithEngine(() => handleDecodePCM(request), request.requestId);
     case "ENCODE_PCM":
       return runWithEngine(() => handleEncodePCM(request), request.requestId);
+    case "MUX_STILL_VIDEO":
+      return runWithEngine(() => handleMuxStillVideo(request), request.requestId);
   }
 }
 
@@ -195,7 +202,8 @@ async function handleProbe(request: Extract<WorkerRequest, { type: "PROBE" }>): 
       stopLogCapture,
     });
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
-    postResult(request.requestId, metadata);
+    const coverArt = extractCoverArt(ffmpeg, fileId, cleanupFiles);
+    postResult(request.requestId, { ...metadata, coverArt }, coverArt ? [coverArt] : undefined);
   } finally {
     clearTimeout(warnTimeout);
   }
@@ -214,7 +222,8 @@ async function handleRender(
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
   const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
+  const shouldUseCrackle = isCrackleEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback || shouldUseCrackle;
   const filesToCleanup = new Set<string>([payload.fileId]);
 
   activeJobId = jobId;
@@ -238,7 +247,7 @@ async function handleRender(
       }
       const buffer = readOutput(engine, outputFile);
       log("info", "render:ok", { jobId, outputFile });
-      postRenderResult(request, buffer);
+      postRenderResult(request, buffer, outputFile);
       return;
     }
 
@@ -252,7 +261,7 @@ async function handleRender(
       filesToCleanup.add(result.outputFile);
       for (const temp of result.tempFiles) filesToCleanup.add(temp);
       log("info", "render:ok(phaselimiter)", { jobId, outputFile: result.outputFile });
-      postRenderResult(request, result.buffer);
+      postRenderResult(request, result.buffer, result.outputFile);
       return;
     }
 
@@ -263,6 +272,7 @@ async function handleRender(
       soundtouch: shouldUseSoundTouch,
       toneReverb: shouldUseToneReverb,
       phaselimiter: shouldUsePhaseLimiter,
+      crackle: shouldUseCrackle,
     });
 
     const result = await renderWithPcmPipeline(
@@ -275,13 +285,14 @@ async function handleRender(
         useSoundTouch: shouldUseSoundTouch,
         useToneReverb: shouldUseToneReverb,
         usePlaybackDevice: shouldUsePlayback,
+        useCrackle: shouldUseCrackle,
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );
     filesToCleanup.add(result.outputFile);
     for (const temp of result.tempFiles) filesToCleanup.add(temp);
     log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    postRenderResult(request, result.buffer, result.outputFile);
     return;
   } finally {
     activeJobId = undefined;
@@ -328,8 +339,26 @@ async function handleDecodePCM(request: Extract<WorkerRequest, { type: "DECODE_P
 
 async function handleEncodePCM(request: Extract<WorkerRequest, { type: "ENCODE_PCM" }>): Promise<void> {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  let buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  const cover = request.payload.coverArt;
+  if (
+    cover instanceof ArrayBuffer &&
+    cover.byteLength > 0 &&
+    supportsCoverArt(request.payload.format)
+  ) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.requestId, cleanupFiles);
+    } catch {
+      // keep original buffer; cover art must never fail an export
+    }
+  }
   postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
+}
+
+async function handleMuxStillVideo(request: Extract<WorkerRequest, { type: "MUX_STILL_VIDEO" }>): Promise<void> {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const buffer = await muxStillVideo(ffmpeg, request.payload, request.requestId, cleanupFiles);
+  postResult(request.requestId, { buffer }, [buffer]);
 }
 
 function cleanupFiles(...paths: string[]): void {
@@ -349,11 +378,60 @@ function postResult(requestId: string, payload: WorkerResultPayload, transfer?: 
   postEvent({ type: "RESULT", requestId, payload }, transfer);
 }
 
+function analyseRenderedOutput(
+  engine: WorkerFfmpegBridge,
+  outputFile: string,
+  jobId: string
+): AnalysisTrack {
+  const pcmFile = `${jobId}-analysis.f32`;
+  try {
+    withProgressStage("processing", 1, 0, () =>
+      engine.exec("-i", outputFile, "-ac", "1", "-ar", "44100", "-f", "f32le", "-y", pcmFile));
+    const bytes = readOutput(engine, pcmFile);
+    const pcm = new Float32Array(bytes, 0, Math.floor(bytes.byteLength / 4));
+    return buildAnalysisTrack(pcm, 44100);
+  } finally {
+    cleanupFiles(pcmFile);
+  }
+}
+
 function postRenderResult(
   request: Extract<WorkerRequest, { type: "RENDER_PREVIEW" | "RENDER_FULL" }>,
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
+  outputFile: string
 ): void {
-  postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  const cover = request.payload.coverArt;
+  if (
+    request.type === "RENDER_FULL" &&
+    cover instanceof ArrayBuffer &&
+    cover.byteLength > 0 &&
+    supportsCoverArt(request.payload.format) &&
+    ffmpeg
+  ) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.jobId, cleanupFiles);
+    } catch {
+      // keep original buffer; cover art must never fail an export
+    }
+  }
+  let analysis: AnalysisTrack | undefined;
+  if (request.type === "RENDER_PREVIEW" && ffmpeg) {
+    try {
+      analysis = analyseRenderedOutput(ffmpeg, outputFile, request.jobId);
+    } catch (error) {
+      log("warn", "render:analysis-failed", { jobId: request.jobId, error: String(error) });
+      analysis = undefined;
+    }
+  }
+  if (analysis) {
+    postResult(
+      request.requestId,
+      { fileId: request.payload.fileId, format: request.payload.format, buffer, analysis },
+      [buffer, analysis.data.buffer]
+    );
+  } else {
+    postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  }
 }
 
 function getJobId(request: WorkerRequest): string | undefined {

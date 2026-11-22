@@ -1,3 +1,4 @@
+import type { AnalysisTrack } from "./analysis.js";
 import type { DspSpec, MasteringSpec } from "./dsp.js";
 
 export type WorkerRequestType =
@@ -10,7 +11,8 @@ export type WorkerRequestType =
   | "CANCEL"
   | "PING"
   | "DECODE_PCM"
-  | "ENCODE_PCM";
+  | "ENCODE_PCM"
+  | "MUX_STILL_VIDEO";
 
 export type ExportFormat = "mp3" | "wav" | "flac" | "aac";
 
@@ -44,6 +46,7 @@ export interface RenderPayload {
   readonly bitrateKbps?: number;
   readonly startSec?: number;
   readonly durationSec?: number;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface WaveformPayload {
@@ -65,6 +68,19 @@ export interface EncodePcmPayload {
   readonly sampleRate: number;
   readonly format: ExportFormat;
   readonly bitrateKbps?: number;
+  readonly coverArt?: ArrayBuffer | null;
+}
+
+export interface MuxStillVideoPayload {
+  readonly left: Float32Array;
+  readonly right: Float32Array;
+  readonly sampleRate: number;
+  readonly still?: Uint8Array | null;
+  readonly width: number;
+  readonly height: number;
+  readonly fps?: number;
+  readonly crf?: number;
+  readonly encoder?: "libx264" | "mpeg4";
 }
 
 export type WorkerRequest =
@@ -77,7 +93,8 @@ export type WorkerRequest =
   | { type: "CANCEL"; requestId: string; jobId: string; payload: CancelPayload }
   | { type: "PING"; requestId: string }
   | { type: "DECODE_PCM"; requestId: string; payload: DecodePcmPayload }
-  | { type: "ENCODE_PCM"; requestId: string; payload: EncodePcmPayload };
+  | { type: "ENCODE_PCM"; requestId: string; payload: EncodePcmPayload }
+  | { type: "MUX_STILL_VIDEO"; requestId: string; payload: MuxStillVideoPayload };
 
 export interface LoadSourceResultPayload {
   readonly fileId: string;
@@ -89,12 +106,14 @@ export interface ProbeResultPayload {
   readonly sampleRate: number;
   readonly channels: number;
   readonly format: string;
+  readonly coverArt?: ArrayBuffer | null;
 }
 
 export interface RenderResultPayload {
   readonly fileId: string;
   readonly format: ExportFormat;
   readonly buffer: ArrayBuffer;
+  readonly analysis?: AnalysisTrack;
 }
 
 export interface WaveformResultPayload {
@@ -116,6 +135,10 @@ export interface EncodePcmResultPayload {
   readonly buffer: ArrayBuffer;
 }
 
+export interface MuxStillVideoResultPayload {
+  readonly buffer: ArrayBuffer;
+}
+
 export type WorkerResultPayload =
   | LoadSourceResultPayload
   | ProbeResultPayload
@@ -123,7 +146,8 @@ export type WorkerResultPayload =
   | WaveformResultPayload
   | PingResultPayload
   | DecodePcmResultPayload
-  | EncodePcmResultPayload;
+  | EncodePcmResultPayload
+  | MuxStillVideoResultPayload;
 
 export type WorkerLogLevel = "info" | "warn" | "error" | "debug";
 

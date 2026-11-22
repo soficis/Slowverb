@@ -4,6 +4,7 @@ uniform float uTime;
 uniform float uResolutionX;
 uniform float uResolutionY;
 uniform float uLevel;
+uniform float uLevelTime; // integral of uLevel over playback time (s)
 
 out vec4 fragColor;
 
@@ -89,7 +90,7 @@ void main() {
     
     // Camera setup - flying through vortex
     float speed = 5.0 + uLevel * 8.0; // Audio drives speed
-    vec3 ro = vec3(0.0, 0.0, uTime * speed);
+    vec3 ro = vec3(0.0, 0.0, uTime * 5.0 + uLevelTime * 8.0); // = integral of speed
     
     // Wobbling camera (audio-reactive)
     float shake = uLevel * 0.15;
@@ -170,6 +171,13 @@ void main() {
     float beatFlash = smoothstep(0.7, 1.0, uLevel) * 0.3;
     col += beatFlash;
     
+    // Soft knee: the additive glow/grid terms are unbounded. Leave values below the knee
+    // untouched and compress highlights asymptotically toward 0.8 linear (~0.9 after
+    // gamma) so loud input never plateaus at white.
+    col = max(col, vec3(0.0));
+    vec3 over = max(col - 0.5, vec3(0.0));
+    col = min(col, vec3(0.5)) + 0.3 * over / (over + 0.3);
+
     // Gamma correction
     col = pow(col, vec3(0.4545));
     

@@ -490,8 +490,7 @@ var DSP_LIMITS = {
   lowPassCutoffHz: { min: 200, max: 2e4},
   eqWarmth: { min: 0, max: 1},
   hfDamping: { min: 0, max: 1, default: 0 },
-  stereoWidth: { min: 0.5, max: 2}
-};
+  stereoWidth: { min: 0.5, max: 2}};
 var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChain(spec) {
@@ -18318,6 +18317,15 @@ var SlowverbEngine = class {
       runner.terminate();
     }
   }
+  async muxStillVideo(payload, callbacks) {
+    const runner = this.createRunner(callbacks);
+    try {
+      await runner.init(this.initPayload);
+      return await runner.muxStillVideo(payload);
+    } finally {
+      runner.terminate();
+    }
+  }
   async runRender(type, request, callbacks) {
     const runner = this.createRunner(callbacks);
     const jobId = request.jobId ?? createJobId();
@@ -18326,7 +18334,7 @@ var SlowverbEngine = class {
       await this.prepareSource(runner, request.source);
       const payload = await this.buildRenderPayload(request);
       const result = await runner.render(type, payload, jobId);
-      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer };
+      return { jobId, fileId: payload.fileId, format: payload.format, buffer: result.buffer, analysis: result.analysis };
     } finally {
       this.active.delete(jobId);
       runner.terminate();
@@ -18362,7 +18370,8 @@ var SlowverbEngine = class {
       format,
       bitrateKbps: request.bitrateKbps,
       startSec: request.startSec,
-      durationSec: request.durationSec
+      durationSec: request.durationSec,
+      coverArt: request.coverArt ?? void 0
     };
   }
   async resolvePlaybackIR(spec) {
@@ -18559,7 +18568,14 @@ var WorkerRunner = class {
   async encodePCM(payload) {
     const requestId = this.nextRequestId();
     const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.coverArt instanceof ArrayBuffer) transfer.push(payload.coverArt);
     return this.sendWithLog({ type: "ENCODE_PCM", requestId, payload }, { transfer });
+  }
+  async muxStillVideo(payload) {
+    const requestId = this.nextRequestId();
+    const transfer = [payload.left.buffer, payload.right.buffer];
+    if (payload.still) transfer.push(payload.still.buffer);
+    return this.sendWithLog({ type: "MUX_STILL_VIDEO", requestId, payload }, { transfer });
   }
   async cancel(jobId) {
     const payload = { jobId };

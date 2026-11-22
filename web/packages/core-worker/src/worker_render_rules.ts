@@ -28,6 +28,11 @@ export function isPlaybackDeviceEnabled(payload: RenderPayload): boolean {
   return payload.dspSpec?.playback != null && payload.playbackIR != null;
 }
 
+export function isCrackleEnabled(payload: RenderPayload): boolean {
+  const v = payload.dspSpec?.crackle?.intensity;
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
+}
+
 export function isSimpleMasteringEnabled(payload: RenderPayload): boolean {
   return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
 }

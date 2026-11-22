@@ -16,18 +16,55 @@ class _SoundWindow extends ConsumerWidget {
     final params = state.currentParameters;
     final selectedId = state.selectedPreset.id;
 
-    Widget slider(ParameterDefinition def) => Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: EffectSlider(
-        label: def.label,
-        value: params[def.id] ?? def.defaultValue,
-        min: def.min,
-        max: def.max,
-        unit: '',
-        formatValue: (v) => _formatEffectValue(def.id, v),
-        onChanged: (v) => notifier.updateParameter(def.id, v),
-      ),
-    );
+    final preset = state.selectedPreset;
+    final linked = state.speedPitchLinked;
+
+    // Bounds come from the selected preset (global bounds when unranged).
+    // Values are fitted on preset change and reported by _RangeNotice, so the
+    // clamp below only guards the slider widget, it never hides a change.
+    Widget slider(ParameterDefinition def) {
+      final range = preset.rangeFor(def);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: EffectSlider(
+          label: def.label,
+          value: range.clamp(params[def.id] ?? def.defaultValue),
+          min: range.min,
+          max: range.max,
+          unit: '',
+          formatValue: (v) => _formatEffectValue(def.id, v),
+          onChanged: (v) => notifier.updateParameter(def.id, v),
+        ),
+      );
+    }
+
+    Widget speedSlider() {
+      final range = SpeedPitch.speedRange(preset);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: EffectSlider(
+          label: 'Speed',
+          value: range.clamp(params['tempo'] ?? 1.0),
+          min: range.min,
+          max: range.max,
+          unit: '',
+          formatValue: (v) =>
+              '${_formatEffectValue('tempo', v)} · '
+              '${_formatEffectValue('pitch', SpeedPitch.pitchFor(v))}',
+          onChanged: notifier.setLinkedSpeed,
+        ),
+      );
+    }
+
+    final mainSliders = <Widget>[
+      for (final def in effectParameterDefinitions)
+        if (def.id == 'tempo')
+          linked ? speedSlider() : slider(def)
+        else if (def.id == 'pitch')
+          ...(linked ? const <Widget>[] : [slider(def)])
+        else
+          slider(def),
+    ];
 
     return RetroWindow(
       title: 'Sound',
@@ -57,8 +94,25 @@ class _SoundWindow extends ConsumerWidget {
               ],
             ],
           ),
+          if (state.rangeClamps.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            _RangeNotice(
+              presetName: preset.name,
+              clamps: state.rangeClamps,
+              onDismiss: notifier.dismissRangeClamps,
+            ),
+          ],
           const SizedBox(height: SlowverbTokens.spacingMd),
-          ...effectParameterDefinitions.map(slider),
+          _ToggleRow(
+            label: 'Separate speed and pitch',
+            detail: linked
+                ? 'Pitch follows speed, like a record player'
+                : 'Set tempo and pitch independently',
+            value: !linked,
+            onChanged: (separate) => notifier.setSpeedPitchLinked(!separate),
+          ),
+          const SizedBox(height: 6),
+          ...mainSliders,
           const SizedBox(height: SlowverbTokens.spacingSm),
           const PlateLabel('Playback device'),
           const SizedBox(height: 6),
@@ -68,7 +122,9 @@ class _SoundWindow extends ConsumerWidget {
             value: params['playbackDevice'] ?? 0.0,
             onChanged: (v) => notifier.updateParameter('playbackDevice', v),
           ),
-          const SizedBox(height: SlowverbTokens.spacingMd),
+          const SizedBox(height: SlowverbTokens.spacingSm),
+          slider(crackleDef),
+          const SizedBox(height: SlowverbTokens.spacingSm),
           const _MasteringControls(),
           const SizedBox(height: SlowverbTokens.spacingSm),
           const Divider(height: 1),
@@ -247,6 +303,63 @@ class _KeySelector extends StatelessWidget {
               size: 32,
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Says which values were moved to fit the selected preset's ranges, and to
+/// what, so a preset change never snaps a value silently.
+class _RangeNotice extends StatelessWidget {
+  final String presetName;
+  final List<ParameterClamp> clamps;
+  final VoidCallback onDismiss;
+
+  const _RangeNotice({
+    required this.presetName,
+    required this.clamps,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lines = [
+      for (final c in clamps)
+        '${c.label}: ${_formatEffectValue(c.id, c.from)} → '
+            '${_formatEffectValue(c.id, c.to)}',
+    ];
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: theme.colorScheme.outline),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Adjusted to fit $presetName',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  for (final line in lines)
+                    Text(line, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 16),
+              tooltip: 'Dismiss',
+              visualDensity: VisualDensity.compact,
+              onPressed: onDismiss,
+            ),
+          ],
+        ),
       ),
     );
   }

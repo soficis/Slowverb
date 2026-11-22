@@ -1,3 +1,8 @@
+import 'parameter_definitions.dart';
+import 'parameter_range.dart';
+
+export 'parameter_range.dart';
+
 /// Represents a named effect preset configuration
 ///
 /// Each preset defines default values for tempo, pitch,
@@ -8,12 +13,21 @@ class EffectPreset {
   final String description;
   final Map<String, double> parameters;
 
+  /// Optional per-parameter bounds that narrow the global slider range while
+  /// this preset is selected. Keyed by parameter id; most presets have none.
+  final Map<String, ParameterRange> ranges;
+
   const EffectPreset({
     required this.id,
     required this.name,
     required this.description,
     required this.parameters,
+    this.ranges = const {},
   });
+
+  /// Slider bounds for [def] under this preset (global bounds if unranged).
+  ParameterRange rangeFor(ParameterDefinition def) =>
+      ParameterRange.effectiveRange(def, ranges[def.id]);
 }
 
 /// Pre-defined effect presets for Slowverb Web
@@ -58,6 +72,15 @@ abstract final class Presets {
       'eqWarmth': 0.0,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
+    },
+    // Club-style: keep it a sped-up dance track. Past ~1.35x the stretch
+    // smears transients; a low shelf over +12 dB on top of this boost clips
+    // and muddies the kick; heavy reverb washes the beat out.
+    ranges: {
+      'tempo': ParameterRange(1.05, 1.35),
+      'pitch': ParameterRange(0.0, 6.0),
+      'bassGain': ParameterRange(0.0, 12.0),
+      'reverbAmount': ParameterRange(0.0, 0.3),
     },
   );
 
@@ -248,6 +271,15 @@ abstract final class Presets {
       'eqWarmth': 0.8,
       'masteringEnabled': 0.0,
       'masteringAlgorithm': 1.0,
+    },
+    // Lo-fi stays relaxed: never sped up, not dragged below 0.8x, warm
+    // enough to keep the character, and echo capped so it doesn't smear
+    // the groove.
+    ranges: {
+      'tempo': ParameterRange(0.8, 1.0),
+      'pitch': ParameterRange(-4.0, 0.0),
+      'eqWarmth': ParameterRange(0.4, 1.0),
+      'echoAmount': ParameterRange(0.0, 0.4),
     },
   );
 

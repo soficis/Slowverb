@@ -4498,8 +4498,7 @@ var DSP_LIMITS = {
   lowPassCutoffHz: { min: 200, max: 2e4},
   eqWarmth: { min: 0, max: 1},
   hfDamping: { min: 0, max: 1},
-  stereoWidth: { min: 0.5, max: 2}
-};
+  stereoWidth: { min: 0.5, max: 2}};
 var DEFAULT_SAMPLE_RATE = 44100;
 var SIMPLE_MASTERING_FILTER_CHAIN = "highpass=f=20,acompressor=threshold=-18dB:ratio=2:attack=10:release=200:makeup=1,volume=4dB,alimiter=limit=0.95:level=disabled";
 function compileFilterChainParts(spec) {
@@ -4695,6 +4694,205 @@ function log(level, message, data) {
   if (env?.DEV && typeof console?.[level] === "function") {
     console[level](message, data);
   }
+}
+var ANALYSIS_BAND_COUNT = 64;
+var ANALYSIS_STRIDE = ANALYSIS_BAND_COUNT + 4;
+var RMS_OFFSET = ANALYSIS_BAND_COUNT;
+var BASS_OFFSET = ANALYSIS_BAND_COUNT + 1;
+var MID_OFFSET = ANALYSIS_BAND_COUNT + 2;
+var TREBLE_OFFSET = ANALYSIS_BAND_COUNT + 3;
+var ANALYSIS_MIN_HZ = 20;
+var ANALYSIS_MAX_HZ = 16e3;
+var ANALYSIS_NORMALISED_PEAK = 0.95;
+var BASS_HZ = [20, 200];
+var MID_HZ = [200, 2e3];
+var TREBLE_HZ = [2e3, 16e3];
+var HANN_ENERGY_GAIN = Math.sqrt(3 / 8);
+function analysisMaxHz(sampleRate) {
+  return Math.min(ANALYSIS_MAX_HZ, sampleRate / 2);
+}
+function analysisBandEdges(sampleRate) {
+  const maxHz = analysisMaxHz(sampleRate);
+  const edges = new Float64Array(ANALYSIS_BAND_COUNT + 1);
+  const ratio = maxHz / ANALYSIS_MIN_HZ;
+  for (let i = 0; i <= ANALYSIS_BAND_COUNT; i++) {
+    edges[i] = ANALYSIS_MIN_HZ * Math.pow(ratio, i / ANALYSIS_BAND_COUNT);
+  }
+  return edges;
+}
+function bandEnergies(magnitudes, sampleRate, fftSize) {
+  const binHz = sampleRate / fftSize;
+  const energy = (lo, hi) => {
+    const first = Math.max(0, Math.ceil(lo / binHz));
+    const last = Math.min(magnitudes.length - 1, Math.ceil(hi / binHz) - 1);
+    let sum = 0;
+    for (let k = first; k <= last; k++) sum += magnitudes[k] * magnitudes[k];
+    return Math.min(1, Math.sqrt(sum) / HANN_ENERGY_GAIN);
+  };
+  return {
+    bass: energy(BASS_HZ[0], BASS_HZ[1]),
+    mid: energy(MID_HZ[0], MID_HZ[1]),
+    treble: energy(TREBLE_HZ[0], TREBLE_HZ[1])
+  };
+}
+function normaliseTrack(track) {
+  const src = track.data;
+  const out = new Float32Array(src.length);
+  const frames = track.frameCount;
+  let rmsPeak = 0;
+  let spectrumPeak = 0;
+  let rangePeak = 0;
+  for (let f = 0; f < frames; f++) {
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) spectrumPeak = Math.max(spectrumPeak, src[base + b]);
+    rmsPeak = Math.max(rmsPeak, src[base + RMS_OFFSET]);
+    rangePeak = Math.max(rangePeak, src[base + BASS_OFFSET], src[base + MID_OFFSET], src[base + TREBLE_OFFSET]);
+  }
+  const gain = (peak) => peak > 0 ? ANALYSIS_NORMALISED_PEAK / peak : 0;
+  const rmsGain = gain(rmsPeak);
+  const spectrumGain = gain(spectrumPeak);
+  const rangeGain = gain(rangePeak);
+  const scale = (v, g) => Math.min(1, Math.max(0, v * g));
+  for (let f = 0; f < frames; f++) {
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) out[base + b] = scale(src[base + b], spectrumGain);
+    out[base + RMS_OFFSET] = scale(src[base + RMS_OFFSET], rmsGain);
+    out[base + BASS_OFFSET] = scale(src[base + BASS_OFFSET], rangeGain);
+    out[base + MID_OFFSET] = scale(src[base + MID_OFFSET], rangeGain);
+    out[base + TREBLE_OFFSET] = scale(src[base + TREBLE_OFFSET], rangeGain);
+  }
+  return { sampleRate: track.sampleRate, fps: track.fps, frameCount: frames, data: out };
+}
+
+// src/analysis_track.ts
+function isPowerOfTwo(n) {
+  if (!Number.isInteger(n)) return false;
+  if (n < 1) return false;
+  let v = n;
+  while (v % 2 === 0) v /= 2;
+  return v === 1;
+}
+function fft(re, im) {
+  if (re.length !== im.length) throw new RangeError("fft: re/im length mismatch");
+  const n = re.length;
+  if (n < 2 || !isPowerOfTwo(n)) throw new RangeError("fft: length must be a power of two >= 2");
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    while (j & bit) {
+      j ^= bit;
+      bit >>= 1;
+    }
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      const ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1;
+      let wIm = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const uRe = re[i + j];
+        const uIm = im[i + j];
+        const vRe = re[i + j + half] * wRe - im[i + j + half] * wIm;
+        const vIm = re[i + j + half] * wIm + im[i + j + half] * wRe;
+        re[i + j] = uRe + vRe;
+        im[i + j] = uIm + vIm;
+        re[i + j + half] = uRe - vRe;
+        im[i + j + half] = uIm - vIm;
+        const nRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nRe;
+      }
+    }
+  }
+}
+function buildAnalysisTrack(pcm, sampleRate, options) {
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new RangeError("buildAnalysisTrack: sampleRate must be finite and > 0");
+  }
+  const fftSize = 2048;
+  const hopSize = 1024;
+  if (!isPowerOfTwo(fftSize) || fftSize < 32) {
+    throw new RangeError("buildAnalysisTrack: fftSize must be a power of two >= 32");
+  }
+  if (!Number.isInteger(hopSize) || hopSize < 1) {
+    throw new RangeError("buildAnalysisTrack: hopSize must be an integer >= 1");
+  }
+  let mono;
+  {
+    mono = pcm;
+  }
+  const len = mono.length;
+  const frameCount = len === 0 ? 0 : Math.ceil(len / hopSize);
+  const fps = sampleRate / hopSize;
+  const data = new Float32Array(frameCount * ANALYSIS_STRIDE);
+  const window2 = new Float64Array(fftSize);
+  for (let i = 0; i < fftSize; i++) {
+    window2[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / fftSize));
+  }
+  const edges = analysisBandEdges(sampleRate);
+  const binHz = sampleRate / fftSize;
+  const re = new Float64Array(fftSize);
+  const im = new Float64Array(fftSize);
+  const mag = new Float32Array(fftSize / 2 + 1);
+  const half = fftSize / 2;
+  const bandFirst = new Int32Array(ANALYSIS_BAND_COUNT);
+  const bandLast = new Int32Array(ANALYSIS_BAND_COUNT);
+  for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) {
+    const lo = edges[b];
+    const hi = edges[b + 1];
+    const first = Math.max(0, Math.ceil(lo / binHz));
+    const last = Math.min(half, Math.ceil(hi / binHz) - 1);
+    if (first <= last) {
+      bandFirst[b] = first;
+      bandLast[b] = last;
+    } else {
+      const idx = Math.min(half, Math.max(0, Math.round(Math.sqrt(lo * hi) / binHz)));
+      bandFirst[b] = idx;
+      bandLast[b] = idx;
+    }
+  }
+  for (let f = 0; f < frameCount; f++) {
+    const start = f * hopSize;
+    let sumSq = 0;
+    for (let i = 0; i < fftSize; i++) {
+      const idx = start + i;
+      const v = idx < len ? mono[idx] : 0;
+      sumSq += v * v;
+      re[i] = v * window2[i];
+      im[i] = 0;
+    }
+    const rms = Math.sqrt(sumSq / fftSize);
+    fft(re, im);
+    for (let k = 0; k <= half; k++) {
+      mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]) / half;
+    }
+    const base = f * ANALYSIS_STRIDE;
+    for (let b = 0; b < ANALYSIS_BAND_COUNT; b++) {
+      let best = 0;
+      for (let k = bandFirst[b]; k <= bandLast[b]; k++) {
+        if (mag[k] > best) best = mag[k];
+      }
+      data[base + b] = best > 1 ? 1 : best;
+    }
+    const { bass, mid, treble } = bandEnergies(mag, sampleRate, fftSize);
+    data[base + ANALYSIS_BAND_COUNT] = rms;
+    data[base + ANALYSIS_BAND_COUNT + 1] = bass;
+    data[base + ANALYSIS_BAND_COUNT + 2] = mid;
+    data[base + ANALYSIS_BAND_COUNT + 3] = treble;
+  }
+  const track = { sampleRate, fps, frameCount, data };
+  return normaliseTrack(track);
 }
 
 // src/worker_utils.ts
@@ -4916,6 +5114,105 @@ function normalizeInPlace(values) {
   if (max <= 0) return;
   for (let i = 0; i < values.length; i += 1) {
     values[i] = values[i] / max;
+  }
+}
+
+// src/crackle.ts
+var MAX_POPS_PER_SEC = 8;
+var POP_DECAY = 0.985;
+function xorshift32(seed) {
+  let s = seed >>> 0 || 2654435769;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s / 4294967296;
+  };
+}
+function clampIntensity(intensity) {
+  if (typeof intensity !== "number" || Number.isNaN(intensity)) return 0;
+  if (intensity <= 0) return 0;
+  if (intensity >= 1) return 1;
+  return intensity;
+}
+function validateFramesAndRate(frames, sampleRate) {
+  if (!Number.isInteger(frames) || frames < 0) {
+    throw new RangeError(`Invalid frames: ${String(frames)}`);
+  }
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new RangeError(`Invalid sampleRate: ${String(sampleRate)}`);
+  }
+}
+function planCracklePops(seed, frames, intensity, sampleRate) {
+  validateFramesAndRate(frames, sampleRate);
+  const i = clampIntensity(intensity);
+  if (i === 0 || frames === 0) return new Uint32Array(0);
+  const rng = xorshift32(seed);
+  const popsPerSec = MAX_POPS_PER_SEC * i;
+  const slot = sampleRate / popsPerSec;
+  const onsets = [];
+  for (let k = 0; k * slot < frames; k += 1) {
+    const r1 = rng();
+    const r2 = rng();
+    if (r1 < 0.7) {
+      const onset = Math.floor(k * slot + r2 * slot);
+      if (onset < frames) onsets.push(onset);
+    }
+  }
+  return Uint32Array.from(onsets);
+}
+function clampSample(v) {
+  if (v > 1) return 1;
+  if (v < -1) return -1;
+  return v;
+}
+function renderCrackleBed(seed, frames, intensity, sampleRate) {
+  validateFramesAndRate(frames, sampleRate);
+  const i = clampIntensity(intensity);
+  const out = new Float32Array(frames * 2);
+  if (i === 0) return out;
+  const hrng = xorshift32((seed ^ 2779096485) >>> 0);
+  const hissGain = 4e-3 * i;
+  const onsets = planCracklePops(seed, frames, i, sampleRate);
+  const prng = xorshift32((seed ^ 1540483477) >>> 0);
+  let yL = 0;
+  let yR = 0;
+  let envL = 0;
+  let envR = 0;
+  let onsetIdx = 0;
+  for (let n = 0; n < frames; n += 1) {
+    const xL = (hrng() * 2 - 1) * hissGain;
+    const xR = (hrng() * 2 - 1) * hissGain;
+    yL += 0.35 * (xL - yL);
+    yR += 0.35 * (xR - yR);
+    while (onsetIdx < onsets.length && onsets[onsetIdx] === n) {
+      const a = (0.15 + 0.35 * prng()) * i;
+      const bal = prng();
+      envL = a * (0.6 + 0.4 * bal);
+      envR = a * (0.6 + 0.4 * (1 - bal));
+      onsetIdx += 1;
+    }
+    let popL = 0;
+    let popR = 0;
+    if (envL > 1e-5 || envR > 1e-5) {
+      const popNoise = prng() * 2 - 1;
+      popL = envL * popNoise;
+      popR = envR * popNoise;
+    }
+    envL *= POP_DECAY;
+    envR *= POP_DECAY;
+    out[2 * n] = clampSample(yL + popL);
+    out[2 * n + 1] = clampSample(yR + popR);
+  }
+  return out;
+}
+function mixCrackleInto(pcm, bed) {
+  if (pcm.length !== bed.length) {
+    throw new RangeError(`Length mismatch: pcm=${pcm.length} bed=${bed.length}`);
+  }
+  for (let j = 0; j < pcm.length; j += 1) {
+    pcm[j] += bed[j];
   }
 }
 
@@ -5910,6 +6207,23 @@ async function renderWithPcmPipeline(ffmpeg2, payload, jobId, isPreview, options
     tempFiles.push(effectsFile);
     currentPcmFile = effectsFile;
   }
+  if (options.useCrackle && payload.dspSpec?.crackle) {
+    const bytes = ffmpeg2.FS.readFile(currentPcmFile);
+    const pcm = new Float32Array(bytes.byteLength / 4);
+    new Uint8Array(pcm.buffer).set(bytes);
+    const frames = pcm.length / 2;
+    const bed = renderCrackleBed(
+      payload.dspSpec.crackle.seed ?? 1,
+      frames,
+      payload.dspSpec.crackle.intensity,
+      sampleRate
+    );
+    mixCrackleInto(pcm, bed);
+    const crackleFile = `${payload.fileId}-${jobId}-crackle.f32`;
+    ffmpeg2.FS.writeFile(crackleFile, new Uint8Array(pcm.buffer));
+    tempFiles.push(crackleFile);
+    currentPcmFile = crackleFile;
+  }
   if (options.usePlaybackDevice && payload.playbackIR) {
     const device = getPlaybackDevice(payload.dspSpec?.playback?.device);
     if (!device) throw new Error("Unknown playback device");
@@ -6085,6 +6399,232 @@ async function encodePcm(ffmpeg2, payload, cleanupFiles2) {
   }
 }
 
+// src/cover_art.ts
+var COVER_MAX_PX = 600;
+var COVER_SCALE_FILTER = `scale='min(${COVER_MAX_PX},iw)':'min(${COVER_MAX_PX},ih)':force_original_aspect_ratio=decrease`;
+function supportsCoverArt(format) {
+  return format === "mp3" || format === "flac";
+}
+function buildExtractCoverArgs(input, out) {
+  return [
+    "-hide_banner",
+    "-i",
+    input,
+    "-map",
+    "0:v:0",
+    "-frames:v",
+    "1",
+    "-an",
+    "-vf",
+    COVER_SCALE_FILTER,
+    "-c:v",
+    "png",
+    "-f",
+    "image2",
+    "-update",
+    "1",
+    "-y",
+    out
+  ];
+}
+function buildAttachCoverArgs(audio, cover, out, format) {
+  const args = [
+    "-hide_banner",
+    "-i",
+    audio,
+    "-i",
+    cover,
+    "-map",
+    "0:a:0",
+    "-map",
+    "1:v:0",
+    "-c:a",
+    "copy",
+    "-c:v",
+    "png",
+    "-vf",
+    COVER_SCALE_FILTER,
+    "-disposition:v:0",
+    "attached_pic"
+  ];
+  if (format === "mp3") {
+    args.push(
+      "-id3v2_version",
+      "3",
+      "-metadata:s:v",
+      "title=Album cover",
+      "-metadata:s:v",
+      "comment=Cover (front)"
+    );
+  }
+  args.push("-f", format, "-y", out);
+  return args;
+}
+function extractCoverArt(ffmpeg2, fileId, cleanupFiles2) {
+  const out = `${fileId}-cover.png`;
+  try {
+    ffmpeg2.reset?.();
+    const rc = ffmpeg2.exec(...buildExtractCoverArgs(fileId, out));
+    if (rc !== 0) return null;
+    try {
+      const info = ffmpeg2.FS.analyzePath(out);
+      if (!info?.exists) return null;
+    } catch {
+    }
+    const buf = readOutput(ffmpeg2, out);
+    if (buf.byteLength === 0) return null;
+    return buf;
+  } catch {
+    return null;
+  } finally {
+    try {
+      cleanupFiles2(out);
+    } catch {
+    }
+  }
+}
+function attachCoverArt(ffmpeg2, audio, cover, format, jobId, cleanupFiles2) {
+  const inAudio = `${jobId}-cover-in.${format}`;
+  const img = `${jobId}-cover.img`;
+  const out = `${jobId}-cover-out.${format}`;
+  try {
+    ffmpeg2.FS.writeFile(inAudio, new Uint8Array(audio));
+    ffmpeg2.FS.writeFile(img, new Uint8Array(cover));
+    ffmpeg2.reset?.();
+    const rc = ffmpeg2.exec(...buildAttachCoverArgs(inAudio, img, out, format));
+    if (rc !== 0) return audio;
+    const buf = readOutput(ffmpeg2, out);
+    if (buf.byteLength === 0) return audio;
+    return buf;
+  } catch {
+    return audio;
+  } finally {
+    try {
+      cleanupFiles2(inAudio, img, out);
+    } catch {
+    }
+  }
+}
+
+// src/video_mux.ts
+var BLACK_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==";
+function blackPngBytes() {
+  const binary = atob(BLACK_PNG_BASE64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    out[i] = binary.charCodeAt(i);
+  }
+  return out;
+}
+function resolveStillVideoParams(p) {
+  const { width, height } = p;
+  const fps = p.fps ?? 30;
+  const crf = p.crf ?? 23;
+  const encoder = p.encoder ?? "libx264";
+  if (!Number.isInteger(width) || width < 16 || width > 4096 || width % 2 !== 0) {
+    throw new RangeError(`width must be an even integer in [16, 4096], got ${String(width)}`);
+  }
+  if (!Number.isInteger(height) || height < 16 || height > 4096 || height % 2 !== 0) {
+    throw new RangeError(`height must be an even integer in [16, 4096], got ${String(height)}`);
+  }
+  if (width * height > 3840 * 2160) {
+    throw new RangeError(`width*height area ${width * height} exceeds maximum ${3840 * 2160}`);
+  }
+  if (!Number.isInteger(fps) || fps < 1 || fps > 60) {
+    throw new RangeError(`fps must be an integer in [1, 60], got ${String(fps)}`);
+  }
+  if (!Number.isInteger(crf) || crf < 0 || crf > 51) {
+    throw new RangeError(`crf must be an integer in [0, 51], got ${String(crf)}`);
+  }
+  if (encoder !== "libx264" && encoder !== "mpeg4") {
+    throw new RangeError(`encoder must be "libx264" or "mpeg4", got ${String(encoder)}`);
+  }
+  return { width, height, fps, crf, encoder };
+}
+function buildBedArgs(still, bed, p) {
+  const args = [
+    "-loop",
+    "1",
+    "-framerate",
+    `${p.fps}`,
+    "-i",
+    still,
+    "-t",
+    "2",
+    "-vf",
+    `scale=${p.width}:${p.height}:force_original_aspect_ratio=increase,crop=${p.width}:${p.height},setsar=1`,
+    "-c:v",
+    p.encoder
+  ];
+  if (p.encoder === "libx264") {
+    args.push("-preset", "ultrafast", "-tune", "stillimage", "-crf", `${p.crf}`);
+  } else {
+    args.push("-q:v", "3");
+  }
+  args.push("-g", `${p.fps}`, "-pix_fmt", "yuv420p", "-r", `${p.fps}`, "-an", "-y", bed);
+  return args;
+}
+function buildMuxArgs(bed, audio, sampleRate, out) {
+  return [
+    "-stream_loop",
+    "-1",
+    "-i",
+    bed,
+    "-f",
+    "f32le",
+    "-ac",
+    "2",
+    "-ar",
+    `${sampleRate}`,
+    "-i",
+    audio,
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    "-y",
+    out
+  ];
+}
+async function muxStillVideo(ffmpeg2, payload, jobId, cleanupFiles2) {
+  const p = resolveStillVideoParams(payload);
+  if (payload.left.length !== payload.right.length || payload.left.length === 0) {
+    throw new RangeError("left and right must have equal non-zero length");
+  }
+  if (!Number.isFinite(payload.sampleRate) || payload.sampleRate <= 0) {
+    throw new RangeError(`sampleRate must be finite and > 0, got ${String(payload.sampleRate)}`);
+  }
+  const still = `${jobId}-still.img`;
+  const bed = `${jobId}-bed.mp4`;
+  const audio = `${jobId}-audio.f32`;
+  const out = `${jobId}-video.mp4`;
+  try {
+    ffmpeg2.FS.writeFile(
+      still,
+      payload.still && payload.still.length > 0 ? payload.still : blackPngBytes()
+    );
+    writeInterleavedF32Stereo(ffmpeg2.FS, audio, payload.left, payload.right);
+    ffmpeg2.reset?.();
+    const r1 = ffmpeg2.exec(...buildBedArgs(still, bed, p));
+    if (r1 !== 0) throw new Error(`video bed encode failed (exit ${r1})`);
+    ffmpeg2.reset?.();
+    const r2 = ffmpeg2.exec(...buildMuxArgs(bed, audio, payload.sampleRate, out));
+    if (r2 !== 0) throw new Error(`video mux failed (exit ${r2})`);
+    return readOutput(ffmpeg2, out);
+  } finally {
+    cleanupFiles2(still, bed, audio, out);
+  }
+}
+
 // src/worker_render_rules.ts
 function isPhaseLimiterEnabled(payload) {
   const mastering = payload.mastering;
@@ -6106,6 +6646,10 @@ function isToneReverbEnabled(payload) {
 }
 function isPlaybackDeviceEnabled(payload) {
   return payload.dspSpec?.playback != null && payload.playbackIR != null;
+}
+function isCrackleEnabled(payload) {
+  const v = payload.dspSpec?.crackle?.intensity;
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
 }
 function isSimpleMasteringEnabled(payload) {
   return payload.mastering?.enabled === true && payload.mastering?.algorithm === "simple";
@@ -6186,6 +6730,8 @@ async function handleRequest(request) {
       return runWithEngine(() => handleDecodePCM(request), request.requestId);
     case "ENCODE_PCM":
       return runWithEngine(() => handleEncodePCM(request), request.requestId);
+    case "MUX_STILL_VIDEO":
+      return runWithEngine(() => handleMuxStillVideo(request), request.requestId);
   }
 }
 async function handlePing(request) {
@@ -6280,7 +6826,8 @@ async function handleProbe(request) {
       stopLogCapture
     });
     postEvent({ type: "LOG", level: "info", message: `probe:ok (${fileId}) durationMs=${metadata.durationMs ?? "null"}` });
-    postResult(request.requestId, metadata);
+    const coverArt = extractCoverArt(ffmpeg, fileId, cleanupFiles);
+    postResult(request.requestId, { ...metadata, coverArt }, coverArt ? [coverArt] : void 0);
   } finally {
     clearTimeout(warnTimeout);
   }
@@ -6295,7 +6842,8 @@ async function handleRender(request) {
   const shouldUseSoundTouch = isSoundTouchEnabled(payload);
   const shouldUseToneReverb = isToneReverbEnabled(payload);
   const shouldUsePlayback = isPlaybackDeviceEnabled(payload);
-  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback;
+  const shouldUseCrackle = isCrackleEnabled(payload);
+  const shouldUsePcmPipeline = shouldUseSoundTouch || shouldUseToneReverb || shouldUsePlayback || shouldUseCrackle;
   const filesToCleanup = /* @__PURE__ */ new Set([payload.fileId]);
   activeJobId = jobId;
   try {
@@ -6318,7 +6866,7 @@ async function handleRender(request) {
       }
       const buffer = readOutput(engine, outputFile);
       log("info", "render:ok", { jobId, outputFile });
-      postRenderResult(request, buffer);
+      postRenderResult(request, buffer, outputFile);
       return;
     }
     if (shouldUsePhaseLimiter && !shouldUsePcmPipeline) {
@@ -6331,7 +6879,7 @@ async function handleRender(request) {
       filesToCleanup.add(result2.outputFile);
       for (const temp of result2.tempFiles) filesToCleanup.add(temp);
       log("info", "render:ok(phaselimiter)", { jobId, outputFile: result2.outputFile });
-      postRenderResult(request, result2.buffer);
+      postRenderResult(request, result2.buffer, result2.outputFile);
       return;
     }
     log("info", "render:start(pcm-pipeline)", {
@@ -6340,7 +6888,8 @@ async function handleRender(request) {
       format: payload.format,
       soundtouch: shouldUseSoundTouch,
       toneReverb: shouldUseToneReverb,
-      phaselimiter: shouldUsePhaseLimiter
+      phaselimiter: shouldUsePhaseLimiter,
+      crackle: shouldUseCrackle
     });
     const result = await renderWithPcmPipeline(
       engine,
@@ -6351,14 +6900,15 @@ async function handleRender(request) {
         applyPhaseLimiter: shouldUsePhaseLimiter,
         useSoundTouch: shouldUseSoundTouch,
         useToneReverb: shouldUseToneReverb,
-        usePlaybackDevice: shouldUsePlayback
+        usePlaybackDevice: shouldUsePlayback,
+        useCrackle: shouldUseCrackle
       },
       { postEvent, withProgressStage, postMasteringWarning }
     );
     filesToCleanup.add(result.outputFile);
     for (const temp of result.tempFiles) filesToCleanup.add(temp);
     log("info", "render:ok(pcm-pipeline)", { jobId, outputFile: result.outputFile });
-    postRenderResult(request, result.buffer);
+    postRenderResult(request, result.buffer, result.outputFile);
     return;
   } finally {
     activeJobId = void 0;
@@ -6400,8 +6950,20 @@ async function handleDecodePCM(request) {
 }
 async function handleEncodePCM(request) {
   if (!ffmpeg) throw new Error("FFmpeg not initialized");
-  const buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  let buffer = await encodePcm(ffmpeg, request.payload, cleanupFiles);
+  const cover = request.payload.coverArt;
+  if (cover instanceof ArrayBuffer && cover.byteLength > 0 && supportsCoverArt(request.payload.format)) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.requestId, cleanupFiles);
+    } catch {
+    }
+  }
   postResult(request.requestId, { fileId: "encoded", format: request.payload.format, buffer }, [buffer]);
+}
+async function handleMuxStillVideo(request) {
+  if (!ffmpeg) throw new Error("FFmpeg not initialized");
+  const buffer = await muxStillVideo(ffmpeg, request.payload, request.requestId, cleanupFiles);
+  postResult(request.requestId, { buffer }, [buffer]);
 }
 function cleanupFiles(...paths) {
   if (!ffmpeg) return;
@@ -6417,8 +6979,43 @@ function cleanupFiles(...paths) {
 function postResult(requestId, payload, transfer) {
   postEvent({ type: "RESULT", requestId, payload }, transfer);
 }
-function postRenderResult(request, buffer) {
-  postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+function analyseRenderedOutput(engine, outputFile, jobId) {
+  const pcmFile = `${jobId}-analysis.f32`;
+  try {
+    withProgressStage("processing", 1, 0, () => engine.exec("-i", outputFile, "-ac", "1", "-ar", "44100", "-f", "f32le", "-y", pcmFile));
+    const bytes = readOutput(engine, pcmFile);
+    const pcm = new Float32Array(bytes, 0, Math.floor(bytes.byteLength / 4));
+    return buildAnalysisTrack(pcm, 44100);
+  } finally {
+    cleanupFiles(pcmFile);
+  }
+}
+function postRenderResult(request, buffer, outputFile) {
+  const cover = request.payload.coverArt;
+  if (request.type === "RENDER_FULL" && cover instanceof ArrayBuffer && cover.byteLength > 0 && supportsCoverArt(request.payload.format) && ffmpeg) {
+    try {
+      buffer = attachCoverArt(ffmpeg, buffer, cover, request.payload.format, request.jobId, cleanupFiles);
+    } catch {
+    }
+  }
+  let analysis;
+  if (request.type === "RENDER_PREVIEW" && ffmpeg) {
+    try {
+      analysis = analyseRenderedOutput(ffmpeg, outputFile, request.jobId);
+    } catch (error) {
+      log("warn", "render:analysis-failed", { jobId: request.jobId, error: String(error) });
+      analysis = void 0;
+    }
+  }
+  if (analysis) {
+    postResult(
+      request.requestId,
+      { fileId: request.payload.fileId, format: request.payload.format, buffer, analysis },
+      [buffer, analysis.data.buffer]
+    );
+  } else {
+    postResult(request.requestId, { fileId: request.payload.fileId, format: request.payload.format, buffer }, [buffer]);
+  }
 }
 function getJobId(request) {
   return "jobId" in request ? request.jobId : void 0;

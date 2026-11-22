@@ -18,6 +18,8 @@ Future<AudioMetadata> loadSourceImpl(
   final durationMs = payloadObj
       .getProperty<JSNumber?>('durationMs'.toJS)
       ?.toDartInt;
+  // The probe omits coverArt when the source has no embedded image.
+  final coverArtBuffer = payloadObj.getProperty<JSObject?>('coverArt'.toJS);
 
   return AudioMetadata(
     fileId: engine._getProperty<String>(payloadObj, 'fileId'),
@@ -26,6 +28,9 @@ Future<AudioMetadata> loadSourceImpl(
     sampleRate: engine._getProperty<int>(payloadObj, 'sampleRate'),
     channels: engine._getProperty<int>(payloadObj, 'channels'),
     format: engine._getProperty<String>(payloadObj, 'format'),
+    coverArt: coverArtBuffer == null
+        ? null
+        : BridgeInterop.bufferToUint8List(coverArtBuffer),
   );
 }
 
@@ -59,6 +64,7 @@ Future<Uint8List> encodeFromFloatPcmImpl(
   required int sampleRate,
   required String format,
   int? bitrateKbps,
+  Uint8List? coverArt,
 }) async {
   engine._ensureInitialized();
   final payloadData = <String, Object?>{
@@ -67,6 +73,7 @@ Future<Uint8List> encodeFromFloatPcmImpl(
     'sampleRate': sampleRate,
     'format': format,
     'bitrateKbps': bitrateKbps,
+    'coverArt': coverArt?.toJS,
   };
   payloadData.removeWhere((_, value) => value == null);
   final payload = BridgeInterop.toJsObject(payloadData);
@@ -75,6 +82,40 @@ Future<Uint8List> encodeFromFloatPcmImpl(
   final type = engine._getProperty<String>(response, 'type');
   if (type != 'encode-pcm-ok') {
     throw StateError('Encode PCM failed: $type');
+  }
+
+  final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+  final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
+  return BridgeInterop.bufferToUint8List(buffer);
+}
+
+Future<Uint8List> muxStillVideoImpl(
+  WasmAudioEngine engine, {
+  required Float32List left,
+  required Float32List right,
+  required int sampleRate,
+  required int width,
+  required int height,
+  required int fps,
+  required int crf,
+  Uint8List? still,
+}) async {
+  engine._ensureInitialized();
+  final payload = BridgeInterop.toJsObject({
+    'left': left.toJS,
+    'right': right.toJS,
+    'sampleRate': sampleRate,
+    'width': width,
+    'height': height,
+    'fps': fps,
+    'crf': crf,
+    if (still != null && still.isNotEmpty) 'still': still.toJS,
+  });
+
+  final response = await BridgeInterop.muxStillVideo(payload);
+  final type = engine._getProperty<String>(response, 'type');
+  if (type != 'mux-video-ok') {
+    throw StateError('Video export failed: $type');
   }
 
   final payloadObj = response.getProperty<JSObject>('payload'.toJS);
@@ -122,6 +163,7 @@ Future<Uri> renderPreviewImpl(
     engine._activeBlobUrls.remove(engine._currentPreviewUrl);
     engine._currentPreviewUrl = null;
   }
+  engine._previewAnalysis = null;
 
   final jobId = 'preview-${DateTime.now().millisecondsSinceEpoch}';
   engine._currentPreviewJobId = jobId;
@@ -139,9 +181,8 @@ Future<Uri> renderPreviewImpl(
     });
 
     final response = await BridgeInterop.renderPreview(payload);
-    final buffer = response
-        .getProperty<JSObject>('payload'.toJS)
-        .getProperty<JSObject>('buffer'.toJS);
+    final payloadObj = response.getProperty<JSObject>('payload'.toJS);
+    final buffer = payloadObj.getProperty<JSObject>('buffer'.toJS);
     final bytes = BridgeInterop.bufferToUint8List(buffer);
 
     final blob = web.Blob(
@@ -152,6 +193,9 @@ Future<Uri> renderPreviewImpl(
 
     engine._currentPreviewUrl = url;
     engine._activeBlobUrls.add(url);
+    engine._previewAnalysis = BridgeInterop.analysisTrackFromJs(
+      payloadObj.getProperty<JSAny?>('analysis'.toJS),
+    );
     return Uri.parse(url);
   } finally {
     engine._currentPreviewJobId = null;
@@ -163,6 +207,7 @@ Future<RenderJobId> startRenderImpl(
   required String fileId,
   required EffectConfig config,
   required ExportOptions options,
+  Uint8List? coverArt,
 }) async {
   engine._ensureInitialized();
 
@@ -180,6 +225,7 @@ Future<RenderJobId> startRenderImpl(
       config: config,
       options: options,
       controller: engine._progressControllers[jobId.value]!,
+      coverArt: coverArt,
     ),
   );
 
@@ -193,6 +239,7 @@ Future<void> performRenderImpl(
   required EffectConfig config,
   required ExportOptions options,
   required StreamController<RenderProgress> controller,
+  Uint8List? coverArt,
 }) async {
   try {
     final payload = BridgeInterop.toJsObject({
@@ -203,6 +250,7 @@ Future<void> performRenderImpl(
       'dspSpec': engine._toDspSpec(config),
       'format': options.format,
       'bitrateKbps': options.bitrateKbps ?? 192,
+      'coverArt': ?coverArt?.toJS,
       'jobId': jobId.value,
     });
 
@@ -562,6 +610,16 @@ Map<String, Object?> toDspSpecImpl(EffectConfig config) {
   if (playbackIndex >= 1 && playbackIndex <= playbackDevices.length) {
     spec['playback'] = <String, Object?>{
       'device': playbackDevices[playbackIndex - 1],
+    };
+  }
+
+  // Crackle is a fixed-seed bed, so the same settings always render the same
+  // pops: preview and export match, and re-renders don't reshuffle.
+  final crackle = config.crackle;
+  if (crackle != null && crackle > 0) {
+    spec['crackle'] = <String, Object?>{
+      'intensity': crackle.clamp(0.0, 1.0),
+      'seed': 1,
     };
   }
 
